@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  ai-rag-grading-ta-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_rag_grading_ta_api
+    restart: always
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true

@@ -1,0 +1,34 @@
+# Web API Server
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-multipart
+python-dotenv
+pyyaml
+loguru
+
+# RAG & AI Subsystem
+langchain
+langchain-community
+langchain-groq
+langchain-huggingface
+langchain-core
+langchain-text-splitters
+huggingface-hub
+openai
+pinecone
+rank-bm25
+
+# Vector Database
+chromadb
+
+# Document Ingestion (PDF & PPTX)
+pypdf
+PyMuPDF
+python-pptx
+Pillow
+tiktoken
+nltk
+numpy
+pandas

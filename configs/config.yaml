@@ -1,0 +1,43 @@
+
+
+document_processing:
+  chunk_size: 500
+  chunk_overlap: 50
+  separators: ["\n\n", "\n", ". ", " ", ""]
+
+embeddings:
+  model_name: "BAAI/bge-m3"
+  device: "cloud"
+  
+vectorstore:
+  type: "chroma"
+  persist_directory: "./data/chroma_db"
+  collection_name: "course_materials"
+  
+retrieval:
+  top_k: 5
+  search_type: "similarity"
+  enable_reranking: true
+  rerank_top_k: 3
+  reranker_type: "bge"  # Options: "bge" (bge-reranker-v2-m3 via Pinecone) or "bm25"
+  reranker_model: "bge-reranker-v2-m3"  # Pinecone model name
+  
+llm:
+  provider: "huggingface"
+  model_name: "openai/gpt-oss-120b" 
+  temperature: 0.3
+  max_new_tokens: 2048
+  device: "cloud" 
+  
+grading:
+  min_confidence: 0.5
+  require_citations: true
+  max_score: 100
+  
+api:
+  host: "0.0.0.0"
+  port: 8000
+  
+ui:
+  port: 7860
+  share: false
