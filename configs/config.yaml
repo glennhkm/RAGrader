@@ -34,6 +34,10 @@ grading:
   require_citations: true
   max_score: 100
   
+multimodal:
+  enable_image_extraction: false
+  enable_vision_captioning: false
+  
 api:
   host: "0.0.0.0"
   port: 8000

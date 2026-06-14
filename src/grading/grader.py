@@ -1,5 +1,6 @@
 """Essay grading orchestrator with multimodal document support."""
 
+import os
 from typing import Dict, Any, List, Callable, Optional
 from pathlib import Path
 from loguru import logger
@@ -16,8 +17,8 @@ class EssayGrader:
         config: Dict[str, Any],
         provider: str = "groq",
         model_name: str = None,
-        enable_image_extraction: bool = True,
-        enable_vision_captioning: bool = True
+        enable_image_extraction: Optional[bool] = None,
+        enable_vision_captioning: Optional[bool] = None
     ):
         """
         Initialize essay grader.
@@ -30,16 +31,33 @@ class EssayGrader:
             enable_vision_captioning: Enable vision captioning for images
         """
         self.config = config
-        self.enable_image_extraction = enable_image_extraction
-        self.enable_vision_captioning = enable_vision_captioning
+        
+        # Resolve multimodal settings from argument override, env variables, or config file
+        if enable_image_extraction is None:
+            env_val = os.getenv('ENABLE_IMAGE_EXTRACTION')
+            if env_val is not None:
+                self.enable_image_extraction = env_val.lower() == 'true'
+            else:
+                self.enable_image_extraction = config.get('multimodal', {}).get('enable_image_extraction', True)
+        else:
+            self.enable_image_extraction = enable_image_extraction
+            
+        if enable_vision_captioning is None:
+            env_val = os.getenv('ENABLE_VISION_CAPTIONING')
+            if env_val is not None:
+                self.enable_vision_captioning = env_val.lower() == 'true'
+            else:
+                self.enable_vision_captioning = config.get('multimodal', {}).get('enable_vision_captioning', True)
+        else:
+            self.enable_vision_captioning = enable_vision_captioning
         
         # Initialize components
-        self.document_loader = DocumentLoader(enable_multimodal=enable_image_extraction)
+        self.document_loader = DocumentLoader(enable_multimodal=self.enable_image_extraction)
         self.preprocessor = DocumentPreprocessor(
             chunk_size=config['document_processing']['chunk_size'],
             chunk_overlap=config['document_processing']['chunk_overlap'],
             separators=config['document_processing']['separators'],
-            include_image_captions=enable_vision_captioning
+            include_image_captions=self.enable_vision_captioning
         )
         self.rag_pipeline = RAGPipeline(config, provider=provider, model_name=model_name)
         
