@@ -22,3 +22,28 @@
 2026-06-14 17:51:52 | INFO | src.vectorstore.chroma_store:similarity_search:238 - Found 1 similar documents in collection: course_102_baai_bge_m3
 2026-06-14 17:51:52 | INFO | src.vectorstore.chroma_store:clear:290 - Vector store collection cleared: course_101_baai_bge_m3
 2026-06-14 17:51:52 | INFO | src.vectorstore.chroma_store:clear:290 - Vector store collection cleared: course_102_baai_bge_m3
+2026-06-19 15:07:34 | INFO | src.utils.config:setup_logging:58 - Logging setup complete
+2026-06-19 15:07:34 | INFO | src.utils.config:load_config:40 - Reranking override from environment variable ENABLE_RERANKING: True
+2026-06-19 15:07:34 | INFO | src.utils.config:load_config:42 - Configuration loaded from /home/glennhkm/Documents/Tugas Akhir/Prototype/api_service/configs/config.yaml
+2026-06-19 15:07:34 | INFO | src.vectorstore.embeddings:_init_embeddings:74 - Initializing HuggingFace Inference API embeddings: BAAI/bge-m3
+2026-06-19 15:07:34 | INFO | src.vectorstore.embeddings:_init_embeddings:75 - Using cloud-based inference (no local GPU/CPU computation)
+2026-06-19 15:07:34 | INFO | src.vectorstore.embeddings:_init_embeddings:82 - Embedding model initialized successfully (HF Inference API)
+2026-06-19 15:07:34 | INFO | src.vectorstore.chroma_store:__init__:52 - VectorStore client initialized pointing to /home/glennhkm/Documents/Tugas Akhir/Prototype/api_service/data/test_chroma_db
+2026-06-19 15:07:34 | INFO | src.vectorstore.chroma_store:__init__:53 - Default base collection: test_materials_baai_bge_m3
+2026-06-19 15:07:34 | INFO | src.vectorstore.chroma_store:__init__:54 - Embedding model: BAAI/bge-m3
+2026-06-19 15:07:34 | INFO | src.vectorstore.chroma_store:add_documents:162 - Adding 1 documents to Chroma collection: course_101_baai_bge_m3...
+2026-06-19 15:07:34 | INFO | src.vectorstore.chroma_store:add_documents:163 - 📦 Using batch size: 10, max retries: 3
+2026-06-19 15:07:34 | INFO | src.vectorstore.chroma_store:_get_vectorstore:83 - Loaded/Created Chroma collection: course_101_baai_bge_m3
+2026-06-19 15:07:34 | INFO | src.vectorstore.chroma_store:add_documents:176 - 📤 Processing batch 1/1 (1 documents)...
+2026-06-19 15:07:41 | INFO | src.vectorstore.chroma_store:add_documents:184 -    ✅ Batch 1 completed successfully
+2026-06-19 15:07:41 | INFO | src.vectorstore.chroma_store:add_documents:209 - ✅ Successfully added all 1 documents in 1 batches
+2026-06-19 15:07:41 | INFO | src.vectorstore.chroma_store:add_documents:162 - Adding 1 documents to Chroma collection: course_102_baai_bge_m3...
+2026-06-19 15:07:41 | INFO | src.vectorstore.chroma_store:add_documents:163 - 📦 Using batch size: 10, max retries: 3
+2026-06-19 15:07:41 | INFO | src.vectorstore.chroma_store:_get_vectorstore:83 - Loaded/Created Chroma collection: course_102_baai_bge_m3
+2026-06-19 15:07:41 | INFO | src.vectorstore.chroma_store:add_documents:176 - 📤 Processing batch 1/1 (1 documents)...
+2026-06-19 15:07:42 | INFO | src.vectorstore.chroma_store:add_documents:184 -    ✅ Batch 1 completed successfully
+2026-06-19 15:07:42 | INFO | src.vectorstore.chroma_store:add_documents:209 - ✅ Successfully added all 1 documents in 1 batches
+2026-06-19 15:07:42 | INFO | src.vectorstore.chroma_store:similarity_search:238 - Found 1 similar documents in collection: course_101_baai_bge_m3
+2026-06-19 15:08:05 | INFO | src.vectorstore.chroma_store:similarity_search:238 - Found 1 similar documents in collection: course_102_baai_bge_m3
+2026-06-19 15:08:05 | INFO | src.vectorstore.chroma_store:clear:290 - Vector store collection cleared: course_101_baai_bge_m3
+2026-06-19 15:08:05 | INFO | src.vectorstore.chroma_store:clear:290 - Vector store collection cleared: course_102_baai_bge_m3

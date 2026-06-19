@@ -30,6 +30,15 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
+    # Environment override for reranking
+    env_enable_reranking = os.getenv("ENABLE_RERANKING")
+    if env_enable_reranking is not None:
+        val = env_enable_reranking.lower() in ("true", "1", "yes", "on")
+        if 'retrieval' not in config:
+            config['retrieval'] = {}
+        config['retrieval']['enable_reranking'] = val
+        logger.info(f"Reranking override from environment variable ENABLE_RERANKING: {val}")
+    
     logger.info(f"Configuration loaded from {config_path}")
     return config
 

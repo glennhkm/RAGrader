@@ -181,9 +181,10 @@ class Retriever:
             List of relevant documents
         """
         # Get initial results from vector store (semantic search)
+        k_val = self.top_k if self.enable_reranking else self.rerank_top_k
         results = self.vectorstore.similarity_search(
             query=query,
-            k=self.top_k,
+            k=k_val,
             course_id=course_id
         )
         
@@ -213,9 +214,10 @@ class Retriever:
             List of (document, score) tuples
         """
         # Get initial results from vector store
+        k_val = self.top_k if self.enable_reranking else self.rerank_top_k
         results = self.vectorstore.similarity_search(
             query=query,
-            k=self.top_k,
+            k=k_val,
             course_id=course_id
         )
         
