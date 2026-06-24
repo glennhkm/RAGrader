@@ -47,3 +47,32 @@
 2026-06-19 15:08:05 | INFO | src.vectorstore.chroma_store:similarity_search:238 - Found 1 similar documents in collection: course_102_baai_bge_m3
 2026-06-19 15:08:05 | INFO | src.vectorstore.chroma_store:clear:290 - Vector store collection cleared: course_101_baai_bge_m3
 2026-06-19 15:08:05 | INFO | src.vectorstore.chroma_store:clear:290 - Vector store collection cleared: course_102_baai_bge_m3
+2026-06-19 18:58:19 | INFO | src.utils.config:setup_logging:58 - Logging setup complete
+2026-06-19 18:58:19 | INFO | src.utils.config:load_config:40 - Reranking override from environment variable ENABLE_RERANKING: False
+2026-06-19 18:58:19 | INFO | src.utils.config:load_config:42 - Configuration loaded from /home/glennhkm/Documents/Tugas Akhir/spada.usk.ac.id/api_service/configs/config.yaml
+2026-06-19 18:58:23 | INFO | src.utils.config:setup_logging:58 - Logging setup complete
+2026-06-19 18:58:23 | INFO | src.utils.config:ensure_directories:72 - All required directories verified
+2026-06-19 18:58:23 | INFO | src.utils.config:load_config:40 - Reranking override from environment variable ENABLE_RERANKING: False
+2026-06-19 18:58:23 | INFO | src.utils.config:load_config:42 - Configuration loaded from /home/glennhkm/Documents/Tugas Akhir/spada.usk.ac.id/api_service/configs/config.yaml
+2026-06-19 18:58:23 | INFO | src.ingestion.document_loader:__init__:62 - MultimodalDocumentLoader initialized: image_extraction=False, vision_captioning=False
+2026-06-19 18:58:23 | INFO | src.ingestion.preprocessor:__init__:36 - Preprocessor initialized: chunk_size=500, overlap=50, image_captions=False
+2026-06-19 18:58:23 | INFO | src.rag.pipeline:__init__:31 - Initializing RAG pipeline...
+2026-06-19 18:58:23 | INFO | src.rag.pipeline:__init__:32 - Using provider: groq
+2026-06-19 18:58:23 | INFO | src.vectorstore.embeddings:_init_embeddings:74 - Initializing HuggingFace Inference API embeddings: BAAI/bge-m3
+2026-06-19 18:58:23 | INFO | src.vectorstore.embeddings:_init_embeddings:75 - Using cloud-based inference (no local GPU/CPU computation)
+2026-06-19 18:58:23 | INFO | src.vectorstore.embeddings:_init_embeddings:82 - Embedding model initialized successfully (HF Inference API)
+2026-06-19 18:58:23 | INFO | src.vectorstore.chroma_store:__init__:52 - VectorStore client initialized pointing to data/chroma_db
+2026-06-19 18:58:23 | INFO | src.vectorstore.chroma_store:__init__:53 - Default base collection: course_materials_baai_bge_m3
+2026-06-19 18:58:23 | INFO | src.vectorstore.chroma_store:__init__:54 - Embedding model: BAAI/bge-m3
+2026-06-19 18:58:23 | INFO | src.rag.llm:__init__:64 - Initializing LLM with provider: groq
+2026-06-19 18:58:23 | INFO | src.rag.llm:__init__:65 - Model: openai/gpt-oss-120b
+2026-06-19 18:58:23 | INFO | src.rag.llm:_init_groq:83 - Initializing Groq API LLM: openai/gpt-oss-120b
+2026-06-19 18:58:23 | INFO | src.rag.llm:_init_groq:84 - Using Groq cloud-based inference (ultra-fast)
+2026-06-19 18:58:23 | INFO | src.rag.llm:_init_groq:95 - Groq LLM initialized successfully
+2026-06-19 18:58:23 | INFO | src.rag.retriever:__init__:52 - Retriever initialized: top_k=5, reranking=disabled, reranker_type=bge
+2026-06-19 18:58:23 | INFO | src.rag.pipeline:__init__:77 - RAG pipeline initialized successfully
+2026-06-19 18:58:23 | INFO | src.grading.grader:__init__:64 - EssayGrader initialized with multimodal support
+2026-06-19 18:58:23 | INFO | src.api.app:<module>:71 - FastAPI application initialized with Moodle integration
+2026-06-20 00:14:08 | INFO | src.utils.config:setup_logging:58 - Logging setup complete
+2026-06-20 00:14:08 | INFO | src.utils.config:load_config:40 - Reranking override from environment variable ENABLE_RERANKING: False
+2026-06-20 00:14:08 | INFO | src.utils.config:load_config:42 - Configuration loaded from /home/glennhkm/Documents/Tugas Akhir/spada.usk.ac.id/api_service/configs/config.yaml

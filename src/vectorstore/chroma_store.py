@@ -275,6 +275,44 @@ class VectorStore:
             logger.error(f"Error during similarity search with score: {e}")
             return []
     
+    def delete_document_by_source(self, source_name: str, course_id: Optional[str] = None) -> bool:
+        """
+        Delete all document chunks originating from a specific source/file.
+        
+        Args:
+            source_name: The name of the file/source (e.g. 'syllabus.pdf')
+            course_id: Optional course ID to select collection
+            
+        Returns:
+            True if deletion was successful, False otherwise
+        """
+        col_name = self._get_collection_name(course_id)
+        logger.info(f"Attempting to delete document '{source_name}' from collection: {col_name}")
+        try:
+            # Check if collection exists
+            collections = [c.name for c in self.client.list_collections()]
+            if col_name not in collections:
+                logger.warning(f"Collection {col_name} does not exist")
+                return False
+                
+            collection = self.client.get_collection(col_name)
+            
+            # Query for documents with matching source metadata.
+            results = collection.get(where={"source": {"$eq": source_name}})
+            
+            if results and results.get('ids'):
+                ids = results['ids']
+                logger.info(f"Deleting {len(ids)} chunks for file '{source_name}' in collection '{col_name}'")
+                collection.delete(ids=ids)
+                return True
+            else:
+                logger.warning(f"No chunks found for file '{source_name}' in collection '{col_name}'")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error deleting chunks for '{source_name}': {e}")
+            return False
+
     def clear(self, course_id: Optional[str] = None):
         """
         Clear the collection for the course or default collection.

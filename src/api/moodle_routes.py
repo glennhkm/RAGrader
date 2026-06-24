@@ -477,6 +477,37 @@ async def clear_course_materials(course_id: str = Form(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/course/materials/file")
+async def delete_course_material_file(
+    course_id: str = Form(...),
+    filename: str = Form(...)
+):
+    """
+    Delete a single course material file and its vector chunks.
+    """
+    logger.info(f"Moodle delete request for file '{filename}' in course {course_id}")
+    try:
+        grader = get_grader()
+        success = grader.delete_course_material_file(course_id, filename)
+        
+        # Also clean up the saved file on disk if it exists
+        from ..utils import DATA_DIR
+        file_path = DATA_DIR / "uploads" / f"course_{course_id}" / filename
+        if file_path.exists():
+            file_path.unlink()
+            logger.info(f"Removed file from disk: {file_path}")
+            
+        return {
+            "success": success,
+            "message": f"Successfully deleted vectors for '{filename}'" if success else f"No vectors found or failed to delete for '{filename}'",
+            "course_id": course_id,
+            "filename": filename
+        }
+    except Exception as e:
+        logger.error(f"Error deleting course material file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/course/materials/status/{course_id}")
 async def get_course_materials_status(course_id: str):
     """

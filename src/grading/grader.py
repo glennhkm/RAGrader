@@ -395,3 +395,20 @@ class EssayGrader:
         """
         self.rag_pipeline.vectorstore.clear(course_id=course_id)
         logger.info(f"Vector store cleared for course: {course_id}")
+
+    def delete_course_material_file(self, course_id: str, filename: str) -> bool:
+        """
+        Delete a single course material file and its vector chunks.
+        
+        Args:
+            course_id: Moodle course ID
+            filename: The name of the file to remove
+            
+        Returns:
+            True if deletion was successful, False otherwise
+        """
+        success = self.rag_pipeline.vectorstore.delete_document_by_source(
+            source_name=filename,
+            course_id=course_id
+        )
+        return success
