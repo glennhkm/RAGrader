@@ -15,13 +15,13 @@ from ..ingestion.document_loader import DocumentLoader
 class RAGPipeline:
     """End-to-end RAG pipeline for essay grading."""
     
-    def __init__(self, config: Dict[str, Any], provider: str = "groq", model_name: str = None):
+    def __init__(self, config: Dict[str, Any], provider: str = "provider_chain", model_name: str = None):
         """
         Initialize RAG pipeline with configuration.
         
         Args:
             config: Configuration dictionary
-            provider: LLM provider ("groq" or "huggingface")
+            provider: LLM provider ("provider_chain", "groq", "openrouter", or "huggingface")
             model_name: Model name override (optional)
         """
         self.config = config
@@ -201,6 +201,7 @@ class RAGPipeline:
         return {
             "provider": self.provider,
             "model": self.current_model,
+            "runtime": self.llm.get_provider_info(),
             "available_providers": LLMWrapper.get_available_providers()
         }
     

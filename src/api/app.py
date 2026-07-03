@@ -62,7 +62,11 @@ app.add_middleware(
 
 # Load config and initialize grader
 config = load_config()
-grader = EssayGrader(config)
+grader = EssayGrader(
+    config,
+    provider=config.get('llm', {}).get('provider', 'provider_chain'),
+    model_name=config.get('llm', {}).get('model_name')
+)
 
 # Import and include Moodle routes
 from .moodle_routes import router as moodle_router

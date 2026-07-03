@@ -1,14 +1,13 @@
 """Utility functions for the RAG Essay Grading System."""
 
-import yaml
 import os
+import re
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
+
+import yaml
 from loguru import logger
 from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Setup project root
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -16,9 +15,93 @@ CONFIG_DIR = PROJECT_ROOT / "configs"
 DATA_DIR = PROJECT_ROOT / "data"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
+# Load environment variables from the project .env first, then fall back to cwd discovery.
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv()
+
+ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}")
+
+
+def _get_env_value(var_name: str, default: str = None) -> str:
+    """Read an environment value, using the placeholder default when provided."""
+    value = os.getenv(var_name)
+    if value is not None:
+        return value
+    if default is not None:
+        return default
+    raise ValueError(
+        f"Environment variable {var_name} is required by config.yaml but is not set"
+    )
+
+
+def _coerce_scalar(value: str) -> Any:
+    """Convert env strings to common scalar types for config values."""
+    stripped = value.strip()
+    lowered = stripped.lower()
+
+    if lowered in {"true", "1", "yes", "on"}:
+        return True
+    if lowered in {"false", "0", "no", "off"}:
+        return False
+    if lowered in {"none", "null"}:
+        return None
+
+    if re.fullmatch(r"[+-]?\d+", stripped):
+        try:
+            return int(stripped)
+        except ValueError:
+            return value
+
+    if re.fullmatch(r"[+-]?(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?", stripped):
+        try:
+            return float(stripped)
+        except ValueError:
+            return value
+
+    return value
+
+
+def _resolve_env_placeholders(value: Any) -> Any:
+    """Recursively resolve ${VAR:default} placeholders from loaded YAML data."""
+    if isinstance(value, dict):
+        return {
+            key: _resolve_env_placeholders(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [_resolve_env_placeholders(item) for item in value]
+
+    if not isinstance(value, str):
+        return value
+
+    full_match = ENV_PATTERN.fullmatch(value.strip())
+    if full_match:
+        env_value = _get_env_value(full_match.group(1), full_match.group(2))
+        return _coerce_scalar(env_value)
+
+    def replace_match(match: re.Match) -> str:
+        return str(_get_env_value(match.group(1), match.group(2)))
+
+    return ENV_PATTERN.sub(replace_match, value)
+
+
+def _summarize_env_placeholders(value: Any, names: List[str] = None) -> List[str]:
+    """Collect env names referenced by config without exposing values."""
+    names = names or []
+    if isinstance(value, dict):
+        for item in value.values():
+            _summarize_env_placeholders(item, names)
+    elif isinstance(value, list):
+        for item in value:
+            _summarize_env_placeholders(item, names)
+    elif isinstance(value, str):
+        names.extend(match.group(1) for match in ENV_PATTERN.finditer(value))
+    return sorted(set(names))
+
 
 def load_config(config_path: str = None) -> Dict[str, Any]:
-    """Load configuration from YAML file."""
+    """Load YAML configuration and resolve ${VAR:default} placeholders from .env."""
     if config_path is None:
         config_path = CONFIG_DIR / "config.yaml"
     else:
@@ -29,17 +112,13 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
     
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
-    
-    # Environment override for reranking
-    env_enable_reranking = os.getenv("ENABLE_RERANKING")
-    if env_enable_reranking is not None:
-        val = env_enable_reranking.lower() in ("true", "1", "yes", "on")
-        if 'retrieval' not in config:
-            config['retrieval'] = {}
-        config['retrieval']['enable_reranking'] = val
-        logger.info(f"Reranking override from environment variable ENABLE_RERANKING: {val}")
-    
+
+    env_refs = _summarize_env_placeholders(config)
+    config = _resolve_env_placeholders(config)
+
     logger.info(f"Configuration loaded from {config_path}")
+    if env_refs:
+        logger.info(f"Configuration env placeholders resolved: {', '.join(env_refs)}")
     return config
 
 

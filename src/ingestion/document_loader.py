@@ -1,4 +1,4 @@
-"""Multimodal document loader for PDF and PowerPoint with image extraction."""
+"""Multimodal document loader for PDF, PowerPoint, Word, and text files."""
 
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
@@ -13,16 +13,25 @@ except ImportError:
     HAS_PPTX = False
     logger.warning("python-pptx not installed. PPT processing disabled.")
 
+try:
+    from docx import Document as DocxDocument
+    HAS_DOCX = True
+except ImportError:
+    HAS_DOCX = False
+    logger.warning("python-docx not installed. DOCX processing disabled.")
+
 from .image_extractor import ImageExtractor, ExtractedImage
 from .vision_captioner import VisionCaptioner, ImageCaption
 
 
 class MultimodalDocumentLoader:
-    """Load and process PDF and PowerPoint documents with image extraction."""
+    """Load and process PDF, PowerPoint, Word, and text documents."""
     
     SUPPORTED_FORMATS = {
         '.pdf': 'PDF Document',
-        '.pptx': 'PowerPoint Presentation'
+        '.pptx': 'PowerPoint Presentation',
+        '.docx': 'Word Document',
+        '.txt': 'Plain Text Document',
     }
     
     def __init__(
@@ -79,6 +88,9 @@ class MultimodalDocumentLoader:
         formats = {'.pdf': 'PDF Document'}
         if HAS_PPTX:
             formats['.pptx'] = 'PowerPoint Presentation'
+        if HAS_DOCX:
+            formats['.docx'] = 'Word Document'
+        formats['.txt'] = 'Plain Text Document'
         return formats
     
     def load_pdf(
@@ -279,6 +291,99 @@ class MultimodalDocumentLoader:
             progress_callback(100, 100, f"Completed processing {file_path.name}")
         
         return result
+
+    def load_docx(
+        self,
+        file_path: Path,
+        progress_callback: Callable = None
+    ) -> Dict[str, Any]:
+        """Load text content from a DOCX file."""
+        if not HAS_DOCX:
+            raise ImportError("python-docx is required for DOCX processing")
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        if progress_callback:
+            progress_callback(0, 100, f"Loading text from {file_path.name}...")
+
+        try:
+            docx = DocxDocument(str(file_path))
+            parts = [paragraph.text.strip() for paragraph in docx.paragraphs if paragraph.text.strip()]
+
+            for table in docx.tables:
+                for row in table.rows:
+                    cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if cells:
+                        parts.append(" | ".join(cells))
+
+            content = "\n".join(parts).strip()
+            documents = []
+            if content:
+                documents.append(Document(
+                    page_content=content,
+                    metadata={
+                        'source': str(file_path.name),
+                        'page': 1,
+                        'total_pages': 1,
+                        'content_type': 'text',
+                        'file_type': 'docx'
+                    }
+                ))
+
+            logger.info(f"Loaded DOCX text from {file_path.name}: {len(content)} characters")
+            if progress_callback:
+                progress_callback(100, 100, f"Completed processing {file_path.name}")
+
+            return {
+                'documents': documents,
+                'images': [],
+                'captions': [],
+                'source_file': str(file_path.name),
+                'file_type': 'docx'
+            }
+
+        except Exception as e:
+            logger.error(f"Error loading DOCX text: {e}")
+            raise
+
+    def load_txt(
+        self,
+        file_path: Path,
+        progress_callback: Callable = None
+    ) -> Dict[str, Any]:
+        """Load text content from a plain text file."""
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        if progress_callback:
+            progress_callback(0, 100, f"Loading text from {file_path.name}...")
+
+        content = file_path.read_text(encoding='utf-8', errors='ignore').strip()
+        documents = []
+        if content:
+            documents.append(Document(
+                page_content=content,
+                metadata={
+                    'source': str(file_path.name),
+                    'page': 1,
+                    'total_pages': 1,
+                    'content_type': 'text',
+                    'file_type': 'txt'
+                }
+            ))
+
+        logger.info(f"Loaded TXT text from {file_path.name}: {len(content)} characters")
+        if progress_callback:
+            progress_callback(100, 100, f"Completed processing {file_path.name}")
+
+        return {
+            'documents': documents,
+            'images': [],
+            'captions': [],
+            'source_file': str(file_path.name),
+            'file_type': 'txt'
+        }
     
     def load_document(
         self,
@@ -301,6 +406,10 @@ class MultimodalDocumentLoader:
             return self.load_pdf(file_path, progress_callback)
         elif suffix == '.pptx':
             return self.load_pptx(file_path, progress_callback)
+        elif suffix == '.docx':
+            return self.load_docx(file_path, progress_callback)
+        elif suffix == '.txt':
+            return self.load_txt(file_path, progress_callback)
         else:
             raise ValueError(f"Unsupported file format: {suffix}")
     
@@ -397,7 +506,7 @@ class MultimodalDocumentLoader:
 class DocumentLoader:
     """
     Document loader with multimodal support.
-    Supports PDF and PowerPoint with image extraction and captioning.
+    Supports PDF, PPTX, DOCX, and TXT with optional image extraction for PDF/PPTX.
     """
     
     def __init__(self, enable_multimodal: bool = True):

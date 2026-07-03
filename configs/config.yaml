@@ -1,45 +1,45 @@
 document_processing:
-  chunk_size: 500
-  chunk_overlap: 50
+  chunk_size: "${CHUNK_SIZE:500}"
+  chunk_overlap: "${CHUNK_OVERLAP:50}"
   separators: ["\n\n", "\n", ". ", " ", ""]
 
 embeddings:
-  model_name: "BAAI/bge-m3"
-  device: "cloud"
+  model_name: "${EMBEDDING_MODEL:BAAI/bge-m3}"
+  device: "${EMBEDDING_DEVICE:cloud}"
 
 vectorstore:
-  type: "chroma"
-  persist_directory: "./data/chroma_db"
-  collection_name: "course_materials"
+  type: "${VECTORSTORE_TYPE:chroma}"
+  persist_directory: "${CHROMA_PERSIST_DIRECTORY:./data/chroma_db}"
+  collection_name: "${CHROMA_COLLECTION_NAME:course_materials}"
 
 retrieval:
-  top_k: 5
-  search_type: "similarity"
-  enable_reranking: false
-  rerank_top_k: 3
-  reranker_type: "bge" # Options: "bge" (bge-reranker-v2-m3 via Pinecone) or "bm25"
-  reranker_model: "bge-reranker-v2-m3" # Pinecone model name
+  top_k: "${RETRIEVAL_TOP_K:5}"
+  search_type: "${RETRIEVAL_SEARCH_TYPE:similarity}"
+  enable_reranking: "${ENABLE_RERANKING:false}"
+  rerank_top_k: "${RERANK_TOP_K:3}"
+  reranker_type: "${RERANKER_TYPE:bge}" # Options: "bge" (bge-reranker-v2-m3 via Pinecone) or "bm25"
+  reranker_model: "${RERANKER_MODEL:bge-reranker-v2-m3}" # Pinecone model name
 
 llm:
-  provider: "huggingface"
-  model_name: "openai/gpt-oss-120b"
-  temperature: 0.3
-  max_new_tokens: 2048
-  device: "cloud"
+  provider: "${LLM_PROVIDER:provider_chain}"
+  model_name: "${LLM_MODEL:openai/gpt-oss-120b}"
+  temperature: "${LLM_TEMPERATURE:0.3}"
+  max_new_tokens: "${LLM_MAX_NEW_TOKENS:2048}"
+  device: "${LLM_DEVICE:cloud}"
 
 grading:
-  min_confidence: 0.5
-  require_citations: true
-  max_score: 100
+  min_confidence: "${GRADING_MIN_CONFIDENCE:0.5}"
+  require_citations: "${GRADING_REQUIRE_CITATIONS:true}"
+  max_score: "${GRADING_MAX_SCORE:100}"
 
 multimodal:
-  enable_image_extraction: false
-  enable_vision_captioning: false
+  enable_image_extraction: "${ENABLE_IMAGE_EXTRACTION:false}"
+  enable_vision_captioning: "${ENABLE_VISION_CAPTIONING:false}"
 
 api:
-  host: "0.0.0.0"
-  port: 8000
+  host: "${API_HOST:0.0.0.0}"
+  port: "${API_PORT:8000}"
 
 ui:
-  port: 7860
-  share: false
+  port: "${UI_PORT:7860}"
+  share: "${UI_SHARE:false}"

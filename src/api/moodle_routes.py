@@ -381,7 +381,7 @@ async def upload_course_material(
     Upload a single course material file.
     
     This endpoint is used by the Moodle local_assign_ai_rag plugin
-    to upload course materials (PDF, PPTX, DOCX, etc.) for ingestion
+    to upload course materials (PDF, PPTX, DOCX, TXT) for ingestion
     into the RAG knowledge base.
     
     Args:
@@ -398,7 +398,7 @@ async def upload_course_material(
         grader = get_grader()
         
         # Validate file type
-        valid_extensions = ['.pdf', '.pptx', '.ppt', '.docx', '.doc', '.txt']
+        valid_extensions = ['.pdf', '.pptx', '.docx', '.txt']
         ext = Path(file.filename).suffix.lower()
         if ext not in valid_extensions:
             raise HTTPException(

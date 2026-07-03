@@ -15,7 +15,7 @@ class EssayGrader:
     def __init__(
         self,
         config: Dict[str, Any],
-        provider: str = "groq",
+        provider: str = "provider_chain",
         model_name: str = None,
         enable_image_extraction: Optional[bool] = None,
         enable_vision_captioning: Optional[bool] = None
@@ -25,7 +25,7 @@ class EssayGrader:
         
         Args:
             config: Configuration dictionary
-            provider: LLM provider ("groq" or "huggingface")
+            provider: LLM provider ("provider_chain", "groq", "openrouter", or "huggingface")
             model_name: Model name override (optional)
             enable_image_extraction: Enable image extraction from documents
             enable_vision_captioning: Enable vision captioning for images
