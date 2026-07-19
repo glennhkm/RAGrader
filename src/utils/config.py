@@ -2,6 +2,7 @@
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -126,15 +127,43 @@ def setup_logging(log_level: str = "INFO"):
     """Setup logging configuration."""
     log_file = LOGS_DIR / "app.log"
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    
-    logger.add(
-        log_file,
-        rotation="500 MB",
-        retention="10 days",
-        level=log_level,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}"
+
+    level = os.getenv("LOG_LEVEL", log_level).upper()
+    logformat = (
+        "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | "
+        "request_id={extra[request_id]} | {name}:{function}:{line} - {message}"
     )
-    logger.info("Logging setup complete")
+
+    # Replace Loguru's DEBUG default sink and configure both Docker stdout and
+    # the persistent file with the same production log level.
+    logger.remove()
+    logger.configure(extra={"request_id": "-"})
+    logger.add(
+        sys.stderr,
+        level=level,
+        format=logformat,
+        backtrace=False,
+        diagnose=False,
+    )
+    try:
+        logger.add(
+            log_file,
+            rotation="50 MB",
+            retention="10 days",
+            level=level,
+            format=logformat,
+            backtrace=False,
+            diagnose=False,
+            enqueue=True,
+        )
+    except OSError as exc:
+        # A bind-mounted logs directory may initially have the wrong owner.
+        # Keep the API available through Docker stdout and report the fix.
+        logger.warning(
+            f"Persistent file logging disabled: {exc}. "
+            "Ensure /app/logs is writable by UID 10001."
+        )
+    logger.info(f"Logging setup complete at level {level}")
 
 
 def ensure_directories():

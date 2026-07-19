@@ -25,6 +25,8 @@ rank-bm25>=0.2,<1.0
 
 # Vector Database
 chromadb>=0.5,<1.0
+# Chroma 0.x still uses the positional capture API removed in PostHog 6.
+posthog>=2.4,<6.0
 
 # Document Ingestion
 pypdf>=4.0,<6.0

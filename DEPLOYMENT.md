@@ -122,6 +122,12 @@ sudo docker compose up -d
 sudo docker compose ps
 sudo docker inspect --format '{{.State.Health.Status}}' ai_rag_grading_ta_api
 sudo docker compose logs --tail=100
+
+# Pantau log request secara langsung.
+sudo docker compose logs -f --tail=200 ai-rag-grading-ta-api
+
+# Cari request ID yang ditampilkan Moodle saat grading gagal.
+sudo grep -F "REQUEST_ID_DARI_MOODLE" logs/app.log
 ```
 
 Gunakan satu container API selama Chroma memakai `PersistentClient` lokal. Jangan menjalankan beberapa replica dengan volume Chroma yang sama. Untuk scale-out, pindahkan Chroma ke service server terpisah terlebih dahulu.

@@ -8,10 +8,13 @@ The Moodle integration endpoints are prefixed and follow the format
 expected by the Moodle plugin for seamless LMS integration.
 """
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from typing import List
 from pathlib import Path
 from threading import RLock
+import re
+import time
+import uuid
 from loguru import logger
 
 from .models import (
@@ -64,6 +67,36 @@ operation_lock = RLock()
 app.include_router(moodle_router)
 
 logger.info("FastAPI application initialized with Moodle integration")
+
+
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+@app.middleware("http")
+async def log_http_request(request: Request, call_next):
+    """Log request outcome and expose a correlation ID without logging payloads."""
+    supplied_id = request.headers.get("X-Request-ID", "")
+    request_id = supplied_id if REQUEST_ID_PATTERN.fullmatch(supplied_id) else uuid.uuid4().hex
+    started = time.monotonic()
+    status_code = 500
+
+    with logger.contextualize(request_id=request_id):
+        logger.info(f"HTTP request started method={request.method} path={request.url.path}")
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+        except Exception:
+            logger.exception("Unhandled HTTP request error")
+            raise
+        finally:
+            duration_ms = (time.monotonic() - started) * 1000
+            logger.info(
+                f"HTTP request finished method={request.method} path={request.url.path} "
+                f"status={status_code} duration_ms={duration_ms:.1f}"
+            )
+
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.get("/", response_model=HealthResponse)
