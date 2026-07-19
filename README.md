@@ -346,6 +346,8 @@ Service hanya mendukung `.docx` dan `.pptx`. Konversi file lama terlebih dahulu.
 
 - Jangan commit file `.env`.
 - Gunakan `.env.example` sebagai template.
-- Pastikan port di `.env` sesuai dengan reverse proxy/server.
+- Atur `API_BIND_ADDRESS` ke interface server yang boleh menerima koneksi.
 - Persist `data/` agar vector Chroma tidak hilang saat container restart.
 - Persist `logs/` jika ingin audit error dan penggunaan provider.
+- Gunakan satu container selama memakai Chroma lokal. Beberapa replica tidak boleh berbagi direktori Chroma yang sama.
+- Ikuti runbook lengkap di [`DEPLOYMENT.md`](DEPLOYMENT.md).

@@ -9,10 +9,9 @@ expected by the Moodle plugin for seamless LMS integration.
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
-from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from pathlib import Path
-import shutil
+from threading import RLock
 from loguru import logger
 
 from .models import (
@@ -25,6 +24,8 @@ from .models import (
 )
 from ..grading import EssayGrader
 from ..utils import load_config, setup_logging, ensure_directories, DATA_DIR
+from .moodle_routes import router as moodle_router
+from .request_utils import API_VERSION, safe_filename, save_upload
 
 
 # Initialize
@@ -46,18 +47,9 @@ AI-powered essay grading with RAG (Retrieval-Augmented Generation) and course ma
 ## Moodle Integration
 Use the `/assign/answer` endpoint for Moodle assignment grading.
     """,
-    version="1.0.0",
+    version=API_VERSION,
     docs_url="/docs",
     redoc_url="/redoc"
-)
-
-# CORS middleware - allow all origins for Moodle integration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # Load config and initialize grader
@@ -67,31 +59,31 @@ grader = EssayGrader(
     provider=config.get('llm', {}).get('provider', 'provider_chain'),
     model_name=config.get('llm', {}).get('model_name')
 )
+operation_lock = RLock()
 
-# Import and include Moodle routes
-from .moodle_routes import router as moodle_router
 app.include_router(moodle_router)
 
 logger.info("FastAPI application initialized with Moodle integration")
 
 
 @app.get("/", response_model=HealthResponse)
-async def root():
+def root():
     """Root endpoint."""
-    return HealthResponse(status="healthy", version="1.0.0")
+    return HealthResponse(status="healthy", version=API_VERSION)
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
+def health_check():
     """Health check endpoint."""
-    return HealthResponse(status="healthy", version="1.0.0")
+    return HealthResponse(status="healthy", version=API_VERSION)
 
 
 @app.get("/status", response_model=SystemStatus)
-async def get_status():
+def get_status():
     """Get system status."""
     try:
-        status = grader.get_system_status()
+        with operation_lock:
+            status = grader.get_system_status()
         return SystemStatus(**status)
     except Exception as e:
         logger.error(f"Error getting status: {e}")
@@ -99,7 +91,7 @@ async def get_status():
 
 
 @app.post("/upload", response_model=UploadResponse)
-async def upload_materials(
+def upload_materials(
     files: List[UploadFile] = File(...),
     chunk_size: int = Form(500),
     chunk_overlap: int = Form(50)
@@ -121,17 +113,18 @@ async def upload_materials(
         
         # Validate files are PDFs
         for file in files:
-            if not file.filename.endswith('.pdf'):
+            filename = safe_filename(file.filename)
+            if Path(filename).suffix.lower() != '.pdf':
                 raise HTTPException(
                     status_code=400,
                     detail=f"Invalid file type: {file.filename}. Only PDF files are allowed."
                 )
         
         # Update chunking config
-        grader.update_chunking_config(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
-        )
+        if not 100 <= chunk_size <= 2000:
+            raise HTTPException(status_code=400, detail="chunk_size must be between 100 and 2000")
+        if not 0 <= chunk_overlap < chunk_size:
+            raise HTTPException(status_code=400, detail="chunk_overlap must be smaller than chunk_size")
         
         # Save uploaded files
         upload_dir = DATA_DIR / "uploads"
@@ -139,17 +132,20 @@ async def upload_materials(
         
         pdf_paths = []
         for file in files:
-            file_path = upload_dir / file.filename
-            
-            # Save file
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            filename = safe_filename(file.filename)
+            file_path = upload_dir / filename
+            save_upload(file, file_path)
             
             pdf_paths.append(file_path)
-            logger.info(f"Saved file: {file.filename}")
+            logger.info(f"Saved file: {filename}")
         
         # Ingest documents
-        result = grader.ingest_course_materials(pdf_paths)
+        with operation_lock:
+            grader.update_chunking_config(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            result = grader.ingest_course_materials(pdf_paths)
         
         if not result['success']:
             raise HTTPException(status_code=500, detail=result['message'])
@@ -164,7 +160,7 @@ async def upload_materials(
 
 
 @app.post("/grade", response_model=GradeResponse)
-async def grade_essay(request: GradeRequest):
+def grade_essay(request: GradeRequest):
     """
     Grade a student essay with question context.
     
@@ -186,11 +182,12 @@ async def grade_essay(request: GradeRequest):
             raise HTTPException(status_code=400, detail="Rubric cannot be empty")
         
         # Grade essay with question context
-        result = grader.grade_essay(
-            question=request.question,
-            essay=request.essay,
-            rubric=request.rubric
-        )
+        with operation_lock:
+            result = grader.grade_essay(
+                question=request.question,
+                essay=request.essay,
+                rubric=request.rubric
+            )
         
         if not result.get('success', False):
             error_msg = result.get('error', 'Unknown error occurred')
@@ -207,10 +204,11 @@ async def grade_essay(request: GradeRequest):
 
 
 @app.post("/clear")
-async def clear_database():
+def clear_database():
     """Clear all documents from vector database."""
     try:
-        grader.clear_vector_store()
+        with operation_lock:
+            grader.clear_vector_store()
         return {"success": True, "message": "Vector database cleared successfully"}
     except Exception as e:
         logger.error(f"Error clearing database: {e}")
@@ -218,7 +216,7 @@ async def clear_database():
 
 
 @app.post("/config/chunking")
-async def update_chunking_config(config: ChunkingConfig):
+def update_chunking_config(config: ChunkingConfig):
     """
     Update chunking configuration.
     
@@ -229,10 +227,13 @@ async def update_chunking_config(config: ChunkingConfig):
         Success message
     """
     try:
-        grader.update_chunking_config(
-            chunk_size=config.chunk_size,
-            chunk_overlap=config.chunk_overlap
-        )
+        if config.chunk_overlap >= config.chunk_size:
+            raise HTTPException(status_code=400, detail="chunk_overlap must be smaller than chunk_size")
+        with operation_lock:
+            grader.update_chunking_config(
+                chunk_size=config.chunk_size,
+                chunk_overlap=config.chunk_overlap
+            )
         return {
             "success": True,
             "message": "Chunking configuration updated",

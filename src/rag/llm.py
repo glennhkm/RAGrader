@@ -95,6 +95,11 @@ class LLMWrapper:
         self.max_new_tokens = max_new_tokens
         self.device = "cloud"  # Always cloud-based
         self.provider = provider.lower()
+        self.request_timeout = max(1.0, float(os.getenv("LLM_REQUEST_TIMEOUT", "60")))
+        self.total_timeout = max(
+            self.request_timeout,
+            float(os.getenv("LLM_TOTAL_TIMEOUT", "110")),
+        )
         
         logger.info(f"Initializing LLM with provider: {self.provider}")
         logger.info(f"Model: {model_name}")
@@ -205,7 +210,7 @@ class LLMWrapper:
                 temperature=self.temperature,
                 max_tokens=self.max_new_tokens,
                 groq_api_key=api_token,
-                request_timeout=120
+                request_timeout=self.request_timeout
             )
             self._use_openai_client = False
             logger.info("Groq LLM initialized successfully")
@@ -231,6 +236,8 @@ class LLMWrapper:
             self.client = OpenAI(
                 base_url="https://router.huggingface.co/v1",
                 api_key=api_token,
+                timeout=self.request_timeout,
+                max_retries=0,
             )
             self._use_openai_client = True
             logger.info("HuggingFace Inference API initialized successfully")
@@ -265,21 +272,30 @@ class LLMWrapper:
         """Generate with fallback across Groq and OpenRouter endpoints."""
         self._provider_failures = []
         last_error: Optional[Exception] = None
+        deadline = time.monotonic() + self.total_timeout
 
         for endpoint in self.provider_endpoints:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             api_key = os.getenv(endpoint.api_key_env)
             if not api_key:
                 continue
 
             try:
                 logger.info(f"Generating response via {endpoint.name} ({endpoint.model})")
-                client = self._create_openai_client(endpoint=endpoint, api_key=api_key)
+                timeout = min(self.request_timeout, remaining)
+                client = self._create_openai_client(
+                    endpoint=endpoint,
+                    api_key=api_key,
+                    timeout=timeout,
+                )
                 completion = client.chat.completions.create(
                     model=endpoint.model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=self.temperature,
                     max_tokens=self.max_new_tokens,
-                    timeout=120,
+                    timeout=timeout,
                 )
                 self._last_provider = endpoint.name
                 return completion.choices[0].message.content.strip()
@@ -297,7 +313,9 @@ class LLMWrapper:
                 if error_type == "rate_limit":
                     retry_after = self._extract_retry_after_seconds(exc)
                     if retry_after:
-                        time.sleep(min(retry_after, 5))
+                        sleep_seconds = min(retry_after, 2, max(0.0, deadline - time.monotonic()))
+                        if sleep_seconds:
+                            time.sleep(sleep_seconds)
                 continue
 
         raise RuntimeError(
@@ -305,7 +323,9 @@ class LLMWrapper:
             + (str(last_error) if last_error else "unknown error")
         )
 
-    def _create_openai_client(self, endpoint: ProviderEndpoint, api_key: str) -> OpenAI:
+    def _create_openai_client(
+        self, endpoint: ProviderEndpoint, api_key: str, timeout: float
+    ) -> OpenAI:
         """Create OpenAI-compatible client with provider-specific headers."""
         default_headers = None
         if endpoint.name.startswith("openrouter"):
@@ -317,6 +337,8 @@ class LLMWrapper:
             base_url=endpoint.base_url,
             api_key=api_key,
             default_headers=default_headers,
+            timeout=timeout,
+            max_retries=0,
         )
 
     def _classify_provider_error(self, exc: Exception) -> str:
@@ -359,6 +381,7 @@ class LLMWrapper:
             ],
             temperature=self.temperature,
             max_tokens=self.max_new_tokens,
+            timeout=self.request_timeout,
         )
         return completion.choices[0].message.content.strip()
     

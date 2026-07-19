@@ -200,12 +200,6 @@ class VectorStore:
                         logger.error(f"   ❌ Batch {batch_idx + 1} failed after {max_retries} attempts")
                         raise Exception(f"Failed to add batch {batch_idx + 1} after {max_retries} attempts: {e}")
         
-        # Persist changes (persist may be a no-op or deprecated depending on version, but safe to call)
-        try:
-            vs.persist()
-        except Exception as e:
-            pass
-        
         logger.info(f"✅ Successfully added all {total_docs} documents in {num_batches} batches")
         return all_ids
     

@@ -34,12 +34,13 @@ INSTRUKSI:
 2. Evaluasi jawaban berdasarkan setiap kriteria dalam rubrik
 3. Gunakan bukti dari materi kuliah untuk memverifikasi keakuratan
 4. Berikan umpan balik spesifik untuk setiap kriteria
-5. Berikan skor berdasarkan rubrik
-6. Sertakan kutipan dari materi kuliah
+5. Field "score" WAJIB berupa persentase keseluruhan 0 sampai 100, terlepas dari nilai maksimum tugas
+6. Field skor pada setiap criterion_scores WAJIB mengikuti batas poin kriteria pada rubrik
+7. Sertakan kutipan dari materi kuliah
 
 Berikan respons Anda dalam format JSON berikut:
 {{
-    "score": <skor numerik>,
+    "score": <persentase keseluruhan 0-100>,
     "feedback": "Umpan balik keseluruhan di sini",
     "criterion_scores": {{
         "nama_kriteria": {{

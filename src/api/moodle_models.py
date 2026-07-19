@@ -11,7 +11,7 @@ class MoodleAssignRequest(BaseModel):
     This matches the payload format sent by local_assign_ai_rag plugin.
     """
     # Course context
-    course_id: int = Field(..., description="Moodle course ID")
+    course_id: int = Field(..., gt=0, description="Moodle course ID")
     course_name: str = Field(default="", description="Course full name")
     
     # Assignment context
@@ -26,7 +26,7 @@ class MoodleAssignRequest(BaseModel):
     
     # Grading parameters
     rubric: Dict[str, Any] = Field(default_factory=dict, description="Grading rubric structure")
-    maximum_grade: float = Field(default=100.0, description="Maximum possible grade")
+    maximum_grade: float = Field(default=100.0, gt=0, le=10000, description="Maximum possible grade")
     
     # Additional metadata
     cmi_id: int = Field(default=0, description="Course module ID")
@@ -119,7 +119,7 @@ class MoodleCollectionResponse(BaseModel):
 class MoodleStatusResponse(BaseModel):
     """Response model for server status."""
     status: str
-    version: str = "1.0.0"
+    version: str = "1.1.0"
     vectorstore: Dict[str, Any] = Field(default_factory=dict)
     llm_info: Dict[str, Any] = Field(default_factory=dict)
     embedding_model: str = ""

@@ -72,7 +72,7 @@ class EssayGrader:
         vision_model: str = None
     ) -> Dict[str, Any]:
         """
-        Ingest course material documents (PDF, PPTX) with image support.
+        Ingest course material documents (PDF, PPTX, DOCX, TXT) with image support.
         
         Args:
             file_paths: List of paths to document files
@@ -99,7 +99,7 @@ class EssayGrader:
                     self.document_loader.multimodal_loader.vision_captioner.switch_model(vision_model)
             
             # Filter supported files
-            supported_extensions = ['.pdf', '.pptx']
+            supported_extensions = ['.pdf', '.pptx', '.docx', '.txt']
             valid_paths = [
                 p for p in file_paths 
                 if p.suffix.lower() in supported_extensions
@@ -108,7 +108,7 @@ class EssayGrader:
             if not valid_paths:
                 return {
                     "success": False,
-                    "message": "Tidak ada file yang didukung (PDF/PPTX)",
+                    "message": "Tidak ada file yang didukung (PDF/PPTX/DOCX/TXT)",
                     "documents_loaded": 0,
                     "chunks_created": 0,
                     "images_extracted": 0,
@@ -152,6 +152,13 @@ class EssayGrader:
                 progress_callback(90, 100, "Menyimpan ke database...")
             
             if chunks:
+                # Uploading the same Moodle file again is a replacement, not an
+                # append operation. Remove prior chunks only after parsing works.
+                for source_name in result.get('files_processed', []):
+                    self.rag_pipeline.vectorstore.delete_document_by_source(
+                        source_name=source_name,
+                        course_id=course_id,
+                    )
                 self.rag_pipeline.vectorstore.add_documents(chunks, course_id=course_id)
             
             # Count text and image chunks
@@ -314,7 +321,7 @@ class EssayGrader:
         multimodal_status = {
             "image_extraction_enabled": self.enable_image_extraction,
             "vision_captioning_enabled": self.enable_vision_captioning,
-            "supported_formats": ['.pdf', '.pptx']
+            "supported_formats": ['.pdf', '.pptx', '.docx', '.txt']
         }
         
         return {
