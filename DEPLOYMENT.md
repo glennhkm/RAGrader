@@ -35,6 +35,35 @@ df -h
 
 Lanjutkan hanya jika Docker Compose tersedia, IP terpasang pada server, port 8000 kosong, dan disk mencukupi.
 
+Jika server Ubuntu belum memiliki Docker, pasang Docker Engine dan Compose plugin dari repository resmi Docker:
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo docker run --rm hello-world
+sudo docker compose version
+```
+
+Runbook menggunakan `sudo docker`. Menambahkan akun operator ke grup `docker` bersifat opsional karena grup tersebut memberikan hak setara root.
+
 ## 3. Ambil Source Code
 
 ```bash
@@ -87,12 +116,12 @@ Container berjalan sebagai UID/GID `10001`:
 ```bash
 mkdir -p data/chroma_db data/uploads logs
 sudo chown -R 10001:10001 data logs
-docker compose config --quiet
-docker compose build --pull --no-cache
-docker compose up -d
-docker compose ps
-docker inspect --format '{{.State.Health.Status}}' ai_rag_grading_ta_api
-docker compose logs --tail=100
+sudo docker compose config --quiet
+sudo docker compose build --pull --no-cache
+sudo docker compose up -d
+sudo docker compose ps
+sudo docker inspect --format '{{.State.Health.Status}}' ai_rag_grading_ta_api
+sudo docker compose logs --tail=100
 ```
 
 Gunakan satu container API selama Chroma memakai `PersistentClient` lokal. Jangan menjalankan beberapa replica dengan volume Chroma yang sama. Untuk scale-out, pindahkan Chroma ke service server terpisah terlebih dahulu.
@@ -182,4 +211,3 @@ docker compose ps
 ```
 
 Rollback kode menggunakan commit terakhir yang tercatat, lalu build ulang. Jangan hapus direktori `data/` ketika rollback.
-
