@@ -1,0 +1,102 @@
+"""Regression tests for Chroma collection access across client versions."""
+
+import unittest
+import tempfile
+
+import chromadb
+
+from chromadb.errors import NotFoundError
+
+from src.vectorstore.chroma_store import VectorStore
+
+
+class _FakeCollection:
+    def __init__(self, count=37, ids=None):
+        self._count = count
+        self._ids = ids or []
+        self.deleted_ids = []
+
+    def count(self):
+        return self._count
+
+    def get(self, where=None):
+        return {"ids": self._ids}
+
+    def delete(self, ids=None):
+        self.deleted_ids.extend(ids or [])
+
+
+class _FakeClient:
+    def __init__(self, collection=None, missing=False):
+        self.collection = collection
+        self.missing = missing
+        self.deleted_collections = []
+
+    def list_collections(self):
+        raise AssertionError("Collection operations must not depend on list_collections()")
+
+    def get_collection(self, name):
+        if self.missing:
+            raise NotFoundError(f"Collection {name} does not exist")
+        return self.collection
+
+    def delete_collection(self, name):
+        self.deleted_collections.append(name)
+
+
+def _make_store(client):
+    store = VectorStore.__new__(VectorStore)
+    store.client = client
+    store.base_collection_name = "course_materials"
+    store.current_embedding_model = "BAAI/bge-m3"
+    store._vectorstores = {}
+    return store
+
+
+class ChromaStoreCompatibilityTest(unittest.TestCase):
+    def test_real_persistent_client_counts_and_deletes_course_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = chromadb.PersistentClient(path=directory)
+            store = _make_store(client)
+            collection = client.get_or_create_collection("course_204_baai_bge_m3")
+            collection.add(
+                ids=["chunk-1"],
+                embeddings=[[0.1, 0.2, 0.3]],
+                documents=["Deployment pipeline material"],
+                metadatas=[{"source": "material.pptx"}],
+            )
+
+            self.assertEqual(1, store.get_count("204"))
+            self.assertTrue(store.delete_document_by_source("material.pptx", "204"))
+            self.assertEqual(0, store.get_count("204"))
+
+    def test_count_reads_existing_collection_without_listing(self):
+        store = _make_store(_FakeClient(_FakeCollection(count=37)))
+
+        self.assertEqual(37, store.get_count("204"))
+
+    def test_count_returns_zero_only_for_missing_collection(self):
+        store = _make_store(_FakeClient(missing=True))
+
+        self.assertEqual(0, store.get_count("204"))
+
+    def test_reupload_deletes_existing_source_chunks(self):
+        collection = _FakeCollection(ids=["chunk-1", "chunk-2"])
+        store = _make_store(_FakeClient(collection))
+
+        deleted = store.delete_document_by_source("material.pptx", "204")
+
+        self.assertTrue(deleted)
+        self.assertEqual(["chunk-1", "chunk-2"], collection.deleted_ids)
+
+    def test_clear_deletes_existing_collection(self):
+        client = _FakeClient(_FakeCollection())
+        store = _make_store(client)
+
+        store.clear("204")
+
+        self.assertEqual(["course_204_baai_bge_m3"], client.deleted_collections)
+
+
+if __name__ == "__main__":
+    unittest.main()

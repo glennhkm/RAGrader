@@ -7,6 +7,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from loguru import logger
 import chromadb
+from chromadb.errors import NotFoundError
 
 from .embeddings import EmbeddingGenerator
 
@@ -283,13 +284,7 @@ class VectorStore:
         col_name = self._get_collection_name(course_id)
         logger.info(f"Attempting to delete document '{source_name}' from collection: {col_name}")
         try:
-            # Check if collection exists
-            collections = [c.name for c in self.client.list_collections()]
-            if col_name not in collections:
-                logger.warning(f"Collection {col_name} does not exist")
-                return False
-                
-            collection = self.client.get_collection(col_name)
+            collection = self.client.get_collection(name=col_name)
             
             # Query for documents with matching source metadata.
             results = collection.get(where={"source": {"$eq": source_name}})
@@ -303,6 +298,9 @@ class VectorStore:
                 logger.warning(f"No chunks found for file '{source_name}' in collection '{col_name}'")
                 return False
                 
+        except NotFoundError:
+            logger.warning(f"Collection {col_name} does not exist")
+            return False
         except Exception as e:
             logger.error(f"Error deleting chunks for '{source_name}': {e}")
             return False
@@ -316,15 +314,17 @@ class VectorStore:
         """
         col_name = self._get_collection_name(course_id)
         try:
-            collections = [c.name for c in self.client.list_collections()]
-            if col_name in collections:
-                self.client.delete_collection(col_name)
-                logger.info(f"Vector store collection cleared: {col_name}")
+            self.client.get_collection(name=col_name)
+            self.client.delete_collection(name=col_name)
+            logger.info(f"Vector store collection cleared: {col_name}")
             
             # Remove from cached dict
             if col_name in self._vectorstores:
                 del self._vectorstores[col_name]
             
+        except NotFoundError:
+            logger.info(f"Vector store collection already absent: {col_name}")
+            self._vectorstores.pop(col_name, None)
         except Exception as e:
             logger.error(f"Error clearing vector store collection {col_name}: {e}")
             raise
@@ -341,15 +341,13 @@ class VectorStore:
         """
         col_name = self._get_collection_name(course_id)
         try:
-            collections = [c.name for c in self.client.list_collections()]
-            if col_name not in collections:
-                return 0
-            
-            collection = self.client.get_collection(col_name)
+            collection = self.client.get_collection(name=col_name)
             return collection.count()
-        except Exception as e:
-            logger.warning(f"Could not get document count for collection {col_name}: {e}")
+        except NotFoundError:
             return 0
+        except Exception as e:
+            logger.error(f"Could not get document count for collection {col_name}: {e}")
+            raise
     
     def as_retriever(self, course_id: Optional[str] = None, **kwargs):
         """

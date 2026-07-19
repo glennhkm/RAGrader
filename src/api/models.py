@@ -70,4 +70,4 @@ class SystemStatus(BaseModel):
 class HealthResponse(BaseModel):
     """Health check response."""
     status: str
-    version: str = "1.1.0"
+    version: str = "1.1.1"

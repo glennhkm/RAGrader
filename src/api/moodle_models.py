@@ -119,7 +119,7 @@ class MoodleCollectionResponse(BaseModel):
 class MoodleStatusResponse(BaseModel):
     """Response model for server status."""
     status: str
-    version: str = "1.1.0"
+    version: str = "1.1.1"
     vectorstore: Dict[str, Any] = Field(default_factory=dict)
     llm_info: Dict[str, Any] = Field(default_factory=dict)
     embedding_model: str = ""
