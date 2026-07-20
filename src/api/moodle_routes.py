@@ -28,6 +28,7 @@ from .request_utils import (
     save_upload,
     validate_material_filename,
 )
+from .locking import LockAcquisitionError
 
 # Router for Moodle endpoints
 router = APIRouter(prefix="", tags=["Moodle Integration"])
@@ -39,10 +40,11 @@ def get_grader():
     return grader
 
 
-def get_operation_lock():
-    """Get the process-wide lock protecting embedded Chroma and model clients."""
-    from .app import operation_lock
-    return operation_lock
+def get_operation_lock(course_id: object = "default", write: bool = False):
+    """Get a replica-safe read or write lock for one course."""
+    from .app import operation_locks
+    resource = f"course:{course_id}"
+    return operation_locks.write(resource) if write else operation_locks.read(resource)
 
 
 @router.post("/assign/answer", response_model=MoodleAssignResponse)
@@ -106,7 +108,7 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
         
         # Grade using RAG pipeline
         rubric = request.rubric if request.rubric else {"criteria": {}}
-        with get_operation_lock():
+        with get_operation_lock(request.course_id):
             result = grader.grade_essay(
                 question=request.question,
                 essay=request.essay,
@@ -179,6 +181,8 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
             rubric_response=normalized_criteria
         )
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -225,20 +229,19 @@ def moodle_upload_materials(
 
         filenames = [validate_material_filename(file.filename) for file in files]
         
-        # Save uploaded files
-        from ..utils import DATA_DIR
-        upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        
-        file_paths = []
-        for file, filename in zip(files, filenames):
-            file_path = upload_dir / filename
-            save_upload(file, file_path)
-            file_paths.append(file_path)
-            logger.info(f"Saved file: {filename}")
-        
-        # Ingest documents
-        with get_operation_lock():
+        # Save and ingest under one cross-replica course write lock.
+        with get_operation_lock(course_id, write=True):
+            from ..utils import DATA_DIR
+            upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
+            file_paths = []
+            for file, filename in zip(files, filenames):
+                file_path = upload_dir / filename
+                save_upload(file, file_path)
+                file_paths.append(file_path)
+                logger.info(f"Saved file: {filename}")
+
             grader.update_chunking_config(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap
@@ -258,6 +261,8 @@ def moodle_upload_materials(
             errors=result.get('errors', [])
         )
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -280,7 +285,7 @@ def get_course_collection(course_id: int = PathParameter(..., gt=0)):
         grader = get_grader()
         
         # Get vectorstore info
-        with get_operation_lock():
+        with get_operation_lock(course_id):
             vs_info = grader.rag_pipeline.get_vectorstore_info(str(course_id))
         
         return MoodleCollectionResponse(
@@ -291,6 +296,8 @@ def get_course_collection(course_id: int = PathParameter(..., gt=0)):
             embedding_model=grader.rag_pipeline.current_embedding_model
         )
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error getting collection info: {e}")
         return MoodleCollectionResponse(
@@ -317,7 +324,7 @@ def clear_course_collection(course_id: int = PathParameter(..., gt=0)):
     """
     try:
         grader = get_grader()
-        with get_operation_lock():
+        with get_operation_lock(course_id, write=True):
             grader.clear_vector_store(str(course_id))
         
         return {
@@ -326,6 +333,8 @@ def clear_course_collection(course_id: int = PathParameter(..., gt=0)):
             "course_id": course_id
         }
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error clearing collection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -355,6 +364,8 @@ def moodle_server_status():
             ready=True
         )
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error getting status: {e}")
         return MoodleStatusResponse(
@@ -395,17 +406,16 @@ def upload_course_material(
         filename = validate_material_filename(file.filename)
         logger.info(f"Course material upload for course {course_id}: {filename}")
         
-        # Save uploaded file
-        from ..utils import DATA_DIR
-        upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        
-        file_path = upload_dir / filename
-        save_upload(file, file_path)
-        logger.info(f"Saved file: {file_path}")
-        
-        # Ingest document
-        with get_operation_lock():
+        # Keep the file and its vectors consistent across every replica.
+        with get_operation_lock(course_id, write=True):
+            from ..utils import DATA_DIR
+            upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
+            file_path = upload_dir / filename
+            save_upload(file, file_path)
+            logger.info(f"Saved file: {file_path}")
+
             result = grader.ingest_course_materials([file_path], course_id=str(course_id))
         
         if not result['success']:
@@ -420,6 +430,8 @@ def upload_course_material(
             "documents_loaded": result.get('documents_loaded', 0)
         }
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -444,15 +456,15 @@ def clear_course_materials(course_id: int = Form(..., gt=0)):
     
     try:
         grader = get_grader()
-        with get_operation_lock():
+        with get_operation_lock(course_id, write=True):
             grader.clear_vector_store(str(course_id))
-        
-        # Also clear uploaded files for this course
-        from ..utils import DATA_DIR
-        upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
-        if upload_dir.exists():
-            shutil.rmtree(upload_dir)
-            logger.info(f"Cleared upload directory: {upload_dir}")
+
+            # Also clear uploaded files for this course while writes are blocked.
+            from ..utils import DATA_DIR
+            upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
+            if upload_dir.exists():
+                shutil.rmtree(upload_dir)
+                logger.info(f"Cleared upload directory: {upload_dir}")
         
         return {
             "success": True,
@@ -460,6 +472,8 @@ def clear_course_materials(course_id: int = Form(..., gt=0)):
             "course_id": course_id
         }
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error clearing course materials: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -477,15 +491,15 @@ def delete_course_material_file(
         filename = safe_filename(filename)
         logger.info(f"Moodle delete request for file '{filename}' in course {course_id}")
         grader = get_grader()
-        with get_operation_lock():
+        with get_operation_lock(course_id, write=True):
             success = grader.delete_course_material_file(str(course_id), filename)
-        
-        # Also clean up the saved file on disk if it exists
-        from ..utils import DATA_DIR
-        file_path = DATA_DIR / "uploads" / f"course_{course_id}" / filename
-        if file_path.exists():
-            file_path.unlink()
-            logger.info(f"Removed file from disk: {file_path}")
+
+            # Also clean up the saved file while writes are blocked.
+            from ..utils import DATA_DIR
+            file_path = DATA_DIR / "uploads" / f"course_{course_id}" / filename
+            if file_path.exists():
+                file_path.unlink()
+                logger.info(f"Removed file from disk: {file_path}")
             
         return {
             "success": success,
@@ -493,6 +507,8 @@ def delete_course_material_file(
             "course_id": course_id,
             "filename": filename
         }
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error deleting course material file: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -511,15 +527,15 @@ def get_course_materials_status(course_id: int = PathParameter(..., gt=0)):
     """
     try:
         grader = get_grader()
-        with get_operation_lock():
+        with get_operation_lock(course_id):
             vs_info = grader.rag_pipeline.get_vectorstore_info(str(course_id))
-        
-        # Check uploaded files
-        from ..utils import DATA_DIR
-        upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
-        uploaded_files = []
-        if upload_dir.exists():
-            uploaded_files = [f.name for f in upload_dir.iterdir() if f.is_file()]
+
+            # Read file status from the same consistent course snapshot.
+            from ..utils import DATA_DIR
+            upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
+            uploaded_files = []
+            if upload_dir.exists():
+                uploaded_files = [f.name for f in upload_dir.iterdir() if f.is_file()]
         
         return {
             "success": True,
@@ -530,6 +546,8 @@ def get_course_materials_status(course_id: int = PathParameter(..., gt=0)):
             "files_count": len(uploaded_files)
         }
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error getting course materials status: {e}")
         return {
@@ -558,6 +576,8 @@ def assign_server_status():
             "llm_provider": llm_info.get('provider', 'unknown'),
             "llm_model": llm_info.get('model', 'unknown')
         }
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         return {
             "status": "error",

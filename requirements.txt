@@ -8,6 +8,7 @@ python-multipart>=0.0.9,<1.0
 python-dotenv>=1.0,<2.0
 PyYAML>=6.0,<7.0
 loguru>=0.7,<1.0
+redis>=5.0,<6.0
 
 # RAG & AI Subsystem
 langchain>=0.3,<0.4
@@ -24,7 +25,7 @@ pinecone>=5.0,<8.0
 rank-bm25>=0.2,<1.0
 
 # Vector Database
-chromadb>=0.5,<1.0
+chromadb==0.6.3
 # Chroma 0.x still uses the positional capture API removed in PostHog 6.
 posthog>=2.4,<6.0
 

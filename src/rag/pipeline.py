@@ -36,7 +36,11 @@ class RAGPipeline:
             persist_directory=Path(config['vectorstore']['persist_directory']),
             collection_name=config['vectorstore']['collection_name'],
             embedding_model=config['embeddings']['model_name'],
-            device=config['embeddings']['device']
+            device=config['embeddings']['device'],
+            client_mode=config['vectorstore'].get('client_mode', 'persistent'),
+            host=config['vectorstore'].get('host', 'localhost'),
+            port=config['vectorstore'].get('port', 8000),
+            ssl=config['vectorstore'].get('ssl', False),
         )
         
         # Track current embedding model

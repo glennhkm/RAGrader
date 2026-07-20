@@ -5,7 +5,7 @@ import unittest
 from io import BytesIO
 from pathlib import Path
 from threading import RLock
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from fastapi import UploadFile
 
@@ -86,7 +86,7 @@ class MoodleEndpointTest(unittest.TestCase):
         )
         self.data_patch = patch("src.utils.DATA_DIR", Path(self.tempdir.name))
         self.grader_patch.start()
-        self.lock_patch.start()
+        self.lock_mock = self.lock_patch.start()
         self.data_patch.start()
 
     def tearDown(self):
@@ -108,6 +108,7 @@ class MoodleEndpointTest(unittest.TestCase):
         )
         self.assertTrue(response.success)
         self.assertEqual(40.0, response.score)
+        self.lock_mock.assert_called_once_with(12)
 
     def test_material_upload_supports_all_plugin_formats(self):
         for extension in ("pdf", "pptx", "docx", "txt"):
@@ -122,6 +123,10 @@ class MoodleEndpointTest(unittest.TestCase):
                 )
                 self.assertTrue(response["success"])
                 self.assertEqual(3, response["chunk_count"])
+        self.assertEqual(
+            [call(12, write=True)] * 4,
+            self.lock_mock.call_args_list,
+        )
 
     def test_material_management_and_status_contracts(self):
         responses = [

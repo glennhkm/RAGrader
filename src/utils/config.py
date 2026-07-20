@@ -145,24 +145,23 @@ def setup_logging(log_level: str = "INFO"):
         backtrace=False,
         diagnose=False,
     )
-    try:
-        logger.add(
-            log_file,
-            rotation="50 MB",
-            retention="10 days",
-            level=level,
-            format=logformat,
-            backtrace=False,
-            diagnose=False,
-            enqueue=True,
-        )
-    except OSError as exc:
-        # A bind-mounted logs directory may initially have the wrong owner.
-        # Keep the API available through Docker stdout and report the fix.
-        logger.warning(
-            f"Persistent file logging disabled: {exc}. "
-            "Ensure /app/logs is writable by UID 10001."
-        )
+    log_to_file = os.getenv("LOG_TO_FILE", "true").lower() in {"1", "true", "yes", "on"}
+    if log_to_file:
+        try:
+            logger.add(
+                log_file,
+                rotation="50 MB",
+                retention="10 days",
+                level=level,
+                format=logformat,
+                backtrace=False,
+                diagnose=False,
+                enqueue=True,
+            )
+        except OSError as exc:
+            # Keep the API available through Docker stdout if a local log path
+            # is not writable.
+            logger.warning(f"Persistent file logging disabled: {exc}")
     logger.info(f"Logging setup complete at level {level}")
 
 

@@ -257,32 +257,22 @@ POST /clear
 
 ## Menjalankan dengan Docker
 
-Build image:
+Jalankan seluruh stack dengan Docker Compose:
 
 ```bash
-docker build -t rag-essay-api .
+docker compose up -d --build --remove-orphans
 ```
 
-Run container:
-
-```bash
-docker run --env-file .env -p 8000:8000 rag-essay-api
-```
-
-Dengan Docker Compose:
-
-```bash
-docker compose up -d --build
-```
-
-Pastikan `.env` sudah tersedia sebelum container dijalankan.
+Compose menjalankan dua replica API, satu Chroma server, Redis untuk distributed
+lock, dan HAProxy pada port publik. Pastikan `.env` sudah tersedia sebelum
+container dijalankan.
 
 ## Log dan Data
 
-Log tersimpan di:
+Pada deployment replica, baca log setiap container melalui:
 
-```text
-logs/app.log
+```bash
+docker compose logs -f api chroma redis load-balancer
 ```
 
 Data upload dan ChromaDB tersimpan di:
@@ -292,7 +282,8 @@ data/uploads/
 data/chroma_db/
 ```
 
-Direktori `data/` dan `logs/` sebaiknya dipersist saat deployment.
+Kedua direktori tersebut adalah state bersama. API replica tidak membuka file
+Chroma secara langsung; semuanya mengakses service Chroma melalui HTTP.
 
 ## Troubleshooting
 
@@ -348,6 +339,7 @@ Service hanya mendukung `.docx` dan `.pptx`. Konversi file lama terlebih dahulu.
 - Gunakan `.env.example` sebagai template.
 - Atur `API_BIND_ADDRESS` ke interface server yang boleh menerima koneksi.
 - Persist `data/` agar vector Chroma tidak hilang saat container restart.
-- Persist `logs/` jika ingin audit error dan penggunaan provider.
-- Gunakan satu container selama memakai Chroma lokal. Beberapa replica tidak boleh berbagi direktori Chroma yang sama.
+- Gunakan `docker compose logs` untuk log teragregasi dari seluruh replica.
+- Jangan mount `data/chroma_db` ke container API; hanya service Chroma yang boleh membukanya.
+- Redis read/write lock menjaga upload/delete/clear tetap eksklusif per course sementara grading dapat berjalan paralel.
 - Ikuti runbook lengkap di [`DEPLOYMENT.md`](DEPLOYMENT.md).

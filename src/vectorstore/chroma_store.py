@@ -20,7 +20,11 @@ class VectorStore:
         persist_directory: Path,
         collection_name: str = "course_materials",
         embedding_model: str = "BAAI/bge-m3",
-        device: str = "cpu"
+        device: str = "cpu",
+        client_mode: str = "persistent",
+        host: str = "localhost",
+        port: int = 8000,
+        ssl: bool = False,
     ):
         """
         Initialize vector store.
@@ -30,6 +34,10 @@ class VectorStore:
             collection_name: Base name of the collection
             embedding_model: HuggingFace embedding model name
             device: Device for embeddings ('cpu' or 'cuda')
+            client_mode: Chroma client mode ('persistent' or 'http')
+            host: Chroma server host in HTTP mode
+            port: Chroma server port in HTTP mode
+            ssl: Whether the Chroma HTTP connection uses TLS
         """
         self.persist_directory = Path(persist_directory)
         self.base_collection_name = collection_name
@@ -44,8 +52,22 @@ class VectorStore:
             device=device
         )
         
-        # Initialize native Chroma client
-        self.client = chromadb.PersistentClient(path=str(self.persist_directory))
+        # Embedded Chroma is suitable for one process only. Replicated API
+        # deployments use one Chroma server through HttpClient.
+        self.client_mode = str(client_mode).lower()
+        if self.client_mode == "http":
+            self.client = chromadb.HttpClient(
+                host=str(host),
+                port=int(port),
+                ssl=bool(ssl),
+            )
+            self.client.heartbeat()
+            logger.info(f"Connected to Chroma server at {host}:{port}")
+        elif self.client_mode == "persistent":
+            self.client = chromadb.PersistentClient(path=str(self.persist_directory))
+            logger.info(f"Using embedded Chroma at {self.persist_directory}")
+        else:
+            raise ValueError("CHROMA_CLIENT_MODE must be 'persistent' or 'http'")
         
         # Cache of LangChain Chroma vectorstores
         self._vectorstores: Dict[str, Chroma] = {}
@@ -53,6 +75,11 @@ class VectorStore:
         logger.info(f"VectorStore client initialized pointing to {self.persist_directory}")
         logger.info(f"Default base collection: {self.collection_name}")
         logger.info(f"Embedding model: {embedding_model}")
+
+    def heartbeat(self) -> bool:
+        """Check that the Chroma backend is reachable."""
+        self.client.heartbeat()
+        return True
     
     def _get_collection_name(self, course_id: Optional[str] = None) -> str:
         """
@@ -75,6 +102,14 @@ class VectorStore:
     def _get_vectorstore(self, course_id: Optional[str] = None) -> Chroma:
         """Get or create the Chroma vector store instance for a given course."""
         col_name = self._get_collection_name(course_id)
+        if self.client_mode == "http":
+            # Do not retain a process-local collection wrapper in replicated
+            # mode. Another replica can delete and recreate the collection.
+            return Chroma(
+                client=self.client,
+                collection_name=col_name,
+                embedding_function=self.embedding_generator.get_embeddings_instance(),
+            )
         if col_name not in self._vectorstores:
             self._vectorstores[col_name] = Chroma(
                 client=self.client,

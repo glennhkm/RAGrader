@@ -11,8 +11,9 @@ expected by the Moodle plugin for seamless LMS integration.
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from typing import List
 from pathlib import Path
-from threading import RLock
+import os
 import re
+import socket
 import time
 import uuid
 from loguru import logger
@@ -29,6 +30,7 @@ from ..grading import EssayGrader
 from ..utils import load_config, setup_logging, ensure_directories, DATA_DIR
 from .moodle_routes import router as moodle_router
 from .request_utils import API_VERSION, safe_filename, save_upload
+from .locking import LockAcquisitionError, OperationLockManager
 
 
 # Initialize
@@ -62,7 +64,7 @@ grader = EssayGrader(
     provider=config.get('llm', {}).get('provider', 'provider_chain'),
     model_name=config.get('llm', {}).get('model_name')
 )
-operation_lock = RLock()
+operation_locks = OperationLockManager()
 
 app.include_router(moodle_router)
 
@@ -70,6 +72,7 @@ logger.info("FastAPI application initialized with Moodle integration")
 
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+INSTANCE_ID = os.getenv("HOSTNAME", socket.gethostname())
 
 
 @app.middleware("http")
@@ -96,6 +99,7 @@ async def log_http_request(request: Request, call_next):
             )
 
     response.headers["X-Request-ID"] = request_id
+    response.headers["X-API-Instance"] = INSTANCE_ID
     return response
 
 
@@ -107,17 +111,25 @@ def root():
 
 @app.get("/health", response_model=HealthResponse)
 def health_check():
-    """Health check endpoint."""
-    return HealthResponse(status="healthy", version=API_VERSION)
+    """Readiness check for the API and its shared state services."""
+    try:
+        grader.rag_pipeline.vectorstore.heartbeat()
+        operation_locks.ping()
+        return HealthResponse(status="healthy", version=API_VERSION)
+    except Exception as exc:
+        logger.error(f"Dependency health check failed: {exc}")
+        raise HTTPException(status_code=503, detail="Shared state service unavailable")
 
 
 @app.get("/status", response_model=SystemStatus)
 def get_status():
     """Get system status."""
     try:
-        with operation_lock:
+        with operation_locks.read("course:default"):
             status = grader.get_system_status()
         return SystemStatus(**status)
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error getting status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -159,21 +171,21 @@ def upload_materials(
         if not 0 <= chunk_overlap < chunk_size:
             raise HTTPException(status_code=400, detail="chunk_overlap must be smaller than chunk_size")
         
-        # Save uploaded files
-        upload_dir = DATA_DIR / "uploads"
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        
-        pdf_paths = []
-        for file in files:
-            filename = safe_filename(file.filename)
-            file_path = upload_dir / filename
-            save_upload(file, file_path)
-            
-            pdf_paths.append(file_path)
-            logger.info(f"Saved file: {filename}")
-        
-        # Ingest documents
-        with operation_lock:
+        # Save and ingest atomically with respect to other default-collection
+        # operations across every API replica.
+        with operation_locks.write("course:default"):
+            upload_dir = DATA_DIR / "uploads"
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
+            pdf_paths = []
+            for file in files:
+                filename = safe_filename(file.filename)
+                file_path = upload_dir / filename
+                save_upload(file, file_path)
+
+                pdf_paths.append(file_path)
+                logger.info(f"Saved file: {filename}")
+
             grader.update_chunking_config(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap
@@ -185,6 +197,8 @@ def upload_materials(
         
         return UploadResponse(**result)
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -215,7 +229,7 @@ def grade_essay(request: GradeRequest):
             raise HTTPException(status_code=400, detail="Rubric cannot be empty")
         
         # Grade essay with question context
-        with operation_lock:
+        with operation_locks.read("course:default"):
             result = grader.grade_essay(
                 question=request.question,
                 essay=request.essay,
@@ -229,6 +243,8 @@ def grade_essay(request: GradeRequest):
         # Convert to response model
         return GradeResponse(**result)
         
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -240,9 +256,11 @@ def grade_essay(request: GradeRequest):
 def clear_database():
     """Clear all documents from vector database."""
     try:
-        with operation_lock:
+        with operation_locks.write("course:default"):
             grader.clear_vector_store()
         return {"success": True, "message": "Vector database cleared successfully"}
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Error clearing database: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -262,7 +280,12 @@ def update_chunking_config(config: ChunkingConfig):
     try:
         if config.chunk_overlap >= config.chunk_size:
             raise HTTPException(status_code=400, detail="chunk_overlap must be smaller than chunk_size")
-        with operation_lock:
+        if operation_locks.enabled:
+            raise HTTPException(
+                status_code=409,
+                detail="Runtime chunking changes are disabled with API replicas; update the deployment environment",
+            )
+        with operation_locks.write("course:default"):
             grader.update_chunking_config(
                 chunk_size=config.chunk_size,
                 chunk_overlap=config.chunk_overlap
@@ -272,6 +295,10 @@ def update_chunking_config(config: ChunkingConfig):
             "message": "Chunking configuration updated",
             "config": config.dict()
         }
+    except LockAcquisitionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating config: {e}")
         raise HTTPException(status_code=500, detail=str(e))

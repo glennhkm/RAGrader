@@ -2,6 +2,7 @@
 
 import unittest
 import tempfile
+from unittest.mock import MagicMock, patch
 
 import chromadb
 
@@ -54,6 +55,33 @@ def _make_store(client):
 
 
 class ChromaStoreCompatibilityTest(unittest.TestCase):
+    @patch("src.vectorstore.chroma_store.Chroma")
+    @patch("src.vectorstore.chroma_store.EmbeddingGenerator")
+    @patch("src.vectorstore.chroma_store.chromadb.HttpClient")
+    def test_http_mode_uses_shared_chroma_server(
+        self, http_client, _embedding_generator, langchain_chroma
+    ):
+        client = MagicMock()
+        http_client.return_value = client
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = VectorStore(
+                persist_directory=directory,
+                client_mode="http",
+                host="chroma",
+                port=8000,
+                ssl=False,
+            )
+
+        http_client.assert_called_once_with(host="chroma", port=8000, ssl=False)
+        client.heartbeat.assert_called_once_with()
+        self.assertIs(store.client, client)
+
+        store._get_vectorstore("12")
+        store._get_vectorstore("12")
+        self.assertEqual(2, langchain_chroma.call_count)
+        self.assertEqual({}, store._vectorstores)
+
     def test_real_persistent_client_counts_and_deletes_course_chunks(self):
         with tempfile.TemporaryDirectory() as directory:
             client = chromadb.PersistentClient(path=directory)

@@ -11,6 +11,10 @@ vectorstore:
   type: "${VECTORSTORE_TYPE:chroma}"
   persist_directory: "${CHROMA_PERSIST_DIRECTORY:./data/chroma_db}"
   collection_name: "${CHROMA_COLLECTION_NAME:course_materials}"
+  client_mode: "${CHROMA_CLIENT_MODE:persistent}"
+  host: "${CHROMA_HOST:localhost}"
+  port: "${CHROMA_PORT:8000}"
+  ssl: "${CHROMA_SSL:false}"
 
 retrieval:
   top_k: "${RETRIEVAL_TOP_K:5}"

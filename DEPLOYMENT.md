@@ -93,6 +93,17 @@ API_BIND_ADDRESS=192.168.27.218
 API_HOST=0.0.0.0
 API_PORT=8000
 MAX_UPLOAD_SIZE_MB=50
+API_REPLICAS=2
+LOG_TO_FILE=false
+
+CHROMA_CLIENT_MODE=http
+CHROMA_HOST=chroma
+CHROMA_PORT=8000
+CHROMA_SSL=false
+REDIS_URL=redis://redis:6379/0
+DISTRIBUTED_LOCK_ENABLED=true
+DISTRIBUTED_LOCK_TTL_SECONDS=900
+DISTRIBUTED_LOCK_WAIT_SECONDS=120
 
 LLM_PROVIDER=provider_chain
 LLM_PROVIDER_ORDER=groq,openrouter
@@ -118,19 +129,22 @@ mkdir -p data/chroma_db data/uploads logs
 sudo chown -R 10001:10001 data logs
 sudo docker compose config --quiet
 sudo docker compose build --pull --no-cache
-sudo docker compose up -d
+sudo docker compose up -d --remove-orphans
 sudo docker compose ps
-sudo docker inspect --format '{{.State.Health.Status}}' ai_rag_grading_ta_api
-sudo docker compose logs --tail=100
+sudo docker compose ps --format json
+sudo docker compose logs --tail=100 api chroma redis load-balancer
 
 # Pantau log request secara langsung.
-sudo docker compose logs -f --tail=200 ai-rag-grading-ta-api
+sudo docker compose logs -f --tail=200 api chroma redis load-balancer
 
 # Cari request ID yang ditampilkan Moodle saat grading gagal.
-sudo grep -F "REQUEST_ID_DARI_MOODLE" logs/app.log
+sudo docker compose logs api | grep -F "REQUEST_ID_DARI_MOODLE"
 ```
 
-Gunakan satu container API selama Chroma memakai `PersistentClient` lokal. Jangan menjalankan beberapa replica dengan volume Chroma yang sama. Untuk scale-out, pindahkan Chroma ke service server terpisah terlebih dahulu.
+Hasil yang benar adalah dua container `api`, satu `chroma`, satu `redis`, dan
+satu `load-balancer`. Hanya load balancer yang mempublikasikan port `8000`.
+Untuk CPU 8 core Xeon E5540, mulai dari dua replica; jangan menaikkan jumlahnya
+sebelum CPU, RAM, latency, dan rate limit provider dipantau.
 
 ## 6. Firewall
 
@@ -159,6 +173,17 @@ Dari server API dan server Moodle:
 curl -fsS --connect-timeout 5 http://192.168.27.218:8000/health
 curl -fsS --connect-timeout 5 http://192.168.27.218:8000/moodle/status
 ```
+
+Pastikan trafik mencapai kedua replica:
+
+```bash
+for i in $(seq 1 10); do
+  curl -fsSD - -o /dev/null http://192.168.27.218:8000/health \
+    | grep -i '^x-api-instance:'
+done
+```
+
+Output harus menampilkan lebih dari satu nilai `X-API-Instance`.
 
 Uji alur material dan grading memakai course ID khusus pengujian:
 
@@ -198,10 +223,13 @@ Kosongkan API key plugin selama API belum menerapkan autentikasi wajib. Setelah 
 
 ## 9. Backup, Update, dan Rollback
 
-Backup sebelum update:
+Untuk migrasi pertama dari satu embedded Chroma maupun update berikutnya,
+stop seluruh writer sebelum backup. Jangan menyalin database Chroma yang sedang
+aktif:
 
 ```bash
 cd /opt/ai-rag-grading-api
+sudo docker compose down
 tar -czf "$HOME/ai-rag-data-$(date +%Y%m%d-%H%M%S).tar.gz" data
 git rev-parse HEAD >"$HOME/ai-rag-deployed-commit.txt"
 ```
@@ -211,9 +239,14 @@ Update:
 ```bash
 git fetch origin
 git pull --ff-only origin main
-docker compose build --pull
-docker compose up -d
-docker compose ps
+sudo chown -R 10001:10001 data
+sudo docker compose config --quiet
+sudo docker compose build --pull
+sudo docker compose up -d --remove-orphans
+sudo docker compose ps
 ```
 
-Rollback kode menggunakan commit terakhir yang tercatat, lalu build ulang. Jangan hapus direktori `data/` ketika rollback.
+Jika container lama bernama `ai_rag_grading_ta_api` masih tercatat setelah
+migrasi, pastikan statusnya sudah stopped lalu hapus sebagai orphan. Rollback
+kode menggunakan commit terakhir yang tercatat, lalu build ulang. Jangan hapus
+direktori `data/` dan jangan jalankan versi lama bersamaan dengan Chroma server.
