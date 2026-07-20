@@ -74,8 +74,19 @@ services:
       - redis_locks:/data
     security_opt:
       - no-new-privileges:true
+    # The official Redis entrypoint needs CHOWN/SETUID/SETGID while starting,
+    # then drops privileges to the redis user with gosu.
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
