@@ -32,6 +32,14 @@ class MoodleAssignRequest(BaseModel):
     cmi_id: int = Field(default=0, description="Course module ID")
     lang: str = Field(default="en", description="Language code")
     moodle_site_id: str = Field(default="", description="Moodle site identifier")
+    source_filter: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of linked material filenames to scope retrieval",
+    )
+    module_filter: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of module/week tags to scope retrieval",
+    )
 
 
 class MoodleCriterionScore(BaseModel):

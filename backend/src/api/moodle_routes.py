@@ -29,6 +29,7 @@ from .request_utils import (
     validate_material_filename,
 )
 from .locking import LockAcquisitionError
+from ..vectorstore.filters import build_chroma_where_filter
 
 # Router for Moodle endpoints
 router = APIRouter(prefix="", tags=["Moodle Integration"])
@@ -108,12 +109,17 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
         
         # Grade using RAG pipeline
         rubric = request.rubric if request.rubric else {"criteria": {}}
+        metadata_filter = build_chroma_where_filter(
+            modules=request.module_filter,
+            sources=request.source_filter,
+        )
         with get_operation_lock(request.course_id):
             result = grader.grade_essay(
                 question=request.question,
                 essay=request.essay,
                 rubric=rubric,
-                course_id=str(request.course_id)
+                course_id=str(request.course_id),
+                metadata_filter=metadata_filter,
             )
         
         # Check for errors

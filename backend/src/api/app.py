@@ -29,6 +29,7 @@ from .models import (
 from ..grading import EssayGrader
 from ..utils import load_config, setup_logging, ensure_directories, DATA_DIR
 from .moodle_routes import router as moodle_router
+from .v1_routes import router as v1_router
 from .auth import check_api_auth
 from .request_utils import API_VERSION, safe_filename, save_upload
 from .locking import LockAcquisitionError, OperationLockManager
@@ -68,6 +69,7 @@ grader = EssayGrader(
 operation_locks = OperationLockManager()
 
 app.include_router(moodle_router)
+app.include_router(v1_router)
 
 logger.info("FastAPI application initialized with Moodle integration")
 
