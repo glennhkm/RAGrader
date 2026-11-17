@@ -2,8 +2,10 @@
 
 import hashlib
 import json
+import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -51,6 +53,11 @@ def _validate_namespace(namespace: str) -> str:
     return cleaned
 
 
+def _storage_namespace(namespace: str) -> str:
+    """Prefix /v1/ namespaces so numeric namespaces cannot collide with Moodle courses."""
+    return f"v1:{namespace}"
+
+
 def _namespace_upload_dir(data_dir: Path, namespace: str) -> Path:
     digest = hashlib.sha1(namespace.encode("utf-8")).hexdigest()[:8]
     safe_prefix = re.sub(r"[^A-Za-z0-9_-]", "_", namespace)[:40].strip("_") or "ns"
@@ -78,6 +85,7 @@ def upload_namespace_material(
 ):
     """Upload and index a material file into an isolated namespace with optional module/tags."""
     ns = _validate_namespace(namespace)
+    storage_ns = _storage_namespace(ns)
     filename = validate_material_filename(file.filename)
     parsed_tags = _parse_tags_json(tags)
 
@@ -89,17 +97,24 @@ def upload_namespace_material(
             upload_dir = _namespace_upload_dir(DATA_DIR, ns)
             upload_dir.mkdir(parents=True, exist_ok=True)
             file_path = upload_dir / filename
-            save_upload(file, file_path)
 
-            result = grader.ingest_course_materials(
-                [file_path],
-                course_id=ns,
-                module=module,
-                tags=parsed_tags,
-            )
+            with tempfile.TemporaryDirectory(dir=upload_dir, prefix=".staging_") as staging_dir:
+                staged_path = Path(staging_dir) / filename
+                save_upload(file, staged_path)
 
-        if not result.get("success"):
-            raise HTTPException(status_code=500, detail=result.get("message", "Ingestion failed"))
+                result = grader.ingest_course_materials(
+                    [staged_path],
+                    course_id=storage_ns,
+                    module=module,
+                    tags=parsed_tags,
+                )
+                if not result.get("success"):
+                    raise HTTPException(
+                        status_code=500,
+                        detail=result.get("message", "Ingestion failed"),
+                    )
+
+                os.replace(staged_path, file_path)
 
         return V1UploadResponse(
             success=True,
@@ -119,10 +134,11 @@ def upload_namespace_material(
 def get_namespace_materials(namespace: str = PathParam(...)):
     """Inspect indexed chunk count and uploaded filenames for a namespace."""
     ns = _validate_namespace(namespace)
+    storage_ns = _storage_namespace(ns)
     try:
         grader = get_grader()
         with get_operation_lock(ns, write=False):
-            vs_info = grader.rag_pipeline.get_vectorstore_info(ns)
+            vs_info = grader.rag_pipeline.get_vectorstore_info(storage_ns)
             from ..utils import DATA_DIR
 
             upload_dir = _namespace_upload_dir(DATA_DIR, ns)
@@ -147,11 +163,12 @@ def delete_namespace_material_file(
 ):
     """Remove a single uploaded file and its vector chunks from a namespace."""
     ns = _validate_namespace(namespace)
+    storage_ns = _storage_namespace(ns)
     clean_name = safe_filename(filename)
     try:
         grader = get_grader()
         with get_operation_lock(ns, write=True):
-            deleted = grader.delete_course_material_file(ns, clean_name)
+            deleted = grader.delete_course_material_file(storage_ns, clean_name)
             from ..utils import DATA_DIR
 
             file_path = _namespace_upload_dir(DATA_DIR, ns) / clean_name
@@ -172,10 +189,11 @@ def delete_namespace_material_file(
 def clear_namespace(namespace: str = PathParam(...)):
     """Delete all vectors and uploaded files for a namespace."""
     ns = _validate_namespace(namespace)
+    storage_ns = _storage_namespace(ns)
     try:
         grader = get_grader()
         with get_operation_lock(ns, write=True):
-            grader.clear_vector_store(ns)
+            grader.clear_vector_store(storage_ns)
             from ..utils import DATA_DIR
 
             upload_dir = _namespace_upload_dir(DATA_DIR, ns)
@@ -198,6 +216,7 @@ def grade_in_namespace(
 ):
     """Grade one student answer against scoped materials in a namespace."""
     ns = _validate_namespace(namespace)
+    storage_ns = _storage_namespace(ns)
     if not request.question.strip() or not request.essay.strip():
         raise HTTPException(status_code=400, detail="Question and essay must be non-empty")
 
@@ -217,7 +236,7 @@ def grade_in_namespace(
                 question=request.question,
                 essay=request.essay,
                 rubric=rubric,
-                course_id=ns,
+                course_id=storage_ns,
                 metadata_filter=where_filter,
             )
 

@@ -695,14 +695,14 @@ function airagassign_get_linked_material_filenames(int $assignid, int $contextid
     $records = $DB->get_records_sql($sql, ['assignid' => $assignid]);
     foreach ($records as $record) {
         $name = basename(trim((string)($record->filename ?? '')));
-        if ($name !== '' && $name !== '.') {
+        if ($name !== '' && $name !== '.' && $name !== '..') {
             $filenames[$name] = true;
         }
     }
 
     foreach (airagassign_get_uploaded_files($contextid) as $file) {
         $name = basename(trim((string)$file->get_filename()));
-        if ($name !== '' && $name !== '.') {
+        if ($name !== '' && $name !== '.' && $name !== '..') {
             $filenames[$name] = true;
         }
     }
@@ -735,6 +735,12 @@ function airagassign_grade_submission($assign, $submission, $context) {
     }
 
     $sourcefilter = airagassign_get_linked_material_filenames((int)$assign->id, (int)$context->id);
+    if (empty($sourcefilter) && $DB->record_exists('airagassign_materials', ['assignid' => $assign->id])) {
+        return [
+            'success' => false,
+            'error' => 'Linked course materials are not vectorized yet. Please wait for vectorization to complete before grading.',
+        ];
+    }
 
     if ($assign->assignmode === 'quiz') {
         return airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl, $sourcefilter);

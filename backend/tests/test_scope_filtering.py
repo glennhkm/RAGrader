@@ -37,12 +37,52 @@ class ScopeFilteringTest(unittest.TestCase):
         self.assertGreaterEqual(len(col_name), 3)
         self.assertRegex(col_name, r"^[a-z0-9][a-z0-9_-]*[a-z0-9]$")
 
+        # Punctuation and casing variants must never collapse to the same collection.
+        variants = ["cs-101", "cs_101", "cs.101", "CS-101"]
+        variant_cols = [
+            build_collection_name("course_materials", "BAAI/bge-m3", ns)
+            for ns in variants
+        ]
+        self.assertEqual(len(variants), len(set(variant_cols)))
+        for col in variant_cols:
+            self.assertLessEqual(len(col), 63)
+            self.assertGreaterEqual(len(col), 3)
+            self.assertRegex(col, r"^[a-z0-9][a-z0-9_-]*[a-z0-9]$")
+
+        # Numeric v1 namespace key must not collide with Moodle numeric course_id.
+        moodle_col = build_collection_name("course_materials", "BAAI/bge-m3", "12")
+        v1_col = build_collection_name("course_materials", "BAAI/bge-m3", "v1:12")
+        self.assertEqual("course_12_baai_bge_m3", moodle_col)
+        self.assertNotEqual(moodle_col, v1_col)
+        self.assertTrue(v1_col.startswith("ns_"))
+
+        # Non-ASCII digits must not take the Moodle integer course_ branch.
+        arabic_digits_col = build_collection_name("course_materials", "BAAI/bge-m3", "\u0661\u0662")
+        self.assertTrue(arabic_digits_col.startswith("ns_"))
+        self.assertRegex(arabic_digits_col, r"^[a-z0-9][a-z0-9_-]*[a-z0-9]$")
+
     def test_sanitize_chunk_metadata_flattens_scalar_tags(self):
         meta = sanitize_chunk_metadata(
             module="week-1",
-            tags={"topic": "OSI Model", "graded": True, "skip_none": None},
+            tags={
+                "topic": "  OSI Model  ",
+                "graded": True,
+                "flag_false": False,
+                "zero_int": 0,
+                "blank": "   ",
+                "skip_none": None,
+            },
         )
-        self.assertEqual({"module": "week-1", "tag_topic": "OSI Model", "tag_graded": True}, meta)
+        self.assertEqual(
+            {
+                "module": "week-1",
+                "tag_topic": "OSI Model",
+                "tag_graded": True,
+                "tag_flag_false": False,
+                "tag_zero_int": 0,
+            },
+            meta,
+        )
 
     def test_build_chroma_where_filter_combinations(self):
         self.assertIsNone(build_chroma_where_filter())
@@ -62,6 +102,23 @@ class ScopeFilteringTest(unittest.TestCase):
                 ]
             },
             build_chroma_where_filter(modules=["week-1", "week-2"], sources=["slides.pdf"]),
+        )
+        self.assertEqual(
+            {
+                "$and": [
+                    {"tag_week": {"$in": [1, 2]}},
+                    {"tag_graded": {"$in": [True, False]}},
+                    {"tag_topic": {"$eq": "osi"}},
+                ]
+            },
+            build_chroma_where_filter(
+                tags={
+                    "week": [1, 2],
+                    "graded": [True, False],
+                    "topic": "  osi  ",
+                    "ignored_blank": "   ",
+                }
+            ),
         )
 
     def test_real_chroma_filters_week1_to_week3_and_excludes_week4(self):
@@ -106,6 +163,68 @@ class ScopeFilteringTest(unittest.TestCase):
                 sources = {doc.metadata["source"] for doc in scoped}
                 self.assertEqual({"week1.pdf", "week3.pdf"}, sources)
                 self.assertNotIn("week4.pdf", sources)
+
+    def test_real_chroma_filters_numeric_and_string_tags(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            with patch(
+                "src.vectorstore.chroma_store.EmbeddingGenerator"
+            ) as mock_generator_cls:
+                fake_embeddings = _DeterministicFakeEmbeddings()
+                mock_generator_cls.return_value.get_embeddings_instance.return_value = (
+                    fake_embeddings
+                )
+                store = VectorStore(
+                    persist_directory=tempdir,
+                    collection_name="course_materials",
+                    embedding_model="BAAI/bge-m3",
+                    client_mode="persistent",
+                )
+
+                docs = [
+                    Document(
+                        page_content="Week 1 OSI physical and data link layers.",
+                        metadata={
+                            "source": "w1_osi.pdf",
+                            "page": 1,
+                            **sanitize_chunk_metadata(tags={"week": 1, "topic": "  osi  "}),
+                        },
+                    ),
+                    Document(
+                        page_content="Week 2 OSI network layer IP addressing.",
+                        metadata={
+                            "source": "w2_osi.pdf",
+                            "page": 1,
+                            **sanitize_chunk_metadata(tags={"week": 2, "topic": "osi"}),
+                        },
+                    ),
+                    Document(
+                        page_content="Week 3 OSI transport layer TCP/UDP.",
+                        metadata={
+                            "source": "w3_osi.pdf",
+                            "page": 1,
+                            **sanitize_chunk_metadata(tags={"week": 3, "topic": "osi"}),
+                        },
+                    ),
+                    Document(
+                        page_content="Week 1 DNS hierarchy and resolution.",
+                        metadata={
+                            "source": "w1_dns.pdf",
+                            "page": 1,
+                            **sanitize_chunk_metadata(tags={"week": 1, "topic": "dns"}),
+                        },
+                    ),
+                ]
+                store.add_documents(docs, course_id="v1:net-202")
+
+                where = build_chroma_where_filter(tags={"week": [1, 2], "topic": "osi"})
+                scoped = store.similarity_search(
+                    "Explain OSI layers",
+                    k=5,
+                    filter=where,
+                    course_id="v1:net-202",
+                )
+                sources = {doc.metadata["source"] for doc in scoped}
+                self.assertEqual({"w1_osi.pdf", "w2_osi.pdf"}, sources)
 
 
 if __name__ == "__main__":

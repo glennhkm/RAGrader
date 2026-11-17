@@ -130,7 +130,6 @@ class LLMWrapper:
             )
 
         self._use_provider_chain = True
-        self._use_openai_client = False
         logger.info(
             "Provider fallback chain initialized: "
             + ", ".join(endpoint.name for endpoint in self.provider_endpoints)
@@ -211,7 +210,6 @@ class LLMWrapper:
                 timeout=self.request_timeout,
                 max_retries=0,
             )
-            self._use_openai_client = True
             logger.info("HuggingFace Inference API initialized successfully")
             
         except Exception as e:
@@ -347,9 +345,7 @@ class LLMWrapper:
         return completion.choices[0].message.content.strip()
     
     def get_llm_instance(self):
-        """Get the underlying LLM instance for LangChain."""
-        if hasattr(self, 'llm'):
-            return self.llm
+        """Return None; LangChain LLM client has been replaced by OpenAI-compatible clients."""
         return None
     
     def get_provider_info(self) -> Dict[str, Any]:

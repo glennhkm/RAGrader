@@ -16,7 +16,11 @@ from src.api.v1_routes import router as v1_router
 class _FakePipeline:
     current_embedding_model = "BAAI/bge-m3"
 
+    def __init__(self):
+        self.last_info_course_id = None
+
     def get_vectorstore_info(self, course_id=None):
+        self.last_info_course_id = course_id
         return {"collection_name": f"ns_{course_id}", "document_count": 4}
 
 
@@ -25,10 +29,13 @@ class _FakeGrader:
         self.rag_pipeline = _FakePipeline()
         self.last_ingest_kwargs = None
         self.last_grade_kwargs = None
+        self.last_delete_args = None
+        self.last_clear_course_id = None
+        self.ingest_response = {"success": True, "documents_loaded": 1, "chunks_created": 4, "errors": []}
 
     def ingest_course_materials(self, paths, **kwargs):
         self.last_ingest_kwargs = {"paths": paths, **kwargs}
-        return {"success": True, "documents_loaded": 1, "chunks_created": 4, "errors": []}
+        return self.ingest_response
 
     def grade_essay(self, **kwargs):
         self.last_grade_kwargs = kwargs
@@ -43,9 +50,11 @@ class _FakeGrader:
         }
 
     def delete_course_material_file(self, course_id, filename):
+        self.last_delete_args = (course_id, filename)
         return True
 
     def clear_vector_store(self, course_id=None):
+        self.last_clear_course_id = course_id
         return None
 
 
@@ -78,7 +87,8 @@ class V1EndpointTest(unittest.TestCase):
         )
         self.assertEqual(200, upload_resp.status_code)
         self.assertTrue(upload_resp.json()["success"])
-        self.assertEqual("cs-101", self.fake_grader.last_ingest_kwargs["course_id"])
+        self.assertEqual("cs-101", upload_resp.json()["namespace"])
+        self.assertEqual("v1:cs-101", self.fake_grader.last_ingest_kwargs["course_id"])
         self.assertEqual("week-1", self.fake_grader.last_ingest_kwargs["module"])
         self.assertEqual({"topic": "networking"}, self.fake_grader.last_ingest_kwargs["tags"])
 
@@ -94,7 +104,9 @@ class V1EndpointTest(unittest.TestCase):
         self.assertEqual(200, grade_resp.status_code)
         body = grade_resp.json()
         self.assertTrue(body["success"])
+        self.assertEqual("cs-101", body["namespace"])
         self.assertEqual(17.0, body["score"])
+        self.assertEqual("v1:cs-101", self.fake_grader.last_grade_kwargs["course_id"])
         self.assertEqual(
             {"module": {"$in": ["week-1", "week-2", "week-3"]}},
             self.fake_grader.last_grade_kwargs["metadata_filter"],
@@ -116,6 +128,102 @@ class V1EndpointTest(unittest.TestCase):
         clear_ns = self.client.delete("/v1/namespaces/bio-101")
         self.assertEqual(200, clear_ns.status_code)
         self.assertTrue(clear_ns.json()["success"])
+
+    def test_numeric_namespace_uses_v1_storage_key_while_returning_raw_namespace(self):
+        upload_resp = self.client.post(
+            "/v1/namespaces/12/materials",
+            files={"file": ("syllabus.txt", b"Course 12", "text/plain")},
+        )
+        self.assertEqual(200, upload_resp.status_code)
+        self.assertEqual("12", upload_resp.json()["namespace"])
+        self.assertEqual("v1:12", self.fake_grader.last_ingest_kwargs["course_id"])
+
+        info_resp = self.client.get("/v1/namespaces/12/materials")
+        self.assertEqual(200, info_resp.status_code)
+        self.assertEqual("12", info_resp.json()["namespace"])
+        self.assertEqual("v1:12", self.fake_grader.rag_pipeline.last_info_course_id)
+
+        grade_resp = self.client.post(
+            "/v1/namespaces/12/grade",
+            json={"question": "Q", "essay": "A", "maximum_grade": 100},
+        )
+        self.assertEqual(200, grade_resp.status_code)
+        self.assertEqual("12", grade_resp.json()["namespace"])
+        self.assertEqual("v1:12", self.fake_grader.last_grade_kwargs["course_id"])
+
+        del_file_resp = self.client.delete("/v1/namespaces/12/materials/syllabus.txt")
+        self.assertEqual(200, del_file_resp.status_code)
+        self.assertEqual("12", del_file_resp.json()["namespace"])
+        self.assertEqual(("v1:12", "syllabus.txt"), self.fake_grader.last_delete_args)
+
+        clear_resp = self.client.delete("/v1/namespaces/12")
+        self.assertEqual(200, clear_resp.status_code)
+        self.assertEqual("12", clear_resp.json()["namespace"])
+        self.assertEqual("v1:12", self.fake_grader.last_clear_course_id)
+
+    def test_failed_ingest_does_not_leave_orphan_file_or_corrupt_existing_file(self):
+        self.fake_grader.ingest_response = {
+            "success": False,
+            "message": "No readable text found",
+            "documents_loaded": 0,
+            "chunks_created": 0,
+        }
+        failed_upload = self.client.post(
+            "/v1/namespaces/fail-ns/materials",
+            files={"file": ("empty.txt", b"broken", "text/plain")},
+        )
+        self.assertEqual(500, failed_upload.status_code)
+
+        listing = self.client.get("/v1/namespaces/fail-ns/materials")
+        self.assertEqual(200, listing.status_code)
+        self.assertEqual([], listing.json()["uploaded_files"])
+
+        # Now upload a valid file, then fail a re-upload of the same filename.
+        self.fake_grader.ingest_response = {
+            "success": True,
+            "documents_loaded": 1,
+            "chunks_created": 2,
+            "errors": [],
+        }
+        ok_upload = self.client.post(
+            "/v1/namespaces/fail-ns/materials",
+            files={"file": ("notes.txt", b"valid v1", "text/plain")},
+        )
+        self.assertEqual(200, ok_upload.status_code)
+
+        from src.api.v1_routes import _namespace_upload_dir
+
+        saved_path = _namespace_upload_dir(Path(self.tempdir.name), "fail-ns") / "notes.txt"
+        self.assertEqual(b"valid v1", saved_path.read_bytes())
+
+        self.fake_grader.ingest_response = {"success": False, "message": "Corrupt upload"}
+        failed_reupload = self.client.post(
+            "/v1/namespaces/fail-ns/materials",
+            files={"file": ("notes.txt", b"corrupt v2", "text/plain")},
+        )
+        self.assertEqual(500, failed_reupload.status_code)
+        self.assertEqual(b"valid v1", saved_path.read_bytes())
+        listing_after = self.client.get("/v1/namespaces/fail-ns/materials")
+        self.assertEqual(["notes.txt"], listing_after.json()["uploaded_files"])
+
+    def test_invalid_namespace_and_malformed_tags_return_400(self):
+        for bad_ns in ("-invalid", "bad!ns", "%2e%2e"):
+            resp = self.client.get(f"/v1/namespaces/{bad_ns}/materials")
+            self.assertEqual(400, resp.status_code)
+
+        bad_json = self.client.post(
+            "/v1/namespaces/valid-ns/materials",
+            data={"tags": "{not-json"},
+            files={"file": ("notes.txt", b"hello", "text/plain")},
+        )
+        self.assertEqual(400, bad_json.status_code)
+
+        non_obj_json = self.client.post(
+            "/v1/namespaces/valid-ns/materials",
+            data={"tags": "[1, 2]"},
+            files={"file": ("notes.txt", b"hello", "text/plain")},
+        )
+        self.assertEqual(400, non_obj_json.status_code)
 
 
 if __name__ == "__main__":
