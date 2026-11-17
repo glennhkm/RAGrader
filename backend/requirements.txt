@@ -16,12 +16,10 @@ langchain-community>=0.3,<0.4
 langchain-core>=0.3,<0.4
 langchain-text-splitters>=0.3,<0.4
 langchain-huggingface>=0.1,<0.4
-langchain-groq>=0.2,<0.4
 huggingface-hub>=0.33.4,<1.0
 openai>=1.50,<2.0
 
-# Reranking
-pinecone>=5.0,<8.0
+# Lexical Reranking (Local Fallback)
 rank-bm25>=0.2,<1.0
 
 # Vector Database
@@ -35,9 +33,3 @@ PyMuPDF>=1.24,<2.0
 python-pptx>=0.6.23,<2.0
 python-docx>=1.1,<2.0
 Pillow>=10.0,<12.0
-
-# Data Processing & Utilities
-tiktoken>=0.7,<1.0
-nltk>=3.8,<4.0
-numpy>=1.26,<3.0
-pandas>=2.2,<3.0
