@@ -673,6 +673,44 @@ function airagassign_delete_file_vectors($courseid, $filename) {
 }
 
 /**
+ * Collect linked airagmaterial filenames and manual reference filenames for scoped RAG retrieval.
+ *
+ * @param int $assignid Assignment instance ID
+ * @param int $contextid Module context ID
+ * @return array List of unique material basenames
+ */
+function airagassign_get_linked_material_filenames(int $assignid, int $contextid): array {
+    global $DB;
+
+    $filenames = [];
+    // {airagmaterial_files} tracks per-file vectorization via `vectorized` (0/1),
+    // while `vectorize_status` lives on {airagmaterial}.
+    $sql = "SELECT DISTINCT af.filename
+              FROM {airagassign_materials} aam
+              JOIN {airagmaterial} am ON am.id = aam.materialid
+              JOIN {airagmaterial_files} af ON af.materialid = am.id
+             WHERE aam.assignid = :assignid
+               AND am.vectorize_status = 'completed'
+               AND af.vectorized = 1";
+    $records = $DB->get_records_sql($sql, ['assignid' => $assignid]);
+    foreach ($records as $record) {
+        $name = basename(trim((string)($record->filename ?? '')));
+        if ($name !== '' && $name !== '.') {
+            $filenames[$name] = true;
+        }
+    }
+
+    foreach (airagassign_get_uploaded_files($contextid) as $file) {
+        $name = basename(trim((string)$file->get_filename()));
+        if ($name !== '' && $name !== '.') {
+            $filenames[$name] = true;
+        }
+    }
+
+    return array_keys($filenames);
+}
+
+/**
  * Grade a single submission using the RAG API.
  *
  * @param stdClass $assign The assignment record
@@ -696,10 +734,12 @@ function airagassign_grade_submission($assign, $submission, $context) {
         ];
     }
 
+    $sourcefilter = airagassign_get_linked_material_filenames((int)$assign->id, (int)$context->id);
+
     if ($assign->assignmode === 'quiz') {
-        return airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl);
+        return airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl, $sourcefilter);
     } else {
-        return airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl);
+        return airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl, $sourcefilter);
     }
 }
 
@@ -736,9 +776,10 @@ function airagassign_record_grading_failure($submissionid, $error, $requestid = 
  * @param stdClass $submission Submission record
  * @param array $rubric Rubric dictionary
  * @param string $serverurl RAG server URL
+ * @param array $sourcefilter Optional list of source filenames for scoped retrieval
  * @return array Result
  */
-function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl) {
+function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl, array $sourcefilter = []) {
     global $DB;
 
     $questions = $DB->get_records('airagassign_questions', ['assignid' => $assign->id], 'sortorder ASC');
@@ -768,14 +809,18 @@ function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serve
         }
 
         // Call RAG API for this question.
-        $result = airagassign_call_rag_api($serverurl, [
+        $payload = [
             'course_id' => $assign->course,
             'question' => $question->questiontext,
             'essay' => $answer->answertext,
             'rubric' => $rubric,
             'maximum_grade' => $gradeperquestion,
             'assignment_id' => $assign->id,
-        ]);
+        ];
+        if (!empty($sourcefilter)) {
+            $payload['source_filter'] = array_values($sourcefilter);
+        }
+        $result = airagassign_call_rag_api($serverurl, $payload);
 
         if ($result['success']) {
             $qscore    = (float)($result['data']['score']    ?? 0);
@@ -829,9 +874,10 @@ function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serve
  * @param stdClass $submission Submission record
  * @param array $rubric Rubric dictionary
  * @param string $serverurl RAG server URL
+ * @param array $sourcefilter Optional list of source filenames for scoped retrieval
  * @return array Result
  */
-function airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl) {
+function airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl, array $sourcefilter = []) {
     global $DB;
 
     // Get the essay answer.
@@ -840,14 +886,18 @@ function airagassign_grade_essay_submission($assign, $submission, $rubric, $serv
         return ['success' => false, 'error' => 'No essay answer found'];
     }
 
-    $result = airagassign_call_rag_api($serverurl, [
+    $payload = [
         'course_id' => $assign->course,
         'question' => $assign->essayprompt,
         'essay' => $answer->answertext,
         'rubric' => $rubric,
         'maximum_grade' => (float)$assign->maximumgrade,
         'assignment_id' => $assign->id,
-    ]);
+    ];
+    if (!empty($sourcefilter)) {
+        $payload['source_filter'] = array_values($sourcefilter);
+    }
+    $result = airagassign_call_rag_api($serverurl, $payload);
 
     if (!$result['success']) {
         return $result;
