@@ -1,0 +1,1016 @@
+/* =============================================================================
+ * AI RAG Assign — Design System
+ *
+ * Palette
+ *   #F9BF3B  primary   (amber — main actions, highlights)
+ *   #02864A  success   (green — graded, confirmed, pass)
+ *   #E8083E  error     (red   — destructive, errors)
+ *   #0F6CBF  info      (blue  — AI, informational)
+ * =========================================================================== */
+
+:root {
+  --airag-primary:       #F9BF3B;
+  --airag-primary-dark:  #d9a51f;
+  --airag-primary-light: #fef9ec;
+  --airag-primary-text:  #1a1a1a;
+
+  --airag-success:       #02864A;
+  --airag-success-dark:  #016e3c;
+  --airag-success-light: #e6f4ed;
+
+  --airag-error:         #E8083E;
+  --airag-error-dark:    #c00634;
+  --airag-error-light:   #fde8ee;
+
+  --airag-info:          #0F6CBF;
+  --airag-info-dark:     #0a589f;
+  --airag-info-light:    #e8f2fb;
+
+  --airag-muted:         #6c757d;
+  --airag-radius:        .375rem;
+}
+
+/* ── Solid buttons ─────────────────────────────────────────────────────────── */
+
+.btn-airag-primary {
+  background-color: var(--airag-primary);
+  border-color: var(--airag-primary);
+  color: var(--airag-primary-text);
+  font-weight: 500;
+}
+.btn-airag-primary:hover,
+.btn-airag-primary:focus {
+  background-color: var(--airag-primary-dark);
+  border-color: var(--airag-primary-dark);
+  color: var(--airag-primary-text);
+}
+.btn-airag-primary:disabled,
+.btn-airag-primary.disabled {
+  background-color: var(--airag-primary);
+  border-color: var(--airag-primary);
+  color: var(--airag-primary-text);
+  opacity: .55;
+}
+
+.btn-airag-success {
+  background-color: var(--airag-success);
+  border-color: var(--airag-success);
+  color: #fff;
+  font-weight: 500;
+}
+.btn-airag-success:hover,
+.btn-airag-success:focus {
+  background-color: var(--airag-success-dark);
+  border-color: var(--airag-success-dark);
+  color: #fff;
+}
+
+.btn-airag-error {
+  background-color: var(--airag-error);
+  border-color: var(--airag-error);
+  color: #fff;
+  font-weight: 500;
+}
+.btn-airag-error:hover,
+.btn-airag-error:focus {
+  background-color: var(--airag-error-dark);
+  border-color: var(--airag-error-dark);
+  color: #fff;
+}
+.btn-airag-error.disabled,
+.btn-airag-error:disabled,
+a.btn-airag-error.disabled {
+  background-color: var(--airag-error);
+  border-color: var(--airag-error);
+  opacity: .55;
+  pointer-events: none;
+}
+
+.btn-airag-info {
+  background-color: var(--airag-info);
+  border-color: var(--airag-info);
+  color: #fff;
+  font-weight: 500;
+}
+.btn-airag-info:hover,
+.btn-airag-info:focus {
+  background-color: var(--airag-info-dark);
+  border-color: var(--airag-info-dark);
+  color: #fff;
+}
+
+/* ── Outline buttons ───────────────────────────────────────────────────────── */
+
+.btn-airag-outline-primary {
+  border: 1.5px solid var(--airag-primary);
+  color: #7a5500;
+  background: transparent;
+  font-weight: 500;
+}
+.btn-airag-outline-primary:hover,
+.btn-airag-outline-primary:focus {
+  background-color: var(--airag-primary);
+  border-color: var(--airag-primary);
+  color: var(--airag-primary-text);
+}
+
+.btn-airag-outline-secondary {
+  border: 1.5px solid var(--airag-muted);
+  color: var(--airag-muted);
+  background: transparent;
+}
+.btn-airag-outline-secondary:hover,
+.btn-airag-outline-secondary:focus {
+  background-color: var(--airag-muted);
+  border-color: var(--airag-muted);
+  color: #fff;
+}
+
+.btn-airag-outline-success {
+  border: 1.5px solid var(--airag-success);
+  color: var(--airag-success);
+  background: transparent;
+  font-weight: 500;
+}
+.btn-airag-outline-success:hover,
+.btn-airag-outline-success:focus {
+  background-color: var(--airag-success);
+  border-color: var(--airag-success);
+  color: #fff;
+}
+
+.btn-airag-outline-error {
+  border: 1.5px solid var(--airag-error);
+  color: var(--airag-error);
+  background: transparent;
+}
+.btn-airag-outline-error:hover,
+.btn-airag-outline-error:focus {
+  background-color: var(--airag-error);
+  border-color: var(--airag-error);
+  color: #fff;
+}
+
+.btn-airag-outline-info {
+  border: 1.5px solid var(--airag-info);
+  color: var(--airag-info);
+  background: transparent;
+}
+.btn-airag-outline-info:hover,
+.btn-airag-outline-info:focus {
+  background-color: var(--airag-info);
+  border-color: var(--airag-info);
+  color: #fff;
+}
+
+/* Checked state for decision radio pairs. Do not depend on Bootstrap 5's
+   btn-check utility because Moodle 4.4/4.5 themes may not provide it. */
+.airag-decision-input:checked + .btn-airag-outline-success {
+  background-color: var(--airag-success);
+  border-color: var(--airag-success);
+  color: #fff;
+}
+.airag-decision-input:checked + .btn-airag-outline-primary {
+  background-color: var(--airag-primary);
+  border-color: var(--airag-primary);
+  color: var(--airag-primary-text);
+}
+.airag-decision-input:focus-visible + .btn-airag-outline-success,
+.airag-decision-input:focus-visible + .btn-airag-outline-primary {
+  box-shadow: 0 0 0 .25rem rgba(2, 134, 74, .25);
+}
+
+/* ── Badges ────────────────────────────────────────────────────────────────── */
+
+.airag-badge-primary {
+  background-color: var(--airag-primary);
+  color: var(--airag-primary-text);
+}
+.airag-badge-success { background-color: var(--airag-success); color: #fff; }
+.airag-badge-error   { background-color: var(--airag-error);   color: #fff; }
+.airag-badge-info    { background-color: var(--airag-info);    color: #fff; }
+.airag-badge-muted   { background-color: var(--airag-muted);   color: #fff; }
+
+/* ── Alerts ────────────────────────────────────────────────────────────────── */
+
+.alert-airag-primary {
+  background-color: var(--airag-primary-light);
+  border-color: var(--airag-primary);
+  color: #5a4200;
+}
+.alert-airag-success {
+  background-color: var(--airag-success-light);
+  border-color: var(--airag-success);
+  color: #014d2b;
+}
+.alert-airag-error {
+  background-color: var(--airag-error-light);
+  border-color: var(--airag-error);
+  color: #8c0025;
+}
+.alert-airag-info {
+  background-color: var(--airag-info-light);
+  border-color: var(--airag-info);
+  color: #063d72;
+}
+
+/* ── Text colors ───────────────────────────────────────────────────────────── */
+
+.text-airag-success { color: var(--airag-success) !important; }
+.text-airag-error   { color: var(--airag-error)   !important; }
+.text-airag-info    { color: var(--airag-info)     !important; }
+.text-airag-primary { color: #7a5500              !important; } /* amber-dark for text readability */
+
+/* ── Border accent colors ──────────────────────────────────────────────────── */
+
+.border-airag-primary { border-color: var(--airag-primary) !important; }
+.border-airag-success { border-color: var(--airag-success) !important; }
+.border-airag-error   { border-color: var(--airag-error)   !important; }
+.border-airag-info    { border-color: var(--airag-info)    !important; }
+
+/* ── Card / modal header fills ─────────────────────────────────────────────── */
+
+.airag-card-header-primary {
+  background-color: var(--airag-primary);
+  color: var(--airag-primary-text);
+}
+.airag-card-header-success {
+  background-color: var(--airag-success);
+  color: #fff;
+}
+.airag-card-header-error {
+  background-color: var(--airag-error);
+  color: #fff;
+}
+.airag-card-header-info {
+  background-color: var(--airag-info);
+  color: #fff;
+}
+.airag-card-header-primary *,
+.airag-card-header-success *,
+.airag-card-header-error *,
+.airag-card-header-info * {
+  color: inherit !important;
+}
+/* Close button contrast in colored headers */
+.airag-card-header-error .btn-close,
+.airag-card-header-success .btn-close,
+.airag-card-header-info .btn-close {
+  filter: invert(1) grayscale(1);
+}
+
+/* ── Score display helpers ─────────────────────────────────────────────────── */
+
+.airag-score-pass { color: var(--airag-success); font-weight: 700; }
+.airag-score-mid  { color: #7a5500;              font-weight: 700; } /* 50–69 */
+.airag-score-fail { color: var(--airag-error);   font-weight: 700; }
+
+/* ── Section sub-headings ──────────────────────────────────────────────────── */
+
+.airag-section-title {
+  font-size: .8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #495057;
+  border-bottom: 2px solid var(--airag-primary);
+  padding-bottom: .35rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Citation list ─────────────────────────────────────────────────────────── */
+
+.airag-citation-list {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.airag-citation-item {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .65rem .85rem;
+  background: #fafafa;
+  border: 1px solid #e9ecef;
+  border-left: 3px solid var(--airag-info);
+  border-radius: .375rem;
+}
+.airag-citation-num {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--airag-info);
+  color: #fff;
+  font-size: .7rem;
+  font-weight: 700;
+  border-radius: 50%;
+  margin-top: .1rem;
+}
+.airag-citation-body {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  min-width: 0;
+}
+.airag-citation-quote {
+  font-style: italic;
+  font-size: .875rem;
+  color: #343a40;
+  line-height: 1.45;
+}
+.airag-citation-source {
+  font-size: .8rem;
+  color: var(--airag-muted);
+  display: block;
+}
+.airag-citation-source a {
+  color: var(--airag-info);
+  font-weight: 600;
+  text-decoration: none;
+}
+.airag-citation-source a:hover {
+  text-decoration: underline;
+}
+
+/* ── Grading decision radio group ──────────────────────────────────────────── */
+
+.airag-decision-group {
+  position: relative;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: .75rem;
+  width: 100%;
+}
+
+.airag-decision-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+}
+
+.airag-decision-group .btn-airag-outline-success,
+.airag-decision-group .btn-airag-outline-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 3.25rem;
+  margin: 0 !important;
+  font-size: 1rem;
+  padding: .75rem 1rem;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* ── Shared page layouts ───────────────────────────────────────────────────── */
+
+.airagassign-main-page,
+.airagassign-workflow-page,
+.airagassign-result-page {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.airagassign-main-page > h2,
+.airagassign-workflow-page > h2,
+.airagassign-result-page > h2 {
+  margin: 0 0 1rem;
+  overflow-wrap: anywhere;
+}
+
+.airag-two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.airag-column,
+.airagassign-workflow-page .card,
+.airagassign-result-page .card,
+.airagassign-workflow-page form {
+  min-width: 0;
+}
+
+.airagassign-workflow-page .card-body,
+.airagassign-workflow-page .card-header,
+.airagassign-result-page .card-body,
+.airagassign-result-page .card-header,
+.airagassign-workflow-page td,
+.airagassign-workflow-page th,
+.airagassign-result-page td,
+.airagassign-result-page th {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.airag-accent-card {
+  border-left: 4px solid var(--airag-info) !important;
+}
+
+.airag-feedback-block {
+  padding-left: 1rem;
+  border-left: 3px solid var(--airag-info);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.airag-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.airag-table-scroll > table {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.airag-table-actions,
+.airag-status-banner,
+.airag-pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.airag-table-actions {
+  min-width: 11rem;
+}
+
+.airag-table-actions > .btn {
+  margin: 0 !important;
+}
+
+.airag-pending-actions > .btn {
+  margin: 0 0 0 auto !important;
+}
+
+.airagassign-workflow-page .airag-table-scroll > table {
+  min-width: 38rem;
+}
+
+.airag-action-row {
+  position: static !important;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  clear: both;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.airag-action-row > .btn {
+  position: static !important;
+  min-width: 0;
+  margin: 0 !important;
+  white-space: normal;
+}
+
+.airag-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+
+.airag-navigation > .btn {
+  margin: 0 !important;
+}
+
+/* ── Back-link button ──────────────────────────────────────────────────────── */
+
+.airag-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .875rem;
+}
+
+/* ── Computed / read-only grade field (quiz auto-sum) ──────────────────────── */
+
+.airag-grade-computed {
+  background-color: #f8f9fa !important;
+  color: var(--airag-info);
+  font-weight: 700;
+  font-size: 1.2rem;
+  border: 2px solid #dee2e6;
+  cursor: not-allowed;
+  caret-color: transparent;
+  user-select: none;
+}
+.airag-grade-computed:focus {
+  border-color: #dee2e6;
+  box-shadow: none;
+  outline: none;
+}
+.airag-grade-computed-full {
+  color: var(--airag-success) !important;
+  border-color: var(--airag-success) !important;
+}
+
+/* ── Info banner (left-border style, less heavy than alert) ────────────────── */
+
+.airag-banner {
+  border-left: 4px solid;
+  padding: .7rem 1rem;
+  border-radius: 0 var(--airag-radius) var(--airag-radius) 0;
+  margin-bottom: 1rem;
+  font-size: .9375rem;
+}
+.airag-banner-info    { border-color: var(--airag-info);    background: var(--airag-info-light);    color: #063d72; }
+.airag-banner-primary { border-color: var(--airag-primary); background: var(--airag-primary-light); color: #5a4200; }
+.airag-banner-success { border-color: var(--airag-success); background: var(--airag-success-light); color: #014d2b; }
+.airag-banner-error   { border-color: var(--airag-error);   background: var(--airag-error-light);   color: #8c0025; }
+
+/* Student submission form. Scope every rule so course themes cannot make
+   labels, validation icons, controls, and action buttons overlap. */
+.airagassign-submit-page {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.airagassign-submit-page > h2 {
+  margin: 0 0 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.airagassign-submit-form {
+  position: relative !important;
+  display: block !important;
+  isolation: isolate;
+  width: 100%;
+  min-width: 0;
+}
+
+.airagassign-submit-form [hidden],
+.airagassign-submit-form .invalid-feedback:empty {
+  display: none !important;
+}
+
+.airagassign-rubric summary {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.airagassign-rubric-table {
+  width: 100%;
+  min-width: 42rem;
+  margin-bottom: 0;
+}
+
+.airagassign-rubric-table th:first-child {
+  width: 22%;
+}
+
+.airagassign-rubric-table th:last-child {
+  width: 8rem;
+}
+
+.airagassign-submit-form .fitem.row,
+.airagassign-submit-form .form-group.row,
+.airagassign-submit-form .form-group,
+.airagassign-submit-form .fitem {
+  position: static !important;
+  display: block;
+  float: none !important;
+  clear: both;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 0 1.25rem;
+  inset: auto !important;
+  transform: none !important;
+}
+
+.airagassign-submit-form .fitem .col-form-label,
+.airagassign-submit-form .fitem .felement,
+.airagassign-submit-form .form-group > [class*="col-"] {
+  display: block;
+  flex: none;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.airagassign-submit-form .fitem .col-form-label,
+.airagassign-submit-form .form-group > label {
+  margin-bottom: .4rem;
+  padding-top: 0;
+  font-weight: 600;
+}
+
+.airagassign-submit-form .fitem_fstatic .col-form-label,
+.airagassign-submit-form .fitem[data-fieldtype="static"] .col-form-label {
+  display: none;
+}
+
+.airagassign-submit-form .alert-airag-info {
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid #b8daff;
+  border-left: 4px solid var(--airag-info);
+  border-radius: var(--airag-radius);
+  background: var(--airag-info-light);
+  color: #17324d;
+}
+
+.airagassign-submit-form .alert-airag-info p {
+  margin: .5rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.airagassign-submit-form textarea.form-control,
+.airagassign-submit-form textarea {
+  position: static !important;
+  display: block;
+  float: none !important;
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 9rem;
+  margin: 0;
+  resize: vertical;
+}
+
+.airagassign-submit-form .form-control-feedback,
+.airagassign-submit-form .invalid-feedback {
+  position: static !important;
+  width: 100%;
+  margin-top: .35rem;
+  transform: none !important;
+}
+
+.airagassign-submit-form .fitem_actionbuttons,
+.airagassign-submit-form [data-groupname="buttonar"] {
+  position: static !important;
+  display: block !important;
+  float: none !important;
+  clear: both;
+  width: 100% !important;
+  height: auto !important;
+  margin-top: 1.5rem;
+  margin-bottom: 0;
+  inset: auto !important;
+  transform: none !important;
+  z-index: auto !important;
+}
+
+.airagassign-submit-form .fitem_actionbuttons .col-form-label {
+  display: none;
+}
+
+.airagassign-submit-form .fitem_actionbuttons .felement,
+.airagassign-submit-form .fitem_actionbuttons .d-flex,
+.airagassign-submit-form [data-groupname="buttonar"] .felement,
+.airagassign-submit-form [data-groupname="buttonar"] .d-flex {
+  position: static !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  float: none !important;
+  width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+.airagassign-submit-form .fitem_actionbuttons .btn,
+.airagassign-submit-form [data-groupname="buttonar"] .btn,
+.airagassign-submit-form .form-submit {
+  position: static !important;
+  float: none !important;
+  margin: 0 !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+/* Standalone student answer form. This intentionally avoids MoodleQuickForm's
+   theme-dependent row/column wrappers on Moodle 4.5. */
+.airagassign-answer-form {
+  position: static !important;
+  display: block !important;
+  float: none !important;
+  isolation: isolate;
+  width: 100% !important;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+.airag-answer-item {
+  position: static !important;
+  display: flow-root !important;
+  float: none !important;
+  clear: both;
+  width: 100% !important;
+  min-width: 0;
+  height: auto !important;
+  margin: 0 0 1.5rem !important;
+  padding: 0 !important;
+  inset: auto !important;
+  transform: none !important;
+}
+
+.airag-question-prompt {
+  position: static !important;
+  display: flow-root !important;
+  float: none !important;
+  width: 100% !important;
+  min-width: 0;
+  margin: 0 0 1rem !important;
+  padding: 1rem 1.1rem;
+  border: 1px solid #b8daff;
+  border-left: 4px solid var(--airag-info);
+  border-radius: var(--airag-radius);
+  background: var(--airag-info-light);
+  color: #17324d;
+  overflow-wrap: anywhere;
+}
+
+.airag-question-text {
+  margin-top: .5rem;
+  font-weight: 400;
+}
+
+.airag-question-text > :last-child {
+  margin-bottom: 0;
+}
+
+.airag-field-label {
+  position: static !important;
+  display: block !important;
+  float: none !important;
+  width: 100% !important;
+  margin: 0 0 .45rem !important;
+  padding: 0 !important;
+  color: #343a40;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.airag-answer-textarea {
+  position: static !important;
+  display: block !important;
+  float: none !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 10rem;
+  height: auto;
+  margin: 0 !important;
+  padding: .75rem .85rem !important;
+  border: 1px solid #8f959b;
+  border-radius: var(--airag-radius);
+  background: #fff;
+  color: #212529;
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  inset: auto !important;
+  transform: none !important;
+  z-index: auto !important;
+}
+
+.airag-answer-textarea:focus {
+  border-color: var(--airag-info);
+  outline: 0;
+  box-shadow: 0 0 0 .2rem rgba(15, 108, 191, .2);
+}
+
+.airag-answer-textarea.is-invalid {
+  border-color: var(--airag-error) !important;
+}
+
+.airag-field-error {
+  position: static !important;
+  display: block !important;
+  width: 100%;
+  margin: .4rem 0 0;
+  color: #a0002b;
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.airag-word-limits {
+  display: block;
+  margin-top: .45rem;
+  color: var(--airag-muted);
+}
+
+.airag-submit-actions {
+  position: static !important;
+  clear: both;
+  margin-top: 0;
+  padding-top: .25rem;
+}
+
+.airag-grading-error {
+  max-width: 34rem;
+  margin-top: .45rem;
+  color: var(--airag-error);
+  font-size: .8125rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.airag-request-id {
+  display: block;
+  margin-top: .25rem;
+  color: var(--airag-muted);
+  font-size: .75rem;
+  user-select: all;
+}
+
+/* Theme-independent confirmation dialog. Moodle 4.5 sites can use themes
+   backed by different Bootstrap generations, so this must not depend on a
+   theme-provided modal script. */
+.airag-confirm-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10550;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 1rem;
+  background: rgba(0, 0, 0, .58);
+}
+
+.airag-confirm-overlay[hidden] {
+  display: none !important;
+}
+
+body.airag-modal-open {
+  overflow: hidden !important;
+}
+
+.airag-confirm-dialog {
+  position: relative !important;
+  display: block !important;
+  box-sizing: border-box;
+  width: min(100%, 38rem) !important;
+  max-width: 38rem !important;
+  max-height: calc(100vh - 2rem);
+  margin: 0 !important;
+  overflow-y: auto;
+  border: 1px solid #c7cdd3;
+  border-radius: var(--airag-radius);
+  background: #fff;
+  color: #212529;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, .32);
+  inset: auto !important;
+  transform: none !important;
+}
+
+.airag-confirm-dialog:focus {
+  outline: 3px solid rgba(15, 108, 191, .35);
+  outline-offset: 2px;
+}
+
+.airag-confirm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--airag-error);
+  color: #fff;
+}
+
+.airag-confirm-header h3 {
+  margin: 0 !important;
+  color: inherit !important;
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.airag-confirm-close {
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: -.5rem -.6rem -.5rem 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--airag-radius);
+  background: transparent;
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.airag-confirm-close:hover,
+.airag-confirm-close:focus {
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.airag-confirm-body {
+  padding: 1.25rem;
+}
+
+.airag-confirm-body .airag-banner {
+  margin: 0 0 1rem;
+}
+
+.airag-confirm-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .75rem;
+  align-items: start;
+}
+
+.airag-confirm-check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: .15rem 0 0;
+}
+
+.airag-confirm-check label {
+  margin: 0;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.airag-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+@media (max-width: 767.98px) {
+  .airagassign-submit-page,
+  .airagassign-main-page,
+  .airagassign-workflow-page,
+  .airagassign-result-page {
+    max-width: none;
+  }
+
+  .airag-two-column,
+  .airag-decision-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .airag-action-row {
+    align-items: stretch;
+  }
+
+  .airag-action-row > .btn,
+  .airag-navigation > .btn,
+  .airag-decision-group label {
+    width: 100%;
+  }
+
+  .airag-pending-actions > .btn {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  .airagassign-submit-form .fitem_actionbuttons .btn,
+  .airagassign-submit-form [data-groupname="buttonar"] .btn {
+    width: 100%;
+  }
+
+  .airag-confirm-actions > .btn {
+    width: 100%;
+  }
+}

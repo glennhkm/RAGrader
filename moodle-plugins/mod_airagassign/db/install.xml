@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/airagassign/db" VERSION="2025010100" COMMENT="XMLDB file for AI RAG Assignment module">
+  <TABLES>
+    <!-- Main assignment instance table -->
+    <TABLE NAME="airagassign" COMMENT="AI RAG Assignment instances">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="course" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="intro" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="assignmode" TYPE="char" LENGTH="10" NOTNULL="true" DEFAULT="essay" SEQUENCE="false" COMMENT="quiz or essay"/>
+        <FIELD NAME="maximumgrade" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="true" DEFAULT="100" SEQUENCE="false"/>
+        <FIELD NAME="opendate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="duedate" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="allowlate" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="rubricmode" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="custom" SEQUENCE="false" COMMENT="custom or moodle"/>
+        <FIELD NAME="essayprompt" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="minwords" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="maxwords" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="course" UNIQUE="false" FIELDS="course"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Quiz mode questions -->
+    <TABLE NAME="airagassign_questions" COMMENT="Questions for quiz mode assignments">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="assignid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="questiontext" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="sortorder" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="assignid" TYPE="foreign" FIELDS="assignid" REFTABLE="airagassign" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="assignid_sortorder" UNIQUE="false" FIELDS="assignid,sortorder"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Rubric criteria -->
+    <TABLE NAME="airagassign_criteria" COMMENT="Rubric criteria for grading">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="assignid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="description" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="maxscore" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="true" DEFAULT="100" SEQUENCE="false"/>
+        <FIELD NAME="sortorder" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="assignid" TYPE="foreign" FIELDS="assignid" REFTABLE="airagassign" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="assignid_sortorder" UNIQUE="false" FIELDS="assignid,sortorder"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Linked materials (RAG context) -->
+    <TABLE NAME="airagassign_materials" COMMENT="Links between assignments and RAG material activities">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="assignid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="materialid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to airagmaterial.id"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="assignid" TYPE="foreign" FIELDS="assignid" REFTABLE="airagassign" REFFIELDS="id"/>
+        <KEY NAME="materialid" TYPE="foreign" FIELDS="materialid" REFTABLE="airagmaterial" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="assignid_materialid" UNIQUE="true" FIELDS="assignid,materialid"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Student submissions -->
+    <TABLE NAME="airagassign_submissions" COMMENT="Student submissions">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="assignid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="submitted" SEQUENCE="false" COMMENT="submitted, grading, grading_failed, ai_suggested, graded"/>
+        <FIELD NAME="grade" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="ai_grade" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="AI suggested grade"/>
+        <FIELD NAME="ai_feedback" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="AI suggested feedback"/>
+        <FIELD NAME="feedback" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="ai_response" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Full JSON AI response"/>
+        <FIELD NAME="graded_by" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" COMMENT="Who confirmed the grade"/>
+        <FIELD NAME="teacher_note" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Internal notes for teacher"/>
+        <FIELD NAME="confidence" TYPE="number" LENGTH="5" DECIMALS="4" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="grading_error" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Last AI grading error visible to teachers"/>
+        <FIELD NAME="grading_requestid" TYPE="char" LENGTH="64" NOTNULL="false" SEQUENCE="false" COMMENT="Request ID used to correlate Moodle and API logs"/>
+        <FIELD NAME="grading_started_at" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timegraded" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="assignid" TYPE="foreign" FIELDS="assignid" REFTABLE="airagassign" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="assignid_userid" UNIQUE="true" FIELDS="assignid,userid"/>
+        <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
+      </INDEXES>
+    </TABLE>
+
+    <!-- Individual answers (for quiz mode: per-question; for essay mode: single entry) -->
+    <TABLE NAME="airagassign_answers" COMMENT="Individual answers per question or single essay">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="submissionid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="FK to questions table, NULL for essay mode"/>
+        <FIELD NAME="answertext" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="score" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="ai_score" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="false" SEQUENCE="false" COMMENT="AI suggested score"/>
+        <FIELD NAME="ai_feedback" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="AI suggested feedback"/>
+        <FIELD NAME="feedback" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="ai_response" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Full JSON AI response for this answer"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="submissionid" TYPE="foreign" FIELDS="submissionid" REFTABLE="airagassign_submissions" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="submissionid_questionid" UNIQUE="true" FIELDS="submissionid,questionid"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

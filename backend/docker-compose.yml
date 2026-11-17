@@ -1,0 +1,122 @@
+x-api-service: &api-service
+  image: ai-rag-grading-api:${API_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment:
+    ANONYMIZED_TELEMETRY: "false"
+    CHROMA_CLIENT_MODE: http
+    CHROMA_HOST: chroma
+    CHROMA_PORT: "8000"
+    CHROMA_SSL: "false"
+    DISTRIBUTED_LOCK_ENABLED: "true"
+    REDIS_URL: redis://redis:6379/0
+    LOG_TO_FILE: "false"
+  depends_on:
+    chroma:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  volumes:
+    - ./data/uploads:/app/data/uploads:Z
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 60s
+
+services:
+  api:
+    <<: *api-service
+    expose:
+      - "8000"
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+
+  chroma:
+    <<: *api-service
+    command: ["chroma", "run", "--path", "/app/data/chroma_db", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: []
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+    depends_on: {}
+    volumes:
+      - ./data/chroma_db:/app/data/chroma_db:Z
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import chromadb; chromadb.HttpClient(host='127.0.0.1', port=8000).heartbeat()"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "yes", "--appendfsync", "always", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    expose:
+      - "6379"
+    volumes:
+      - redis_locks:/data
+    security_opt:
+      - no-new-privileges:true
+    # The official Redis entrypoint needs CHOWN/SETUID/SETGID while starting,
+    # then drops privileges to the redis user with gosu.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  load-balancer:
+    image: haproxy:3.0.25-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
+    volumes:
+      - ./deploy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro,Z
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_locks:

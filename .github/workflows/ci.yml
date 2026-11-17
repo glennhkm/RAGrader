@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run unit tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
+
+      - name: Byte-compile backend sources
+        working-directory: backend
+        run: python -m compileall -q src
+
+      - name: Validate Docker Compose configuration
+        working-directory: backend
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          rm -f .env
+
+  moodle-plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+
+      - name: Lint all Moodle plugin PHP files
+        run: |
+          find moodle-plugins -name "*.php" -print0 | xargs -0 -n1 php -l
+
+      - name: Build and verify Moodle plugin ZIP packages
+        run: |
+          chmod +x scripts/build-plugins.sh
+          ./scripts/build-plugins.sh
+          test -f dist/airagassign.zip
+          test -f dist/airagmaterial.zip
+          test -f dist/local_assign_ai_rag.zip
+          test -f dist/aiprovider_rag.zip
+

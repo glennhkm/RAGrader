@@ -1,0 +1,40 @@
+# Environmental & Build Artifacts
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Runtime Data & Logs
+backend/data/chroma_db/*
+!backend/data/chroma_db/.gitkeep
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+backend/logs/*
+!backend/logs/.gitkeep
+
+# Build & Packaging Outputs
+dist/
+*.zip
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# Superpowers SDD scratch
+.superpowers/

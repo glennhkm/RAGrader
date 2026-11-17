@@ -1,0 +1,49 @@
+document_processing:
+  chunk_size: "${CHUNK_SIZE:500}"
+  chunk_overlap: "${CHUNK_OVERLAP:50}"
+  separators: ["\n\n", "\n", ". ", " ", ""]
+
+embeddings:
+  model_name: "${EMBEDDING_MODEL:BAAI/bge-m3}"
+  device: "${EMBEDDING_DEVICE:cloud}"
+
+vectorstore:
+  type: "${VECTORSTORE_TYPE:chroma}"
+  persist_directory: "${CHROMA_PERSIST_DIRECTORY:./data/chroma_db}"
+  collection_name: "${CHROMA_COLLECTION_NAME:course_materials}"
+  client_mode: "${CHROMA_CLIENT_MODE:persistent}"
+  host: "${CHROMA_HOST:localhost}"
+  port: "${CHROMA_PORT:8000}"
+  ssl: "${CHROMA_SSL:false}"
+
+retrieval:
+  top_k: "${RETRIEVAL_TOP_K:5}"
+  search_type: "${RETRIEVAL_SEARCH_TYPE:similarity}"
+  enable_reranking: "${ENABLE_RERANKING:false}"
+  rerank_top_k: "${RERANK_TOP_K:3}"
+  reranker_type: "${RERANKER_TYPE:bge}" # Options: "bge" (bge-reranker-v2-m3 via Pinecone) or "bm25"
+  reranker_model: "${RERANKER_MODEL:bge-reranker-v2-m3}" # Pinecone model name
+
+llm:
+  provider: "${LLM_PROVIDER:provider_chain}"
+  model_name: "${LLM_MODEL:openai/gpt-oss-120b}"
+  temperature: "${LLM_TEMPERATURE:0.3}"
+  max_new_tokens: "${LLM_MAX_NEW_TOKENS:2048}"
+  device: "${LLM_DEVICE:cloud}"
+
+grading:
+  min_confidence: "${GRADING_MIN_CONFIDENCE:0.5}"
+  require_citations: "${GRADING_REQUIRE_CITATIONS:true}"
+  max_score: "${GRADING_MAX_SCORE:100}"
+
+multimodal:
+  enable_image_extraction: "${ENABLE_IMAGE_EXTRACTION:false}"
+  enable_vision_captioning: "${ENABLE_VISION_CAPTIONING:false}"
+
+api:
+  host: "${API_HOST:0.0.0.0}"
+  port: "${API_PORT:8000}"
+
+ui:
+  port: "${UI_PORT:7860}"
+  share: "${UI_SHARE:false}"

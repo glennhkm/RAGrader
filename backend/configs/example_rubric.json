@@ -1,0 +1,46 @@
+{
+  "total_points": 100,
+  "description": "Rubrik penilaian esai tentang Machine Learning",
+  "criteria": {
+    "pemahaman_konsep": {
+      "points": 40,
+      "description": "Pemahaman konsep dasar machine learning berdasarkan materi kuliah",
+      "levels": {
+        "excellent": "35-40: Menunjukkan pemahaman mendalam dengan referensi lengkap",
+        "good": "30-34: Pemahaman baik dengan beberapa referensi",
+        "fair": "20-29: Pemahaman cukup namun kurang detail",
+        "poor": "0-19: Pemahaman kurang atau tidak sesuai materi"
+      }
+    },
+    "analisis_kritis": {
+      "points": 30,
+      "description": "Kemampuan menganalisis dan membandingkan berbagai pendekatan",
+      "levels": {
+        "excellent": "25-30: Analisis mendalam dengan perbandingan yang jelas",
+        "good": "20-24: Analisis baik dengan beberapa perbandingan",
+        "fair": "15-19: Analisis cukup namun kurang mendalam",
+        "poor": "0-14: Analisis minimal atau tidak ada"
+      }
+    },
+    "struktur_organisasi": {
+      "points": 20,
+      "description": "Struktur penulisan, koherensi, dan alur logika",
+      "levels": {
+        "excellent": "17-20: Struktur sangat jelas dan koheren",
+        "good": "14-16: Struktur baik dan mudah diikuti",
+        "fair": "10-13: Struktur cukup namun ada bagian yang kurang jelas",
+        "poor": "0-9: Struktur kurang jelas atau tidak terorganisir"
+      }
+    },
+    "penggunaan_bukti": {
+      "points": 10,
+      "description": "Penggunaan kutipan dan referensi dari materi kuliah",
+      "levels": {
+        "excellent": "9-10: Bukti relevan dan terintegrasi dengan baik",
+        "good": "7-8: Bukti cukup relevan",
+        "fair": "5-6: Bukti minimal",
+        "poor": "0-4: Bukti tidak ada atau tidak relevan"
+      }
+    }
+  }
+}
