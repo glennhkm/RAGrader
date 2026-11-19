@@ -1,0 +1,16 @@
+# Optional in-process local AI runtimes (no network calls, no cloud keys).
+# Install with: pip install -r requirements.txt -r requirements-local.txt
+# Docker: docker compose build --build-arg INSTALL_LOCAL_EXTRAS=true
+
+# Local embeddings (EMBEDDING_PROVIDER=local, EMBEDDING_LOCAL_BACKEND=fastembed) and
+# local cross-encoder reranking (RERANKER_TYPE=local_cross_encoder). ONNX, no PyTorch.
+fastembed>=0.4,<1.0
+
+# Alternative local backend (EMBEDDING_LOCAL_BACKEND=sentence_transformers or as the
+# cross-encoder fallback). Pulls in PyTorch (large); uncomment if needed.
+# sentence-transformers>=3.0,<7.0
+
+# In-process GGUF LLM (LLM_PROVIDER=local, LLM_LOCAL_MODEL_PATH=/models/model.gguf).
+# Compiles native code; uncomment if needed. Prefer LLM_PROVIDER=openai_compatible
+# with Ollama/vLLM for most self-hosted deployments.
+# llama-cpp-python>=0.3,<0.4
