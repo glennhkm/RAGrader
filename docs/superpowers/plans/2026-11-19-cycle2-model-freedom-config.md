@@ -290,7 +290,7 @@ def create_reranker(settings: RerankerSettings) -> BaseReranker | None   # None 
 - `requirements-local.txt`: `fastembed`, `sentence-transformers` (commented as alternative), `llama-cpp-python` (commented, optional) — pin ranges at implementation time after checking current releases.
 - Missing package / missing model file → `ConfigError` with exact remediation.
 
-- [ ] **Step 1:** Failing tests with fake `llama_cpp` module. **Step 2:** Implement. **Step 3:** Commit `feat(llm): add optional in-process llama.cpp provider`.
+- [x] **Step 1:** Failing tests with fake `llama_cpp` module. **Step 2:** Implement. **Step 3:** Commit `feat(llm): add optional in-process llama.cpp provider`.
 
 ---
 
