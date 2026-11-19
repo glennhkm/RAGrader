@@ -30,6 +30,7 @@ from .request_utils import (
 )
 from .locking import LockAcquisitionError
 from .runtime import get_runtime
+from ..vectorstore.embeddings import EmbeddingMismatchError
 from ..vectorstore.filters import build_chroma_where_filter
 
 # Router for Moodle endpoints
@@ -189,7 +190,7 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
         
     except LockAcquisitionError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
+    except (HTTPException, EmbeddingMismatchError):
         raise
     except Exception as e:
         logger.error(f"Error in Moodle grading endpoint: {e}")
@@ -269,7 +270,7 @@ def moodle_upload_materials(
         
     except LockAcquisitionError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
+    except (HTTPException, EmbeddingMismatchError):
         raise
     except Exception as e:
         logger.error(f"Error uploading materials: {e}")
@@ -438,7 +439,7 @@ def upload_course_material(
         
     except LockAcquisitionError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
+    except (HTTPException, EmbeddingMismatchError):
         raise
     except Exception as e:
         logger.error(f"Error uploading course material: {e}")

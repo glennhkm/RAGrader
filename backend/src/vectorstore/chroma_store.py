@@ -9,7 +9,15 @@ from loguru import logger
 import chromadb
 from chromadb.errors import NotFoundError
 
-from .embeddings import EmbeddingGenerator
+try:  # chromadb 0.6.x raises InvalidCollectionException for missing collections
+    from chromadb.errors import InvalidCollectionException
+except ImportError:  # newer chromadb versions raise NotFoundError only
+    InvalidCollectionException = NotFoundError
+
+# Every exception chromadb uses to signal "collection does not exist".
+MISSING_COLLECTION_ERRORS = (NotFoundError, InvalidCollectionException)
+
+from .embeddings import EmbeddingGenerator, EmbeddingMismatchError
 from .filters import build_collection_name
 
 
@@ -95,25 +103,80 @@ class VectorStore:
         """Returns the default collection name for backward compatibility."""
         return self._get_collection_name(None)
         
+    def _verify_collection_identity(self, col_name: str, identity: Dict[str, Any]) -> None:
+        """Refuse to mix vectors from different embedding providers/models/dimensions.
+
+        Collection names only encode the model id, so switching provider (or a
+        model with a different dimension) under the same name would silently
+        corrupt retrieval. Legacy collections without identity metadata are
+        adopted after checking the stored vector dimension.
+
+        Raises:
+            EmbeddingMismatchError: when the collection belongs to another embedding setup.
+        """
+        try:
+            collection = self.client.get_collection(name=col_name)
+        except MISSING_COLLECTION_ERRORS:
+            return  # Created below with the identity as collection metadata.
+
+        metadata = dict(collection.metadata or {})
+        expected_dim = int(identity["embedding_dimension"])
+        stored = {key: metadata.get(key) for key in identity}
+
+        if all(value is None for value in stored.values()):
+            sample = collection.get(limit=1, include=["embeddings"])
+            embeddings = sample.get("embeddings") if sample else None
+            if embeddings is not None and len(embeddings) > 0 and len(embeddings[0]) != expected_dim:
+                raise EmbeddingMismatchError(
+                    f"Collection '{col_name}' stores {len(embeddings[0])}-dimensional vectors but the "
+                    f"configured embedding model '{identity['embedding_model']}' produces {expected_dim}. "
+                    "Re-ingest the materials or restore the previous embedding configuration."
+                )
+            if any(key.startswith("hnsw:") for key in metadata):
+                # Chroma's modify() replaces metadata and rejects index keys.
+                logger.warning(f"Collection '{col_name}' has index metadata; identity not recorded")
+                return
+            collection.modify(metadata={**metadata, **identity})
+            logger.info(f"Recorded embedding identity on legacy collection '{col_name}'")
+            return
+
+        mismatches = []
+        for key, expected in identity.items():
+            actual = stored.get(key)
+            if key == "embedding_dimension":
+                same = actual is not None and int(actual) == expected_dim
+            else:
+                same = actual == expected
+            if not same:
+                mismatches.append(f"{key}={actual!r} (configured {expected!r})")
+        if mismatches:
+            raise EmbeddingMismatchError(
+                f"Collection '{col_name}' was built with a different embedding setup: "
+                + "; ".join(mismatches)
+                + ". Re-ingest the materials or restore the previous embedding configuration."
+            )
+
     def _get_vectorstore(self, course_id: Optional[str] = None) -> Chroma:
         """Get or create the Chroma vector store instance for a given course."""
         col_name = self._get_collection_name(course_id)
+        if self.client_mode != "http" and col_name in self._vectorstores:
+            return self._vectorstores[col_name]
+
+        identity = self.embedding_generator.identity()
+        self._verify_collection_identity(col_name, identity)
+        vectorstore = Chroma(
+            client=self.client,
+            collection_name=col_name,
+            embedding_function=self.embedding_generator.get_embeddings_instance(),
+            collection_metadata=identity,
+        )
         if self.client_mode == "http":
             # Do not retain a process-local collection wrapper in replicated
             # mode. Another replica can delete and recreate the collection.
-            return Chroma(
-                client=self.client,
-                collection_name=col_name,
-                embedding_function=self.embedding_generator.get_embeddings_instance(),
-            )
-        if col_name not in self._vectorstores:
-            self._vectorstores[col_name] = Chroma(
-                client=self.client,
-                collection_name=col_name,
-                embedding_function=self.embedding_generator.get_embeddings_instance()
-            )
-            logger.info(f"Loaded/Created Chroma collection: {col_name}")
-        return self._vectorstores[col_name]
+            return vectorstore
+        self._vectorstores[col_name] = vectorstore
+        logger.info(f"Loaded/Created Chroma collection: {col_name}")
+        return vectorstore
     
     def switch_embedding_model(self, new_model: str) -> Dict[str, Any]:
         """
@@ -329,7 +392,7 @@ class VectorStore:
                 logger.warning(f"No chunks found for file '{source_name}' in collection '{col_name}'")
                 return False
                 
-        except NotFoundError:
+        except MISSING_COLLECTION_ERRORS:
             logger.warning(f"Collection {col_name} does not exist")
             return False
         except Exception as e:
@@ -353,7 +416,7 @@ class VectorStore:
             if col_name in self._vectorstores:
                 del self._vectorstores[col_name]
             
-        except NotFoundError:
+        except MISSING_COLLECTION_ERRORS:
             logger.info(f"Vector store collection already absent: {col_name}")
             self._vectorstores.pop(col_name, None)
         except Exception as e:
@@ -374,7 +437,7 @@ class VectorStore:
         try:
             collection = self.client.get_collection(name=col_name)
             return collection.count()
-        except NotFoundError:
+        except MISSING_COLLECTION_ERRORS:
             return 0
         except Exception as e:
             logger.error(f"Could not get document count for collection {col_name}: {e}")

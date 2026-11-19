@@ -5,7 +5,7 @@ from pathlib import Path
 from loguru import logger
 
 from ..vectorstore import VectorStore
-from ..vectorstore.embeddings import EmbeddingGenerator
+from ..vectorstore.embeddings import EmbeddingGenerator, EmbeddingMismatchError
 from .llm import LLMWrapper
 from .retriever import Retriever
 from .prompt_builder import PromptBuilder
@@ -160,6 +160,8 @@ class RAGPipeline:
             logger.info(f"Penilaian selesai. Skor: {result.get('score', 'N/A')}")
             return result
             
+        except EmbeddingMismatchError:
+            raise
         except Exception as e:
             logger.error(f"Error saat menilai: {e}")
             return {

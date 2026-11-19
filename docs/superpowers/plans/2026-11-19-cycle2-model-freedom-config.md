@@ -235,8 +235,8 @@ class EmbeddingMismatchError(RuntimeError): ...
 - Collection guard in `VectorStore._get_vectorstore()`: on first open in the process, read collection metadata; if absent (legacy) write identity; if present and provider/model/dimension differ → `EmbeddingMismatchError` with a message telling the operator to re-ingest or switch back. Dimension probed once via `embed_query("dimension probe")` and cached.
 - Local `device`: `cuda` passed to the backend; `fastembed` unsupported model → error suggesting `EMBEDDING_LOCAL_BACKEND=sentence_transformers` (verify the supported-model list against the installed fastembed version during implementation; do not hard-code assumptions in docs).
 
-- [ ] **Step 1: Failing tests:** openai_compatible batching + order (fake client); `huggingface` without token raises only when selected; local backend via fake `fastembed` module injected in `sys.modules`; real `chromadb.PersistentClient` guard tests — legacy collection adopted, mismatched provider raises, same identity reopens fine; API route returns 409 on mismatch.
-- [ ] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(embeddings): add openai-compatible and local embedding providers with collection guard`.
+- [x] **Step 1: Failing tests:** openai_compatible batching + order (fake client); `huggingface` without token raises only when selected; local backend via fake `fastembed` module injected in `sys.modules`; real `chromadb.PersistentClient` guard tests — legacy collection adopted, mismatched provider raises, same identity reopens fine; API route returns 409 on mismatch.
+- [x] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(embeddings): add openai-compatible and local embedding providers with collection guard`.
 
 ---
 
