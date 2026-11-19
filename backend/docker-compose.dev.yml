@@ -29,8 +29,10 @@ services:
       LOG_TO_FILE: "false"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
+    # A named volume (not ./data) so it works out of the box on Linux: Docker
+    # seeds it from the image, owned by the container user (uid 10001).
     volumes:
-      - ./data:/app/data:Z
+      - api_data:/app/data
     # Lets the container reach an Ollama/vLLM server running on the host
     # (use http://host.docker.internal:11434/v1 in .env.dev).
     extra_hosts:
@@ -52,4 +54,5 @@ services:
       - ollama_models:/root/.ollama
 
 volumes:
+  api_data:
   ollama_models:
