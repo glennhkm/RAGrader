@@ -30,7 +30,15 @@ class LLMWrapperAndDepsTest(unittest.TestCase):
             for line in req_text.splitlines()
             if line.strip() and not line.strip().startswith("#")
         }
-        for unused in ("nltk", "tiktoken", "pandas", "numpy", "langchain-groq", "pinecone"):
+        for unused in (
+            "nltk",
+            "tiktoken",
+            "pandas",
+            "numpy",
+            "langchain-groq",
+            "pinecone",
+            "pydantic-settings",
+        ):
             self.assertNotIn(unused, packages)
 
         opt_text = (BACKEND_DIR / "requirements-optional.txt").read_text(encoding="utf-8")

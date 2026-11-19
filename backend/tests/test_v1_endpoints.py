@@ -1,11 +1,14 @@
 """Contract tests for generic /v1/namespaces/* autograding endpoints."""
 
+import importlib
 import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from threading import RLock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -224,6 +227,79 @@ class V1EndpointTest(unittest.TestCase):
             files={"file": ("notes.txt", b"hello", "text/plain")},
         )
         self.assertEqual(400, non_obj_json.status_code)
+
+    def test_upload_accepts_top_level_topic_form_field(self):
+        upload_resp = self.client.post(
+            "/v1/namespaces/cs-202/materials",
+            data={"module": "week-2", "topic": "routing"},
+            files={"file": ("week2.txt", b"OSPF routing", "text/plain")},
+        )
+        self.assertEqual(200, upload_resp.status_code)
+        body = upload_resp.json()
+        self.assertEqual("routing", body["topic"])
+        self.assertEqual({"topic": "routing"}, body["tags"])
+        self.assertEqual({"topic": "routing"}, self.fake_grader.last_ingest_kwargs["tags"])
+
+        grade_resp = self.client.post(
+            "/v1/namespaces/cs-202/grade",
+            json={
+                "question": "Explain OSPF",
+                "essay": "Link-state routing protocol.",
+                "material_filter": {"modules": ["week-2"], "tags": {"topic": "routing"}},
+            },
+        )
+        self.assertEqual(200, grade_resp.status_code)
+        self.assertEqual(
+            {"$and": [{"module": {"$eq": "week-2"}}, {"tag_topic": {"$eq": "routing"}}]},
+            self.fake_grader.last_grade_kwargs["metadata_filter"],
+        )
+
+    def test_main_app_mounts_v1_routes_behind_api_auth_middleware(self):
+        fake_pipeline = _FakePipeline()
+        fake_pipeline.vectorstore = MagicMock()
+        fake_pipeline.vectorstore.heartbeat.return_value = True
+        fake_grader = _FakeGrader()
+        fake_grader.rag_pipeline = fake_pipeline
+
+        fake_locks = MagicMock()
+        fake_locks.ping.return_value = True
+        fake_locks.read.return_value = RLock()
+        fake_locks.write.return_value = RLock()
+
+        had_app = "src.api.app" in sys.modules
+        try:
+            with (
+                patch("src.grading.EssayGrader", return_value=fake_grader),
+                patch("src.api.locking.OperationLockManager", return_value=fake_locks),
+            ):
+                sys.modules.pop("src.api.app", None)
+                app_mod = importlib.import_module("src.api.app")
+
+            with (
+                patch.object(app_mod, "grader", fake_grader),
+                patch.object(app_mod, "operation_locks", fake_locks),
+                patch.dict(os.environ, {"API_AUTH_TOKEN": "cycle1-secret"}, clear=False),
+            ):
+                client = TestClient(app_mod.app)
+                health = client.get("/health")
+                unauth = client.get("/v1/namespaces/cs-101/materials")
+                wrong = client.get(
+                    "/v1/namespaces/cs-101/materials",
+                    headers={"Authorization": "Bearer wrong-token"},
+                )
+                authed = client.get(
+                    "/v1/namespaces/cs-101/materials",
+                    headers={"Authorization": "Bearer cycle1-secret"},
+                )
+
+            self.assertEqual(200, health.status_code)
+            self.assertEqual(401, unauth.status_code)
+            self.assertEqual(401, wrong.status_code)
+            self.assertEqual(200, authed.status_code)
+            self.assertEqual("cs-101", authed.json()["namespace"])
+        finally:
+            if not had_app:
+                sys.modules.pop("src.api.app", None)
 
 
 if __name__ == "__main__":

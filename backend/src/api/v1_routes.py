@@ -81,13 +81,22 @@ def upload_namespace_material(
     namespace: str = PathParam(...),
     file: UploadFile = File(...),
     module: Optional[str] = Form(default=None),
+    topic: Optional[str] = Form(default=None),
     tags: str = Form(default=""),
 ):
-    """Upload and index a material file into an isolated namespace with optional module/tags."""
+    """Upload and index a material file into an isolated namespace with optional module/topic/tags."""
     ns = _validate_namespace(namespace)
     storage_ns = _storage_namespace(ns)
     filename = validate_material_filename(file.filename)
     parsed_tags = _parse_tags_json(tags)
+    cleaned_topic = topic.strip() if topic and topic.strip() else None
+    if cleaned_topic:
+        parsed_tags["topic"] = cleaned_topic
+    response_topic = cleaned_topic or (
+        str(parsed_tags["topic"]).strip()
+        if parsed_tags.get("topic") is not None and str(parsed_tags["topic"]).strip()
+        else None
+    )
 
     try:
         grader = get_grader()
@@ -122,6 +131,7 @@ def upload_namespace_material(
             namespace=ns,
             filename=filename,
             module=module,
+            topic=response_topic,
             tags=parsed_tags,
             chunk_count=int(result.get("chunks_created", 0)),
             documents_loaded=int(result.get("documents_loaded", 0)),

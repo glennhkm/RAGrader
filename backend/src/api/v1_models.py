@@ -71,6 +71,7 @@ class V1UploadResponse(BaseModel):
     namespace: str
     filename: str
     module: Optional[str] = None
+    topic: Optional[str] = None
     tags: Dict[str, Any] = Field(default_factory=dict)
     chunk_count: int = 0
     documents_loaded: int = 0

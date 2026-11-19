@@ -47,7 +47,7 @@ LMS-agnostic endpoints for namespace-isolated RAG autograding (`namespace` must 
 
 | Method & Path | Request Body / Params | Purpose |
 | :--- | :--- | :--- |
-| `POST /v1/namespaces/{namespace}/materials` | Multipart `file`, optional form `module`, optional form `tags` (JSON object) | Upload & vectorize a material file (`.pdf`, `.pptx`, `.docx`, `.txt`) into an isolated namespace with optional module/tag metadata |
+| `POST /v1/namespaces/{namespace}/materials` | Multipart `file`, optional form `module`, `topic`, and `tags` (JSON object) | Upload & vectorize a material file (`.pdf`, `.pptx`, `.docx`, `.txt`) into an isolated namespace with optional module/topic/tag metadata |
 | `GET /v1/namespaces/{namespace}/materials` | Path param `namespace` | Inspect `collection_name`, `document_count`, `uploaded_files`, and `embedding_model` for a namespace |
 | `DELETE /v1/namespaces/{namespace}/materials/{filename}` | Path params `namespace`, `filename` | Remove a single uploaded file and its vector chunks from a namespace |
 | `DELETE /v1/namespaces/{namespace}` | Path param `namespace` | Delete all vectors and uploaded files for a namespace |

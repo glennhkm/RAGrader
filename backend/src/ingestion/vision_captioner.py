@@ -1,9 +1,8 @@
 """Vision captioning for images using Vision Language Models via HuggingFace Router."""
 
 import os
-import base64
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from dataclasses import dataclass
 from loguru import logger
 

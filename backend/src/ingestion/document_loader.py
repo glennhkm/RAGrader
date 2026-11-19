@@ -1,7 +1,7 @@
 """Multimodal document loader for PDF, PowerPoint, Word, and text files."""
 
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Callable
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from loguru import logger
@@ -20,8 +20,8 @@ except ImportError:
     HAS_DOCX = False
     logger.warning("python-docx not installed. DOCX processing disabled.")
 
-from .image_extractor import ImageExtractor, ExtractedImage
-from .vision_captioner import VisionCaptioner, ImageCaption
+from .image_extractor import ImageExtractor
+from .vision_captioner import VisionCaptioner
 
 
 class MultimodalDocumentLoader:

@@ -1,6 +1,6 @@
 """RAG pipeline orchestration."""
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional
 from pathlib import Path
 from loguru import logger
 
