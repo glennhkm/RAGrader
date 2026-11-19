@@ -41,7 +41,8 @@ class MultimodalDocumentLoader:
         vision_model: str = None,
         min_image_width: int = 100,
         min_image_height: int = 100,
-        max_images_per_doc: int = 50
+        max_images_per_doc: int = 50,
+        settings=None,
     ):
         """
         Initialize multimodal document loader.
@@ -64,6 +65,7 @@ class MultimodalDocumentLoader:
             max_images=max_images_per_doc
         ) if enable_image_extraction else None
         
+        self._settings = settings
         # Initialize vision captioner (lazy loading)
         self.vision_captioner = None
         self._vision_model = vision_model
@@ -78,7 +80,11 @@ class MultimodalDocumentLoader:
         """Lazy initialize vision captioner."""
         if self.vision_captioner is None and self.enable_vision_captioning:
             try:
-                self.vision_captioner = VisionCaptioner(model_name=self._vision_model)
+                self.vision_captioner = VisionCaptioner(
+                    model_name=self._vision_model,
+                    settings=self._settings.vision if self._settings else None,
+                    prompt_settings=self._settings.prompt if self._settings else None,
+                )
             except Exception as e:
                 logger.warning(f"Could not initialize vision captioner: {e}")
                 self.enable_vision_captioning = False
@@ -509,17 +515,19 @@ class DocumentLoader:
     Supports PDF, PPTX, DOCX, and TXT with optional image extraction for PDF/PPTX.
     """
     
-    def __init__(self, enable_multimodal: bool = True):
+    def __init__(self, enable_multimodal: bool = True, settings=None):
         """
         Initialize document loader.
         
         Args:
             enable_multimodal: Whether to enable image extraction and captioning
+            settings: Optional Settings forwarded to the vision captioner
         """
         self.enable_multimodal = enable_multimodal
         self.multimodal_loader = MultimodalDocumentLoader(
             enable_image_extraction=enable_multimodal,
-            enable_vision_captioning=enable_multimodal
+            enable_vision_captioning=enable_multimodal,
+            settings=settings,
         )
         self.supported_formats = list(self.multimodal_loader.get_supported_formats().keys())
     

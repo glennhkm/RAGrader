@@ -21,8 +21,9 @@ retrieval:
   search_type: "${RETRIEVAL_SEARCH_TYPE:similarity}"
   enable_reranking: "${ENABLE_RERANKING:false}"
   rerank_top_k: "${RERANK_TOP_K:3}"
-  reranker_type: "${RERANKER_TYPE:bge}" # Options: "bge" (bge-reranker-v2-m3 via Pinecone) or "bm25"
-  reranker_model: "${RERANKER_MODEL:bge-reranker-v2-m3}" # Pinecone model name
+  # none | bm25 | local_cross_encoder | http_rerank | llm_rerank | pinecone ("bge" = pinecone)
+  reranker_type: "${RERANKER_TYPE:bge}"
+  reranker_model: "${RERANKER_MODEL:bge-reranker-v2-m3}"
 
 llm:
   provider: "${LLM_PROVIDER:provider_chain}"
@@ -47,3 +48,6 @@ api:
 ui:
   port: "${UI_PORT:7860}"
   share: "${UI_SHARE:false}"
+
+# Provider endpoints, keys, PROMPT_LANGUAGE and the other Cycle 2 options are read
+# from the environment by src/utils/config.py (see backend/.env.example).

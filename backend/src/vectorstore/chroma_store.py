@@ -34,6 +34,7 @@ class VectorStore:
         host: str = "localhost",
         port: int = 8000,
         ssl: bool = False,
+        embedding_settings=None,
     ):
         """
         Initialize vector store.
@@ -58,7 +59,8 @@ class VectorStore:
         # Initialize embeddings
         self.embedding_generator = EmbeddingGenerator(
             model_name=embedding_model,
-            device=device
+            device=device,
+            settings=embedding_settings,
         )
         
         # Embedded Chroma is suitable for one process only. Replicated API

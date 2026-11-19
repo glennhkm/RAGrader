@@ -312,6 +312,8 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
 
 ## 8. Phased Delivery Roadmap (3 Focused Cycles)
 
+> **Status:** Cycle 1 delivered (merged to `main`). Cycle 2 delivered on `feat/cycle2-model-freedom-config` — see [`docs/superpowers/plans/2026-11-19-cycle2-model-freedom-config.md`](superpowers/plans/2026-11-19-cycle2-model-freedom-config.md). Cycle 3 is next.
+
 | Cycle | Theme | Deliverables | Done Criteria |
 | :--- | :--- | :--- | :--- |
 | **Cycle 1 (Weeks 1–2)** | **Core Engine Generalization, Scoped RAG & Dependency Cleanup** | Generic `/v1/` namespace routes (`module`/`topic`/`tags`), metadata tagging, Chroma `where` filter in `Retriever`/`RAGPipeline`, `mod_airagassign` `source_filter` integration, removal of unused packages (`nltk`, `tiktoken`, `pandas`, `numpy`, `langchain-groq`, `pydantic-settings`) & dead imports | All backend unit tests, app-level `/v1/` auth middleware wiring tests, & real-Chroma scope-filter tests pass; Week 1–3 filter excludes Week 4+ docs; Moodle adapter tests & PHP lint stay green; core `requirements.txt` has zero dead packages |

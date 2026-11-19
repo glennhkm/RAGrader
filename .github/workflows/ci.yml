@@ -34,8 +34,14 @@ jobs:
         working-directory: backend
         run: |
           cp .env.example .env
+          cp .env.dev.example .env.dev
           docker compose config --quiet
-          rm -f .env
+          docker compose -f docker-compose.dev.yml --profile local config --quiet
+          rm -f .env .env.dev
+
+      - name: Build API image
+        working-directory: backend
+        run: docker build --tag ai-rag-grading-api:ci .
 
   moodle-plugins:
     runs-on: ubuntu-latest
