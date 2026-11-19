@@ -11,9 +11,7 @@ expected by the Moodle plugin for seamless LMS integration.
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from typing import List
 from pathlib import Path
-import os
 import re
-import socket
 import time
 import uuid
 from loguru import logger
@@ -27,7 +25,7 @@ from .models import (
     HealthResponse
 )
 from ..grading import EssayGrader
-from ..utils import load_config, setup_logging, ensure_directories, DATA_DIR
+from ..utils import load_config, setup_logging, ensure_directories, get_settings, DATA_DIR
 from .moodle_routes import router as moodle_router
 from .v1_routes import router as v1_router
 from .auth import check_api_auth
@@ -75,7 +73,6 @@ logger.info("FastAPI application initialized with Moodle integration")
 
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
-INSTANCE_ID = os.getenv("HOSTNAME", socket.gethostname())
 
 
 @app.middleware("http")
@@ -103,7 +100,7 @@ async def log_http_request(request: Request, call_next):
             )
 
     response.headers["X-Request-ID"] = request_id
-    response.headers["X-API-Instance"] = INSTANCE_ID
+    response.headers["X-API-Instance"] = get_settings().api.instance_id
     return response
 
 

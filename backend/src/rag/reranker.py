@@ -1,9 +1,10 @@
 """Reranking component using BAAI/bge-reranker-v2-m3 via Pinecone Inference API."""
 
-import os
 from typing import List, Dict, Any, Tuple
 from langchain_core.documents import Document
 from loguru import logger
+
+from ..utils.config import get_settings
 
 try:
     from pinecone import Pinecone
@@ -70,7 +71,7 @@ class BGEReranker:
         self.truncate = truncate
         
         # Get API key
-        self._api_key = api_key or os.getenv("PINECONE_API_KEY")
+        self._api_key = api_key or get_settings().reranker.pinecone_api_key
         
         if not self._api_key:
             raise ValueError(

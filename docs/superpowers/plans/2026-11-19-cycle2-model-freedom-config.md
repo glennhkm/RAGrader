@@ -152,9 +152,9 @@ def override_settings(**env: str) -> Iterator[Settings]   # tests: patch env + r
 
 **Rules:** each class gains an optional `settings` constructor argument defaulting to `get_settings().<section>`; module functions (`check_api_auth`, `save_upload`) read `get_settings()` at call time so `override_settings` works. `OperationLockManager(settings: LockSettings | None = None)`.
 
-- [ ] **Step 1:** Add test `test_no_getenv_outside_config` (walks `src/**/*.py` with `ast`, asserts no `os.getenv` / `os.environ` access except in `utils/config.py`) — fails now.
-- [ ] **Step 2:** Migrate consumers; switch existing tests from `patch.dict(os.environ, …)` to `override_settings(...)` where they relied on env reads.
-- [ ] **Step 3:** Suite → PASS. Commit `refactor(config): route all runtime configuration through settings`.
+- [x] **Step 1:** Add test `test_no_getenv_outside_config` (walks `src/**/*.py` with `ast`, asserts no `os.getenv` / `os.environ` access except in `utils/config.py`) — fails now.
+- [x] **Step 2:** Migrate consumers; switch existing tests from `patch.dict(os.environ, …)` to `override_settings(...)` where they relied on env reads.
+- [x] **Step 3:** Suite → PASS. Commit `refactor(config): route all runtime configuration through settings`.
 
 ---
 

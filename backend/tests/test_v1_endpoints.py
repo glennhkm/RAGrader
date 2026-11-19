@@ -2,7 +2,6 @@
 
 import importlib
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -13,6 +12,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from src.utils.config import override_settings
 from src.api.v1_routes import router as v1_router
 
 
@@ -278,7 +278,7 @@ class V1EndpointTest(unittest.TestCase):
             with (
                 patch.object(app_mod, "grader", fake_grader),
                 patch.object(app_mod, "operation_locks", fake_locks),
-                patch.dict(os.environ, {"API_AUTH_TOKEN": "cycle1-secret"}, clear=False),
+                override_settings(API_AUTH_TOKEN="cycle1-secret"),
             ):
                 client = TestClient(app_mod.app)
                 health = client.get("/health")

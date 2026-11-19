@@ -1,27 +1,15 @@
 """LLM wrapper for Groq/OpenRouter fallback and legacy HuggingFace inference."""
 
-import os
 import time
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import replace
 from typing import Dict, Any, List, Optional
-from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI
 
+from ..utils.config import LLMEndpointSettings, LLMSettings, get_settings
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(PROJECT_ROOT / ".env")
-
-
-@dataclass
-class ProviderEndpoint:
-    """Runtime provider endpoint used by the fallback chain."""
-
-    name: str
-    base_url: str
-    api_key_env: str
-    model: str
+# Backward-compatible name for the endpoint type used by the fallback chain.
+ProviderEndpoint = LLMEndpointSettings
 
 
 class LLMWrapper:
@@ -77,7 +65,8 @@ class LLMWrapper:
         temperature: float = 0.3,
         max_new_tokens: int = 2048,
         device: str = "cpu",  # Not used, kept for compatibility
-        provider: str = "provider_chain"
+        provider: str = "provider_chain",
+        settings: Optional[LLMSettings] = None,
     ):
         """
         Initialize LLM wrapper with specified provider.
@@ -88,17 +77,17 @@ class LLMWrapper:
             max_new_tokens: Maximum tokens to generate
             device: Not used (cloud-based), kept for compatibility
             provider: LLM provider ("provider_chain", "groq", "openrouter", or "huggingface")
+            settings: LLM settings (defaults to get_settings().llm); endpoints,
+                keys and timeouts come from here, never from the environment
         """
+        self._settings = settings or get_settings().llm
         self.model_name = model_name
         self.temperature = temperature
         self.max_new_tokens = max_new_tokens
         self.device = "cloud"  # Always cloud-based
         self.provider = provider.lower()
-        self.request_timeout = max(1.0, float(os.getenv("LLM_REQUEST_TIMEOUT", "60")))
-        self.total_timeout = max(
-            self.request_timeout,
-            float(os.getenv("LLM_TOTAL_TIMEOUT", "110")),
-        )
+        self.request_timeout = self._settings.request_timeout
+        self.total_timeout = self._settings.total_timeout
         
         logger.info(f"Initializing LLM with provider: {self.provider}")
         logger.info(f"Model: {model_name}")
@@ -120,13 +109,18 @@ class LLMWrapper:
             )
 
     def _init_provider_chain(self, preferred_order: Optional[List[str]] = None):
-        """Initialize Groq/OpenRouter fallback chain using available environment keys."""
-        provider_order = preferred_order or self._provider_order_from_env()
-        self.provider_endpoints = self._build_provider_endpoints(provider_order)
+        """Initialize the OpenAI-compatible fallback chain from settings."""
+        provider_order = preferred_order or list(self._settings.provider_order)
+        self.provider_endpoints = [
+            endpoint if endpoint.model_overridden else replace(endpoint, model=self.model_name)
+            for endpoint in self._settings.chain(provider_order)
+        ]
 
         if not self.provider_endpoints:
             raise ValueError(
-                "No Groq/OpenRouter API key found. Set GROQ_API_KEY or OPENROUTER_API_KEY in .env"
+                "No LLM endpoint configured for provider order "
+                f"{', '.join(provider_order)}. Set GROQ_API_KEY, OPENROUTER_API_KEY "
+                "or LLM_CUSTOM_<N>_BASE_URL in .env"
             )
 
         self._use_provider_chain = True
@@ -135,64 +129,10 @@ class LLMWrapper:
             + ", ".join(endpoint.name for endpoint in self.provider_endpoints)
         )
 
-    def _provider_order_from_env(self) -> List[str]:
-        raw = os.getenv("LLM_PROVIDER_ORDER", "groq,openrouter")
-        order = [item.strip().lower() for item in raw.split(",") if item.strip()]
-        return order or ["groq", "openrouter"]
-
-    def _build_provider_endpoints(self, provider_order: List[str]) -> List[ProviderEndpoint]:
-        endpoints: List[ProviderEndpoint] = []
-        for provider_name in provider_order:
-            if provider_name == "groq":
-                endpoints.extend(self._collect_numbered_provider_keys(
-                    provider_name="groq",
-                    base_url="https://api.groq.com/openai/v1",
-                    api_key_prefix="GROQ_API_KEY",
-                    model=os.getenv("GROQ_MODEL", self.model_name),
-                    max_index=int(os.getenv("GROQ_KEY_MAX_INDEX", "6")),
-                ))
-            elif provider_name == "openrouter":
-                endpoints.extend(self._collect_numbered_provider_keys(
-                    provider_name="openrouter",
-                    base_url="https://openrouter.ai/api/v1",
-                    api_key_prefix="OPENROUTER_API_KEY",
-                    model=os.getenv("OPENROUTER_MODEL", self.model_name),
-                    max_index=int(os.getenv("OPENROUTER_KEY_MAX_INDEX", "7")),
-                ))
-            else:
-                logger.warning(f"Skipping unknown provider in LLM_PROVIDER_ORDER: {provider_name}")
-        return endpoints
-
-    def _collect_numbered_provider_keys(
-        self,
-        provider_name: str,
-        base_url: str,
-        api_key_prefix: str,
-        model: str,
-        max_index: int,
-    ) -> List[ProviderEndpoint]:
-        endpoints: List[ProviderEndpoint] = []
-        env_names = [api_key_prefix] + [f"{api_key_prefix}_{idx}" for idx in range(1, max_index + 1)]
-        seen = set()
-        for env_name in env_names:
-            if env_name in seen:
-                continue
-            seen.add(env_name)
-            if os.getenv(env_name):
-                suffix = env_name.removeprefix(api_key_prefix).lstrip("_")
-                endpoints.append(
-                    ProviderEndpoint(
-                        name=f"{provider_name}{suffix}",
-                        base_url=base_url,
-                        api_key_env=env_name,
-                        model=model,
-                    )
-                )
-        return endpoints
-    
     def _init_huggingface(self):
         """Initialize HuggingFace Inference API."""
-        api_token = os.getenv("HUGGINGFACE_API_TOKEN")
+        hf_endpoints = self._settings.presets.get("huggingface", ())
+        api_token = hf_endpoints[0].api_key if hf_endpoints else ""
         if not api_token:
             raise ValueError(
                 "HUGGINGFACE_API_TOKEN not found in environment. "
@@ -244,9 +184,9 @@ class LLMWrapper:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            api_key = os.getenv(endpoint.api_key_env)
-            if not api_key:
-                continue
+            # Self-hosted OpenAI-compatible servers often need no key, but the
+            # SDK requires a non-empty value.
+            api_key = endpoint.api_key or "not-needed"
 
             try:
                 logger.info(f"Generating response via {endpoint.name} ({endpoint.model})")
@@ -293,12 +233,7 @@ class LLMWrapper:
         self, endpoint: ProviderEndpoint, api_key: str, timeout: float
     ) -> OpenAI:
         """Create OpenAI-compatible client with provider-specific headers."""
-        default_headers = None
-        if endpoint.name.startswith("openrouter"):
-            default_headers = {
-                "HTTP-Referer": os.getenv("OPENROUTER_SITE_URL", "http://localhost"),
-                "X-Title": os.getenv("OPENROUTER_APP_NAME", "RAG Essay Grading API"),
-            }
+        default_headers = dict(endpoint.extra_headers) or None
         return OpenAI(
             base_url=endpoint.base_url,
             api_key=api_key,

@@ -146,7 +146,8 @@ def setup_logging(log_level: str = "INFO"):
     log_file = LOGS_DIR / "app.log"
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    level = os.getenv("LOG_LEVEL", log_level).upper()
+    logging_settings = get_settings().logging
+    level = logging_settings.level or log_level.upper()
     logformat = (
         "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | "
         "request_id={extra[request_id]} | {name}:{function}:{line} - {message}"
@@ -163,8 +164,7 @@ def setup_logging(log_level: str = "INFO"):
         backtrace=False,
         diagnose=False,
     )
-    log_to_file = os.getenv("LOG_TO_FILE", "true").lower() in {"1", "true", "yes", "on"}
-    if log_to_file:
+    if logging_settings.to_file:
         try:
             logger.add(
                 log_file,
@@ -267,6 +267,10 @@ class LLMEndpointSettings(_SafeRepr):
     api_key: str
     model: str
     extra_headers: Mapping[str, str] = field(default_factory=dict)
+    # True when the model came from a per-endpoint variable (GROQ_MODEL,
+    # OPENROUTER_MODEL, LLM_CUSTOM_<N>_MODEL) rather than the global LLM model,
+    # so callers that switch the global model at runtime keep the override.
+    model_overridden: bool = False
 
 
 @dataclass(frozen=True, repr=False)
@@ -467,6 +471,7 @@ def _numbered_key_endpoints(
     model: str,
     max_index: int,
     extra_headers: Mapping[str, str] = None,
+    model_overridden: bool = False,
 ) -> Tuple[LLMEndpointSettings, ...]:
     """Expand KEY, KEY_1..KEY_<max_index> exactly like the legacy provider chain."""
     endpoints = []
@@ -481,6 +486,7 @@ def _numbered_key_endpoints(
             api_key=api_key,
             model=model,
             extra_headers=MappingProxyType(dict(extra_headers or {})),
+            model_overridden=model_overridden,
         ))
     return tuple(endpoints)
 
@@ -496,20 +502,24 @@ def _build_llm_settings(reader: _EnvReader) -> LLMSettings:
     provider_order = tuple(item.strip().lower() for item in raw_order.split(",") if item.strip())
     provider_order = provider_order or ("groq", "openrouter")
 
+    groq_model = reader.str("GROQ_MODEL")
+    openrouter_model = reader.str("OPENROUTER_MODEL")
     presets: Dict[str, Tuple[LLMEndpointSettings, ...]] = {
         "groq": _numbered_key_endpoints(
             reader, "groq", _GROQ_BASE_URL, "GROQ_API_KEY",
-            reader.str("GROQ_MODEL", model),
+            groq_model or model,
             reader.int("GROQ_KEY_MAX_INDEX", 6, minimum=0),
+            model_overridden=bool(groq_model),
         ),
         "openrouter": _numbered_key_endpoints(
             reader, "openrouter", _OPENROUTER_BASE_URL, "OPENROUTER_API_KEY",
-            reader.str("OPENROUTER_MODEL", model),
+            openrouter_model or model,
             reader.int("OPENROUTER_KEY_MAX_INDEX", 7, minimum=0),
             extra_headers={
                 "HTTP-Referer": reader.str("OPENROUTER_SITE_URL", "http://localhost"),
                 "X-Title": reader.str("OPENROUTER_APP_NAME", "RAG Essay Grading API"),
             },
+            model_overridden=bool(openrouter_model),
         ),
     }
     hf_token = reader.str("HUGGINGFACE_API_TOKEN")
@@ -526,12 +536,14 @@ def _build_llm_settings(reader: _EnvReader) -> LLMSettings:
             base_url = reader.str(f"{prefix}_BASE_URL")
             if not base_url:
                 raise ConfigError(f"{prefix}_BASE_URL is required because LLM_PROVIDER_ORDER lists {name}")
+            custom_model = reader.str(f"{prefix}_MODEL")
             presets[name] = (LLMEndpointSettings(
                 name=name,
                 base_url=base_url,
                 api_key=reader.str(f"{prefix}_API_KEY"),
-                model=reader.str(f"{prefix}_MODEL", model),
+                model=custom_model or model,
                 extra_headers=MappingProxyType({}),
+                model_overridden=bool(custom_model),
             ),)
         elif name not in presets:
             logger.warning(f"Skipping unknown provider in LLM_PROVIDER_ORDER: {name}")

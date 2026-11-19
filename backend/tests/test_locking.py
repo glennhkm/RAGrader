@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from src.api.locking import OperationLockManager
+from src.utils.config import override_settings
 
 
 class _FakeRedisClient:
@@ -67,11 +68,11 @@ class OperationLockManagerTest(unittest.TestCase):
         fake_module = SimpleNamespace(Redis=_FakeRedisFactory, RedisError=RuntimeError)
         self.stack = ExitStack()
         self.stack.enter_context(patch("src.api.locking.redis", fake_module))
-        self.stack.enter_context(patch.dict("os.environ", {
-            "DISTRIBUTED_LOCK_ENABLED": "true",
-            "DISTRIBUTED_LOCK_WAIT_SECONDS": "2",
-            "DISTRIBUTED_LOCK_TTL_SECONDS": "60",
-        }))
+        self.stack.enter_context(override_settings(
+            DISTRIBUTED_LOCK_ENABLED="true",
+            DISTRIBUTED_LOCK_WAIT_SECONDS="2",
+            DISTRIBUTED_LOCK_TTL_SECONDS="60",
+        ))
 
     def tearDown(self):
         self.stack.close()

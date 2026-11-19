@@ -1,9 +1,10 @@
 """Embedding generator using HuggingFace Inference API with multiple model support."""
 
-from typing import List, Dict, Any
-import os
+from typing import List, Dict, Any, Optional
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from loguru import logger
+
+from ..utils.config import EmbeddingSettings, get_settings
 
 
 class EmbeddingGenerator:
@@ -46,15 +47,18 @@ class EmbeddingGenerator:
     def __init__(
         self,
         model_name: str = "BAAI/bge-m3",
-        device: str = "cpu"  # Not used, kept for compatibility
+        device: str = "cpu",  # Not used, kept for compatibility
+        settings: Optional[EmbeddingSettings] = None,
     ):
         """
         Initialize embedding generator with HuggingFace Inference API.
-        
+
         Args:
             model_name: HuggingFace model name
             device: Not used (cloud-based), kept for compatibility
+            settings: Embedding settings (defaults to get_settings().embeddings)
         """
+        self._settings = settings or get_settings().embeddings
         self.model_name = model_name
         self.device = "cloud"  # Always cloud-based
         self._api_token = None
@@ -64,7 +68,7 @@ class EmbeddingGenerator:
     def _init_embeddings(self):
         """Initialize or reinitialize embeddings with current model."""
         # Get API token from environment
-        self._api_token = os.getenv("HUGGINGFACE_API_TOKEN")
+        self._api_token = self._settings.huggingface_token
         if not self._api_token:
             raise ValueError(
                 "HUGGINGFACE_API_TOKEN not found in environment. "

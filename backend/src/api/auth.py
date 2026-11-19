@@ -1,11 +1,12 @@
 """Optional bearer-token authentication helpers for the FastAPI service."""
 
-import os
 import secrets
 from typing import Mapping, Optional
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
+from ..utils.config import get_settings
 
 PUBLIC_PATHS = frozenset({"/", "/health"})
 
@@ -27,7 +28,7 @@ def extract_bearer_token(headers: Mapping[str, str]) -> Optional[str]:
 
 def check_api_auth(request: Request) -> Optional[JSONResponse]:
     """Enforce ``API_AUTH_TOKEN`` on non-health routes when configured."""
-    expected_token = os.getenv("API_AUTH_TOKEN", "").strip()
+    expected_token = get_settings().api.auth_token
     if not expected_token or request.url.path in PUBLIC_PATHS:
         return None
 
