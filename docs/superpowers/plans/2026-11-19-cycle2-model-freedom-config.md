@@ -278,7 +278,7 @@ def create_reranker(settings: RerankerSettings) -> BaseReranker | None   # None 
 - Caption prompt follows `PROMPT_LANGUAGE` (`en` / `id`; `auto` → `id` for backward compatibility of existing captions) — reuse the template registry from Task 9 if already merged, otherwise a local two-entry dict.
 - Remains disabled by default.
 
-- [ ] **Step 1:** Failing tests with fake client (base URL/model passthrough, image_url data URI payload, retry then success). **Step 2:** Implement. **Step 3:** Commit `feat(vision): make captioning endpoint configurable`.
+- [x] **Step 1:** Failing tests with fake client (base URL/model passthrough, image_url data URI payload, retry then success). **Step 2:** Implement. **Step 3:** Commit `feat(vision): make captioning endpoint configurable`.
 
 ---
 
