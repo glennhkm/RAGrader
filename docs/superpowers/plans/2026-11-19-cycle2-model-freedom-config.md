@@ -265,8 +265,8 @@ def create_reranker(settings: RerankerSettings) -> BaseReranker | None   # None 
 - Every reranker clamps `top_k`, ignores out-of-range indices from remote responses, and on any exception logs and returns the original order (never raises into grading).
 - **Note the `llm_rerank` class name:** the module currently exports `LLMReranker = BGEReranker` as a legacy alias; rename the alias target carefully (`PineconeReranker`) and grep for imports before reusing the name.
 
-- [ ] **Step 1: Failing tests:** `httpx.MockTransport` for cohere and tei request/response shapes (incl. auth header present only with key); malformed / out-of-range indices ignored; HTTP 500 → original order; llm_rerank parses fenced JSON and falls back on garbage; local cross-encoder with fake module; factory mapping incl. `bge` alias and `ENABLE_RERANKING=false` → `None`.
-- [ ] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(rerank): add http, llm, local cross-encoder rerankers behind a factory`.
+- [x] **Step 1: Failing tests:** `httpx.MockTransport` for cohere and tei request/response shapes (incl. auth header present only with key); malformed / out-of-range indices ignored; HTTP 500 → original order; llm_rerank parses fenced JSON and falls back on garbage; local cross-encoder with fake module; factory mapping incl. `bge` alias and `ENABLE_RERANKING=false` → `None`.
+- [x] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(rerank): add http, llm, local cross-encoder rerankers behind a factory`.
 
 ---
 
