@@ -1,19 +1,32 @@
-"""Retrieval component with optional reranking using BGE Reranker."""
+"""Retrieval component with optional, pluggable reranking."""
 
+from dataclasses import replace
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
 from loguru import logger
 
-from .reranker import BGEReranker, BM25Reranker
+from ..utils.config import RerankerSettings, get_settings
+from .reranker import BaseReranker, BM25Reranker, create_reranker
+
+_TYPE_ALIASES = {"bge": "pinecone", "disabled": "none", "cross_encoder": "local_cross_encoder"}
+
+
+def _normalize_type(reranker_type: Optional[str]) -> str:
+    value = (reranker_type or "pinecone").strip().lower()
+    return _TYPE_ALIASES.get(value, value)
 
 
 class Retriever:
-    """Retrieve relevant documents with optional BGE reranking."""
+    """Retrieve relevant documents with optional reranking."""
     
-    # Reranker types
+    # Supported reranker types (RERANKER_TYPE); "bge" is a legacy alias of "pinecone".
     RERANKER_TYPES = {
-        "bge": "bge-reranker-v2-m3 (Cross-Encoder via Pinecone API)",
-        "bm25": "BM25 (Lexical Matching, Fast)"
+        "none": "Disabled (vector similarity order only)",
+        "bm25": "BM25 (lexical matching, local, fast)",
+        "local_cross_encoder": "Local cross-encoder (fastembed / sentence-transformers)",
+        "http_rerank": "Standard /rerank API (Cohere, Jina, vLLM, TEI, Infinity, SiliconFlow)",
+        "llm_rerank": "OpenAI-compatible chat model scoring passages",
+        "pinecone": "bge-reranker-v2-m3 via Pinecone Inference (legacy 'bge')",
     }
     
     def __init__(
@@ -24,6 +37,8 @@ class Retriever:
         rerank_top_k: int = 5,
         reranker_type: str = "bge",
         reranker_model: str = "bge-reranker-v2-m3",
+        reranker: Optional[BaseReranker] = None,
+        settings: Optional[RerankerSettings] = None,
         **kwargs  # Accept extra args for compatibility
     ):
         """
@@ -31,41 +46,48 @@ class Retriever:
         
         Args:
             vectorstore: VectorStore instance
-            top_k: Number of documents to retrieve initially
+            top_k: Number of documents to retrieve before reranking
             enable_reranking: Whether to enable reranking
-            rerank_top_k: Number of documents after reranking
-            reranker_type: Type of reranker ("bge" or "bm25")
-            reranker_model: Model name for BGE reranker
+            rerank_top_k: Number of documents kept (with or without reranking)
+            reranker_type: none | bm25 | local_cross_encoder | http_rerank | llm_rerank |
+                pinecone (legacy "bge")
+            reranker_model: Model for the selected reranker
+            reranker: Pre-built reranker (overrides type/model; used by tests)
+            settings: Reranker settings for endpoints/keys (defaults to get_settings().reranker)
         """
         self.vectorstore = vectorstore
         self.top_k = top_k
         self.enable_reranking = enable_reranking
         self.rerank_top_k = rerank_top_k
-        self.reranker_type = reranker_type
+        self.reranker_type = _normalize_type(reranker_type)
         self.reranker_model = reranker_model
+        self._settings = settings
         
-        # Initialize reranker
-        self._reranker = None
-        if enable_reranking:
+        self._reranker: Optional[BaseReranker] = reranker
+        if reranker is not None:
+            self.reranker_type = getattr(reranker, "kind", self.reranker_type)
+        elif enable_reranking:
             self._init_reranker()
         
         logger.info(
             f"Retriever initialized: top_k={top_k}, "
             f"reranking={'enabled' if enable_reranking else 'disabled'}, "
-            f"reranker_type={reranker_type}"
+            f"reranker_type={self.reranker_type}"
         )
+
+    def _reranker_settings(self) -> RerankerSettings:
+        base = self._settings or get_settings().reranker
+        return replace(base, enabled=True, type=self.reranker_type, model=self.reranker_model,
+                       top_k=self.top_k, rerank_top_k=self.rerank_top_k)
     
     def _init_reranker(self):
-        """Initialize the reranker based on configuration."""
+        """Initialize the configured reranker, falling back to BM25 if it cannot start."""
+        if self.reranker_type == "none":
+            self._reranker = None
+            return
         try:
-            if self.reranker_type == "bge":
-                self._reranker = BGEReranker(
-                    model_name=self.reranker_model
-                )
-                logger.info(f"✅ BGE Reranker initialized: {self.reranker_model}")
-            else:
-                self._reranker = BM25Reranker()
-                logger.info("BM25 Reranker initialized")
+            self._reranker = create_reranker(self._reranker_settings())
+            logger.info(f"Reranker initialized: {self.reranker_type} ({self.reranker_model})")
         except Exception as e:
             logger.warning(f"Failed to initialize {self.reranker_type} reranker: {e}")
             logger.info("Falling back to BM25 reranker")
@@ -77,25 +99,23 @@ class Retriever:
         Switch reranker type.
         
         Args:
-            reranker_type: "bge" or "bm25"
-            model_name: Model name for BGE reranker
+            reranker_type: Any RERANKER_TYPES key (or legacy "bge")
+            model_name: Model name for the reranker
             
         Returns:
             Status dictionary
         """
         old_type = self.reranker_type
-        self.reranker_type = reranker_type
-        
+        self.reranker_type = _normalize_type(reranker_type)
         if model_name:
             self.reranker_model = model_name
-        
         self._init_reranker()
         
         return {
             "success": True,
-            "reranker_type": reranker_type,
+            "reranker_type": self.reranker_type,
             "previous_type": old_type,
-            "model": self.reranker_model if reranker_type == "bge" else "BM25"
+            "model": "BM25" if self.reranker_type == "bm25" else self.reranker_model
         }
     
     def set_reranking(self, enable: bool) -> Dict[str, Any]:
@@ -111,7 +131,6 @@ class Retriever:
         old_state = self.enable_reranking
         self.enable_reranking = enable
         
-        # Initialize reranker if enabling and not already initialized
         if enable and self._reranker is None:
             self._init_reranker()
         
@@ -132,7 +151,7 @@ class Retriever:
             "enable_reranking": self.enable_reranking,
             "rerank_top_k": self.rerank_top_k,
             "reranker_type": self.reranker_type,
-            "reranker_model": self.reranker_model if self.reranker_type == "bge" else "BM25",
+            "reranker_model": "BM25" if self.reranker_type == "bm25" else self.reranker_model,
             "available_rerankers": self.RERANKER_TYPES
         }
     
@@ -150,7 +169,7 @@ class Retriever:
             top_k: Number of documents to retrieve
             enable_reranking: Enable/disable reranking
             rerank_top_k: Number of documents after reranking
-            reranker_type: Type of reranker ("bge" or "bm25")
+            reranker_type: Any RERANKER_TYPES key (or legacy "bge")
         """
         if top_k is not None:
             self.top_k = top_k
@@ -160,8 +179,8 @@ class Retriever:
                 self._init_reranker()
         if rerank_top_k is not None:
             self.rerank_top_k = rerank_top_k
-        if reranker_type is not None and reranker_type != self.reranker_type:
-            self.reranker_type = reranker_type
+        if reranker_type is not None and _normalize_type(reranker_type) != self.reranker_type:
+            self.reranker_type = _normalize_type(reranker_type)
             self._init_reranker()
         
         logger.info(
@@ -176,7 +195,9 @@ class Retriever:
         metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """Run initial similarity search on the vector store."""
-        k_val = self.top_k if self.enable_reranking else self.rerank_top_k
+        # Over-fetch top_k candidates only when a reranker will narrow them down.
+        reranking = self.enable_reranking and self._reranker is not None
+        k_val = self.top_k if reranking else self.rerank_top_k
         return self.vectorstore.similarity_search(
             query=query,
             k=k_val,
@@ -269,11 +290,4 @@ class Retriever:
         """Get information about current reranker."""
         if self._reranker is None:
             return {"status": "not initialized"}
-        
-        if hasattr(self._reranker, 'get_model_info'):
-            return self._reranker.get_model_info()
-        else:
-            return {
-                "type": self.reranker_type,
-                "model": "BM25" if self.reranker_type == "bm25" else self.reranker_model
-            }
+        return self._reranker.get_model_info()
