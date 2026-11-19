@@ -67,10 +67,7 @@ class observer {
             $course = $assign->get_course();
 
             // Check if pending record already exists.
-            $existing = $DB->get_record('local_assign_ai_rag_pending', [
-                'assignmentid' => $cmid,
-                'userid' => $userid,
-            ]);
+            $existing = assign_submission::get_pending_record((int)$cmid, (int)$userid);
 
             if (!$existing) {
                 // Create pending record immediately so it shows in Review page.
@@ -136,10 +133,7 @@ class observer {
             $userid = $data['relateduserid'] ?? null;
             $gradeid = $data['objectid'] ?? null;
 
-            $record = $DB->get_record('local_assign_ai_rag_pending', [
-                'assignmentid' => $cmid,
-                'userid' => $userid,
-            ]);
+            $record = assign_submission::get_pending_record((int)$cmid, (int)$userid);
 
             if (!$record) {
                 return;
@@ -147,7 +141,9 @@ class observer {
 
             $feedback = $DB->get_record('assignfeedback_comments', ['grade' => $gradeid]);
             if ($feedback && !empty($feedback->commenttext)) {
-                $record->message = $feedback->commenttext;
+                // The record message is plain text (it is escaped on display), so
+                // convert the HTML feedback comment instead of storing raw markup.
+                $record->message = content_to_text($feedback->commenttext, $feedback->commentformat);
             }
 
             $grade = $DB->get_record('assign_grades', ['id' => $gradeid]);
@@ -189,7 +185,7 @@ class observer {
                 }
             }
 
-            $record->status = 'approve';
+            $record->status = assign_submission::STATUS_APPROVED;
             if (!empty($data['userid'])) {
                 $record->usermodified = $data['userid'];
             }
@@ -229,12 +225,10 @@ class observer {
             }
 
             $cmid = $assign->get_course_module()->id;
-            $record = $DB->get_record('local_assign_ai_rag_pending', [
-                'assignmentid' => $cmid,
-                'userid' => $userid,
-            ]);
+            $record = assign_submission::get_pending_record((int)$cmid, (int)$userid);
 
-            if (!$record || $record->status !== 'approve') {
+            // 'approve' is the legacy value written by plugin versions before 1.1.2.
+            if (!$record || !in_array($record->status, [assign_submission::STATUS_APPROVED, 'approve'], true)) {
                 return;
             }
 

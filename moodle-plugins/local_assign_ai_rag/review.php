@@ -205,7 +205,7 @@ try {
             }
         }
 
-        $grade = $record->grade !== null ? $record->grade : '-';
+        $grade = $record->grade !== null ? format_float((float)$record->grade, 2, true, true) : '-';
         $confidence = $record->confidence !== null ? round($record->confidence * 100) . '%' : '-';
         $inprogress = $record->status === assign_submission::STATUS_PROCESSING;
         $isinitial = ($record->status === assign_submission::STATUS_INITIAL);

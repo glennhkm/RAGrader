@@ -4,10 +4,18 @@ import unittest
 
 from fastapi import HTTPException
 
-from src.api.request_utils import normalize_grade, rubric_maxima, safe_filename
+from src import __version__
+from src.api.models import HealthResponse
+from src.api.moodle_models import MoodleStatusResponse
+from src.api.request_utils import API_VERSION, normalize_grade, rubric_maxima, safe_filename
 
 
 class RequestUtilsTest(unittest.TestCase):
+    def test_response_models_report_the_package_version_by_default(self):
+        self.assertEqual(__version__, API_VERSION)
+        self.assertEqual(__version__, HealthResponse(status="healthy").version)
+        self.assertEqual(__version__, MoodleStatusResponse(status="healthy").version)
+
     def test_safe_filename_removes_path_components(self):
         self.assertEqual("material.pdf", safe_filename("../../material.pdf"))
         self.assertEqual("material.pdf", safe_filename(r"C:\\fakepath\\material.pdf"))

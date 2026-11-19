@@ -52,6 +52,7 @@ if ($configpath) {
 } else {
     require_once(__DIR__ . '/../../config.php'); // Fallback
 }
+require_once(__DIR__ . '/lib.php');
 
 $id           = required_param('id', PARAM_INT);           // Course module ID.
 $submissionid = required_param('submissionid', PARAM_INT); // Submission ID.
@@ -281,7 +282,7 @@ echo html_writer::tag('div',
 
 echo html_writer::start_tag('div', ['class' => 'card-body']);
 
-if (!empty($submission->confidence)) {
+if (airagassign_has_confidence($submission)) {
     $confpct = round($submission->confidence * 100, 1);
     echo html_writer::tag('p',
         get_string('confidence', 'airagassign') . ': ' .

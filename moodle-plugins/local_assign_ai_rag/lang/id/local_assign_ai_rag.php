@@ -166,3 +166,6 @@ $string['editrubric'] = 'Edit Rubrik';
 $string['default_rubric_name'] = 'Rubrik Tugas';
 $string['materialsmanagement'] = 'Manajemen Materi Kuliah';
 $string['reviewhistory'] = 'Riwayat Review AI';
+$string['aigradingfailed'] = 'Penilaian AI gagal: {$a}';
+$string['page'] = 'hal. {$a}';
+$string['unknownsource'] = 'Sumber tidak diketahui';

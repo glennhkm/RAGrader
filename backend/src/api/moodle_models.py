@@ -3,6 +3,8 @@
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 
+from .. import __version__
+
 
 class MoodleAssignRequest(BaseModel):
     """
@@ -127,7 +129,7 @@ class MoodleCollectionResponse(BaseModel):
 class MoodleStatusResponse(BaseModel):
     """Response model for server status."""
     status: str
-    version: str = "1.1.1"
+    version: str = __version__
     vectorstore: Dict[str, Any] = Field(default_factory=dict)
     llm_info: Dict[str, Any] = Field(default_factory=dict)
     embedding_model: str = ""

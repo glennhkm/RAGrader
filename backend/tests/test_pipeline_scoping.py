@@ -78,6 +78,37 @@ class PipelineScopingTest(unittest.TestCase):
         self.assertEqual("No relevant materials retrieved", result["error"])
         self.assertEqual([], result["retrieved_documents"])
 
+    def test_grade_essay_from_document_forwards_namespace_and_filter(self):
+        pipeline = RAGPipeline.__new__(RAGPipeline)
+        pipeline.extract_answer_from_document = MagicMock(return_value={
+            "success": True,
+            "extracted_text": "TCP is a reliable transport protocol.",
+            "images_found": 0,
+            "image_captions": [],
+            "pages_processed": 1,
+            "error": None,
+        })
+        pipeline.grade_essay = MagicMock(return_value={"score": 80, "feedback": "Good."})
+        where = {"source": {"$eq": "week1.pdf"}}
+
+        result = pipeline.grade_essay_from_document(
+            question="What is TCP?",
+            document_path=Path("answer.docx"),
+            rubric={},
+            course_id="net-101",
+            metadata_filter=where,
+        )
+
+        pipeline.grade_essay.assert_called_once_with(
+            question="What is TCP?",
+            essay="TCP is a reliable transport protocol.",
+            rubric={},
+            course_id="net-101",
+            metadata_filter=where,
+        )
+        self.assertEqual(80, result["score"])
+        self.assertEqual(1, result["extraction_info"]["pages_processed"])
+
     def test_grader_attaches_module_and_tags_and_passes_filter(self):
         with tempfile.TemporaryDirectory() as tempdir:
             sample = Path(tempdir) / "week1.txt"

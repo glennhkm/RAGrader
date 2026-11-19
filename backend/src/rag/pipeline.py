@@ -373,7 +373,9 @@ class RAGPipeline:
         document_path: Path,
         rubric: Dict[str, Any],
         enable_vision: bool = False,
-        include_image_captions: bool = True
+        include_image_captions: bool = True,
+        course_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Grade an essay from an uploaded document.
@@ -387,6 +389,8 @@ class RAGPipeline:
             rubric: Grading rubric
             enable_vision: Whether to use vision model for image captioning
             include_image_captions: Whether to include image captions
+            course_id: Optional course ID / namespace to retrieve from
+            metadata_filter: Optional Chroma metadata filter dict
             
         Returns:
             Grading results dictionary with additional extraction info
@@ -423,10 +427,14 @@ class RAGPipeline:
             }
         
         # Grade the extracted essay
+        # Forward the namespace and scope so document-based grading retrieves
+        # from the same isolated collection as text grading (not the default one).
         grading_result = self.grade_essay(
             question=question,
             essay=extracted_text,
-            rubric=rubric
+            rubric=rubric,
+            course_id=course_id,
+            metadata_filter=metadata_filter,
         )
         
         # Add extraction info to the result

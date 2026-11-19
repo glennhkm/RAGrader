@@ -224,16 +224,62 @@ function airagmaterial_pre_course_module_delete($cm) {
     }
 
     $material = $DB->get_record('airagmaterial', ['id' => $cm->instance]);
-    if (!$material || $material->vectorize_status !== 'completed') {
-        return; // Not vectorized — nothing to clean up in ChromaDB.
+    if (!$material) {
+        return;
     }
 
-    $trackedfiles = $DB->get_records('airagmaterial_files',
-        ['materialid' => $cm->instance], '', 'id, filename');
+    // Clean up every tracked file regardless of the material status: a failed
+    // or re-queued run can still leave vectors from an earlier successful run.
+    airagmaterial_delete_material_vectors($material, airagmaterial_get_tracked_filenames((int)$material->id));
+}
 
-    foreach ($trackedfiles as $tf) {
-        airagmaterial_delete_file_vectors($material->course, $tf->filename);
+/**
+ * Return the distinct filenames tracked for a material (vectorized or not).
+ *
+ * @param int $materialid AI RAG Material instance ID.
+ * @return string[] Filenames.
+ */
+function airagmaterial_get_tracked_filenames(int $materialid): array {
+    global $DB;
+
+    $names = $DB->get_fieldset_select('airagmaterial_files', 'filename', 'materialid = :materialid',
+        ['materialid' => $materialid]);
+    return array_values(array_unique(array_filter(array_map('strval', $names), 'strlen')));
+}
+
+/**
+ * Delete the RAG vectors of the given files belonging to one material.
+ *
+ * Only vectors for this material's files are touched; the rest of the course
+ * collection (other materials, assignment reference files) is left intact.
+ * Files whose name is still used by another activity in the same course are
+ * retained, because the backend identifies chunks by filename only.
+ *
+ * @param stdClass $material The airagmaterial record.
+ * @param string[] $filenames Filenames to remove from the vector store.
+ * @return array{deleted: string[], retained: string[], failed: string[]}
+ */
+function airagmaterial_delete_material_vectors(stdClass $material, array $filenames): array {
+    $result = ['deleted' => [], 'retained' => [], 'failed' => []];
+
+    foreach (array_unique($filenames) as $filename) {
+        $filename = (string)$filename;
+        if ($filename === '') {
+            continue;
+        }
+        if (\mod_airagmaterial\local\vector_ownership::is_filename_in_use(
+                (int)$material->course, $filename, (int)$material->id)) {
+            $result['retained'][] = $filename;
+            continue;
+        }
+        if (airagmaterial_delete_file_vectors($material->course, $filename)) {
+            $result['deleted'][] = $filename;
+        } else {
+            $result['failed'][] = $filename;
+        }
     }
+
+    return $result;
 }
 
 /**
@@ -248,46 +294,6 @@ function airagmaterial_build_api_headers(array $headers = []): array {
         $headers[] = 'Authorization: Bearer ' . $apikey;
     }
     return $headers;
-}
-
-/**
- * Clear all vectors for a Moodle course from the RAG server.
- *
- * @param int $courseid Moodle course ID
- * @return bool True if the API call succeeded
- */
-function airagmaterial_clear_course_vectors($courseid) {
-    $serverurl = get_config('mod_airagmaterial', 'serverurl');
-    if (empty($serverurl)) {
-        $serverurl = 'http://127.0.0.1:8000';
-    }
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => rtrim($serverurl, '/') . '/course/materials/clear',
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 60,
-        CURLOPT_POSTFIELDS => http_build_query(['course_id' => (string)$courseid]),
-        CURLOPT_HTTPHEADER => airagmaterial_build_api_headers([
-            'Content-Type: application/x-www-form-urlencoded',
-        ]),
-    ]);
-    $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlerror = curl_error($ch);
-    curl_close($ch);
-
-    if ($curlerror || $httpcode !== 200) {
-        debugging(
-            "airagmaterial_clear_course_vectors: failed for course $courseid. HTTP $httpcode — $curlerror",
-            DEBUG_DEVELOPER
-        );
-        return false;
-    }
-
-    $data = json_decode((string)$response, true);
-    return is_array($data) && !empty($data['success']);
 }
 
 /**
@@ -435,15 +441,40 @@ function airagmaterial_vectorize_files($material, $context) {
 
     // Get uploaded files.
     $files = airagmaterial_get_uploaded_files($context->id);
+    $currentnames = [];
+    foreach ($files as $file) {
+        $currentnames[] = $file->get_filename();
+    }
+
+    // Files removed from the material since the last run would otherwise keep
+    // their chunks in the course collection forever (orphaned vectors).
+    $stalenames = array_values(array_diff(airagmaterial_get_tracked_filenames((int)$material->id), $currentnames));
+    $cleanup = airagmaterial_delete_material_vectors($material, $stalenames);
+    $cleanupwarnings = [];
+    if (!empty($cleanup['failed'])) {
+        $cleanupwarnings[] = get_string('stalevectors_cleanup_failed', 'airagmaterial',
+            implode(', ', $cleanup['failed']));
+    }
+
     if (empty($files)) {
-        return ['success' => false, 'error' => get_string('nofiles', 'airagmaterial')];
+        // Nothing left to vectorize: reset to a terminal state instead of
+        // leaving the material stuck in 'queued' with a spinner forever.
+        $DB->delete_records('airagmaterial_files', ['materialid' => $material->id]);
+        $material->vectorize_status = 'pending';
+        $material->chunks_created = 0;
+        $material->documents_loaded = 0;
+        $material->total_in_db = 0;
+        $material->vectorize_error = $cleanupwarnings ? implode("\n", $cleanupwarnings) : null;
+        $DB->update_record('airagmaterial', $material);
+        return ['success' => false, 'error' => get_string('nofiles', 'airagmaterial'),
+            'chunks' => 0, 'documents' => 0, 'errors' => [get_string('nofiles', 'airagmaterial')]];
     }
 
     // Update status to processing.
     $material->vectorize_status = 'processing';
     $DB->update_record('airagmaterial', $material);
 
-    // Delete old file tracking records.
+    // Delete old file tracking records (their vectors are replaced or cleaned up above).
     $DB->delete_records('airagmaterial_files', ['materialid' => $material->id]);
 
     $totalchunks = 0;
@@ -492,15 +523,12 @@ function airagmaterial_vectorize_files($material, $context) {
         }
     }
 
-    // Update material record.
-    if (empty($errors)) {
-        $material->vectorize_status = 'completed';
-    } else if ($totaldocs > 0) {
-        $material->vectorize_status = 'completed'; // Partial success is still completed.
-    } else {
-        $material->vectorize_status = 'failed';
-        $material->vectorize_error = implode("\n", $errors);
-    }
+    // Update material record. Partial success is still 'completed' (only the
+    // successfully vectorized files are used for scoped retrieval), but the
+    // per-file errors and cleanup warnings stay visible to the teacher.
+    $material->vectorize_status = (empty($errors) || $totaldocs > 0) ? 'completed' : 'failed';
+    $messages = array_merge($errors, $cleanupwarnings);
+    $material->vectorize_error = $messages ? implode("\n", $messages) : null;
     $material->chunks_created = $totalchunks;
     $material->documents_loaded = $totaldocs;
     $material->last_vectorized = time();

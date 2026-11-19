@@ -47,6 +47,7 @@ if ($configpath) {
 } else {
     require_once(__DIR__ . '/../../config.php'); // Fallback
 }
+require_once(__DIR__ . '/lib.php');
 
 $id = required_param('id', PARAM_INT);
 $submissionid = required_param('submissionid', PARAM_INT);
@@ -129,7 +130,7 @@ echo html_writer::tag('h2',
     ['class' => 'mb-2']
 );
 
-if ($submission->confidence) {
+if (airagassign_has_confidence($submission)) {
     $confpct = round($submission->confidence * 100, 1);
     echo html_writer::tag('p', get_string('confidence', 'airagassign') . ': ' .
         html_writer::tag('span', "$confpct%", ['class' => 'badge airag-badge-info']),
