@@ -19,6 +19,7 @@ import time
 import uuid
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from loguru import logger
 
 from .models import (
@@ -36,6 +37,7 @@ from .v1_routes import router as v1_router
 from .auth import check_api_auth
 from .request_utils import API_VERSION, safe_filename, save_upload
 from .locking import LockAcquisitionError
+from ..vectorstore.embeddings import EmbeddingMismatchError
 from .runtime import AppRuntime, build_runtime, get_runtime, is_runtime_ready, set_runtime
 
 
@@ -164,7 +166,7 @@ def upload_materials(
 
     except LockAcquisitionError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
+    except (HTTPException, EmbeddingMismatchError):
         raise
     except Exception as e:
         logger.error(f"Error uploading materials: {e}")
@@ -210,7 +212,7 @@ def grade_essay(request: GradeRequest):
 
     except LockAcquisitionError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
+    except (HTTPException, EmbeddingMismatchError):
         raise
     except Exception as e:
         logger.error(f"Error grading essay: {e}")
@@ -263,7 +265,7 @@ def update_chunking_config(config: ChunkingConfig):
         }
     except LockAcquisitionError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
+    except (HTTPException, EmbeddingMismatchError):
         raise
     except Exception as e:
         logger.error(f"Error updating config: {e}")
@@ -296,6 +298,12 @@ async def log_http_request(request: Request, call_next):
     response.headers["X-Request-ID"] = request_id
     response.headers["X-API-Instance"] = get_settings().api.instance_id
     return response
+
+
+async def embedding_mismatch_handler(_request: Request, exc: EmbeddingMismatchError) -> JSONResponse:
+    """A collection built with another embedding setup is a configuration conflict."""
+    logger.error(f"Embedding configuration mismatch: {exc}")
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 def create_app(runtime: Optional[AppRuntime] = None, settings: Optional[Settings] = None) -> FastAPI:
@@ -337,6 +345,7 @@ def create_app(runtime: Optional[AppRuntime] = None, settings: Optional[Settings
         lifespan=lifespan,
     )
     application.middleware("http")(log_http_request)
+    application.add_exception_handler(EmbeddingMismatchError, embedding_mismatch_handler)
     application.include_router(legacy_router)
     application.include_router(moodle_router)
     application.include_router(v1_router)

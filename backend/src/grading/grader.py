@@ -7,6 +7,7 @@ from loguru import logger
 from ..ingestion import DocumentLoader, DocumentPreprocessor
 from ..rag import RAGPipeline
 from ..utils.config import VisionSettings, get_settings
+from ..vectorstore.embeddings import EmbeddingMismatchError
 from ..vectorstore.filters import sanitize_chunk_metadata
 
 
@@ -191,6 +192,8 @@ class EssayGrader:
             logger.info(f"Ingestion complete: {result_dict}")
             return result_dict
             
+        except EmbeddingMismatchError:
+            raise
         except Exception as e:
             logger.error(f"Error during ingestion: {e}")
             return {

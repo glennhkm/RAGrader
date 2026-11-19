@@ -25,6 +25,13 @@ class _DeterministicFakeEmbeddings(Embeddings):
         return [byte / 255.0 for byte in digest[:16]]
 
 
+_FAKE_IDENTITY = {
+    "embedding_provider": "fake",
+    "embedding_model": "BAAI/bge-m3",
+    "embedding_dimension": 16,
+}
+
+
 class ScopeFilteringTest(unittest.TestCase):
     def test_collection_name_preserves_moodle_format_and_bounds_arbitrary_namespaces(self):
         self.assertEqual(
@@ -130,6 +137,7 @@ class ScopeFilteringTest(unittest.TestCase):
                 mock_generator_cls.return_value.get_embeddings_instance.return_value = (
                     fake_embeddings
                 )
+                mock_generator_cls.return_value.identity.return_value = _FAKE_IDENTITY
                 store = VectorStore(
                     persist_directory=tempdir,
                     collection_name="course_materials",
@@ -173,6 +181,7 @@ class ScopeFilteringTest(unittest.TestCase):
                 mock_generator_cls.return_value.get_embeddings_instance.return_value = (
                     fake_embeddings
                 )
+                mock_generator_cls.return_value.identity.return_value = _FAKE_IDENTITY
                 store = VectorStore(
                     persist_directory=tempdir,
                     collection_name="course_materials",
