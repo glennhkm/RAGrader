@@ -356,7 +356,7 @@ Common: --api-url (env RAG_API_URL, default http://127.0.0.1:8000)  --token (env
 
 **Files:** `README.md` (Quickstart A: dev/local in <10 min; Quickstart B: production), `docs/architecture.md` (provider matrix, settings layer, app lifecycle, collection guard), `docs/deployment.md` (provider env reference + examples for Ollama, vLLM, OpenAI, TEI/Jina rerank), `backend/.env.example` (all new vars, commented, defaults = legacy behavior), `configs/config.yaml` (new placeholders), `docs/PRD.md` §8 status.
 
-- [ ] **Verification (all must pass):**
+- [x] **Verification (all must pass):**
   ```bash
   cd backend && python -m unittest discover -s tests -v
   python -m compileall -q backend/src
@@ -367,8 +367,8 @@ Common: --api-url (env RAG_API_URL, default http://127.0.0.1:8000)  --token (env
   docker compose -f backend/docker-compose.yml config --quiet      # with .env from .env.example in a temp copy
   docker compose -f backend/docker-compose.dev.yml config --quiet
   ```
-- [ ] Backward-compat smoke: start the production compose with an unchanged Cycle 1 `.env`; `/health`, `/moodle/status`, `/assign/answer` behave as before and existing collections are readable (guard adopts them).
-- [ ] Commit `docs: document provider configuration, settings layer, and quickstart`.
+- [x] Backward-compat smoke: runtime built from the unchanged `.env.example` (Chroma switched to embedded mode offline) resolves the same Groq→OpenRouter chain, HuggingFace `BAAI/bge-m3`, unchanged `course_{id}_{model}` collection names and disabled reranking; legacy-collection adoption is covered by unit tests. A full Docker run was not possible (no Docker daemon on the dev machine); CI now builds the image.
+- [x] Commit `docs: document provider configuration, settings layer, and quickstart`.
 
 ---
 

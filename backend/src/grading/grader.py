@@ -6,7 +6,7 @@ from loguru import logger
 
 from ..ingestion import DocumentLoader, DocumentPreprocessor
 from ..rag import RAGPipeline
-from ..utils.config import VisionSettings, get_settings
+from ..utils.config import Settings, VisionSettings, get_settings
 from ..vectorstore.embeddings import EmbeddingMismatchError
 from ..vectorstore.filters import sanitize_chunk_metadata
 
@@ -22,6 +22,7 @@ class EssayGrader:
         enable_image_extraction: Optional[bool] = None,
         enable_vision_captioning: Optional[bool] = None,
         vision_settings: Optional[VisionSettings] = None,
+        settings: Optional[Settings] = None,
     ):
         """
         Initialize essay grader.
@@ -32,10 +33,12 @@ class EssayGrader:
             model_name: Model name override (optional)
             enable_image_extraction: Enable image extraction from documents
             enable_vision_captioning: Enable vision captioning for images
-            vision_settings: Multimodal settings (defaults to get_settings().vision)
+            vision_settings: Multimodal settings (defaults to settings.vision)
+            settings: Settings forwarded to every component (defaults to get_settings())
         """
         self.config = config
-        vision = vision_settings or get_settings().vision
+        self.settings = settings or get_settings()
+        vision = vision_settings or self.settings.vision
         multimodal = config.get('multimodal', {}) or {}
 
         # Resolution: explicit argument -> config dict (config.yaml values are
@@ -48,14 +51,16 @@ class EssayGrader:
         self.enable_vision_captioning = bool(enable_vision_captioning)
         
         # Initialize components
-        self.document_loader = DocumentLoader(enable_multimodal=self.enable_image_extraction)
+        self.document_loader = DocumentLoader(enable_multimodal=self.enable_image_extraction,
+                                              settings=self.settings)
         self.preprocessor = DocumentPreprocessor(
             chunk_size=config['document_processing']['chunk_size'],
             chunk_overlap=config['document_processing']['chunk_overlap'],
             separators=config['document_processing']['separators'],
             include_image_captions=self.enable_vision_captioning
         )
-        self.rag_pipeline = RAGPipeline(config, provider=provider, model_name=model_name)
+        self.rag_pipeline = RAGPipeline(config, provider=provider, model_name=model_name,
+                                        settings=self.settings)
         
         logger.info("EssayGrader initialized with multimodal support")
     

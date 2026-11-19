@@ -44,6 +44,7 @@ def build_runtime(settings: Optional[Settings] = None) -> AppRuntime:
         config,
         provider=settings.llm.provider,
         model_name=settings.llm.model,
+        settings=settings,
     )
     operation_locks = OperationLockManager(settings.locks)
     logger.info("API runtime initialized")

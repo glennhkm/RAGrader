@@ -160,5 +160,39 @@ class BuildRuntimeTest(unittest.TestCase):
         self.assertIs(settings, runtime.settings)
 
 
+    def test_injected_settings_reach_every_component_without_environment(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = load_settings(env={
+                "LLM_PROVIDER": "openai_compatible",
+                "LLM_BASE_URL": "http://llm.invalid/v1",
+                "LLM_MODEL": "injected-llm",
+                "EMBEDDING_PROVIDER": "openai_compatible",
+                "EMBEDDING_BASE_URL": "http://emb.invalid/v1",
+                "EMBEDDING_MODEL": "injected-embed",
+                "CHROMA_CLIENT_MODE": "persistent",
+                "CHROMA_PERSIST_DIRECTORY": tmp,
+                "ENABLE_RERANKING": "true",
+                "RERANKER_TYPE": "bm25",
+                "PROMPT_LANGUAGE": "en",
+            })
+            # The process environment says something else: it must not be consulted.
+            with patch.dict(os.environ, {"LLM_PROVIDER": "groq", "EMBEDDING_PROVIDER": "huggingface",
+                                         "PROMPT_LANGUAGE": "id"}, clear=True):
+                runtime = runtime_module.build_runtime(settings)
+
+        pipeline = runtime.grader.rag_pipeline
+        self.assertIs(settings, runtime.grader.settings)
+        self.assertEqual("openai_compatible", pipeline.llm.provider)
+        self.assertEqual("http://llm.invalid/v1", pipeline.llm.provider_endpoints[0].base_url)
+        self.assertEqual("openai_compatible", pipeline.vectorstore.embedding_generator.provider)
+        self.assertEqual("injected-embed", pipeline.vectorstore.embedding_generator.model_name)
+        self.assertEqual("bm25", pipeline.retriever.reranker_type)
+        self.assertEqual("en", pipeline.prompt_builder.default_language)
+        self.assertIs(settings, runtime.grader.document_loader.multimodal_loader._settings)
+
+
 if __name__ == "__main__":
     unittest.main()

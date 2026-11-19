@@ -6,6 +6,7 @@ from loguru import logger
 
 from ..vectorstore import VectorStore
 from ..vectorstore.embeddings import EmbeddingGenerator, EmbeddingMismatchError
+from ..utils.config import Settings, get_settings
 from .llm import LLMWrapper
 from .retriever import Retriever
 from .prompt_builder import PromptBuilder
@@ -15,17 +16,22 @@ from ..ingestion.document_loader import DocumentLoader
 class RAGPipeline:
     """End-to-end RAG pipeline for essay grading."""
     
-    def __init__(self, config: Dict[str, Any], provider: str = "provider_chain", model_name: str = None):
+    def __init__(self, config: Dict[str, Any], provider: str = "provider_chain", model_name: str = None,
+                 settings: Optional[Settings] = None):
         """
         Initialize RAG pipeline with configuration.
         
         Args:
             config: Configuration dictionary
-            provider: LLM provider ("provider_chain", "groq", "openrouter", or "huggingface")
+            provider: LLM provider ("provider_chain", "openai_compatible", "local", "groq",
+                "openrouter", or "huggingface")
             model_name: Model name override (optional)
+            settings: Settings forwarded to the vector store, LLM, retriever and prompt
+                builder (defaults to get_settings())
         """
         self.config = config
         self.provider = provider
+        self.settings = settings or get_settings()
         
         # Initialize components
         logger.info("Initializing RAG pipeline...")
@@ -41,6 +47,7 @@ class RAGPipeline:
             host=config['vectorstore'].get('host', 'localhost'),
             port=config['vectorstore'].get('port', 8000),
             ssl=config['vectorstore'].get('ssl', False),
+            embedding_settings=self.settings.embeddings,
         )
         
         # Track current embedding model
@@ -58,7 +65,8 @@ class RAGPipeline:
             temperature=config['llm']['temperature'],
             max_new_tokens=config['llm']['max_new_tokens'],
             device=config['llm']['device'],
-            provider=provider
+            provider=provider,
+            settings=self.settings.llm,
         )
         
         # Store current LLM info
@@ -72,11 +80,12 @@ class RAGPipeline:
             enable_reranking=retrieval_config['enable_reranking'],
             rerank_top_k=retrieval_config['rerank_top_k'],
             reranker_type=retrieval_config.get('reranker_type', 'bge'),
-            reranker_model=retrieval_config.get('reranker_model', 'bge-reranker-v2-m3')
+            reranker_model=retrieval_config.get('reranker_model', 'bge-reranker-v2-m3'),
+            settings=self.settings.reranker,
         )
         
         # Prompt builder
-        self.prompt_builder = PromptBuilder()
+        self.prompt_builder = PromptBuilder(language=self.settings.prompt.language)
         
         logger.info("RAG pipeline initialized successfully")
     
@@ -207,7 +216,8 @@ class RAGPipeline:
             temperature=self.config['llm']['temperature'],
             max_new_tokens=self.config['llm']['max_new_tokens'],
             device=self.config['llm']['device'],
-            provider=provider
+            provider=provider,
+            settings=self.settings.llm,
         )
         
         self.provider = provider
