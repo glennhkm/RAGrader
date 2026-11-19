@@ -3,6 +3,9 @@ x-api-service: &api-service
   build:
     context: .
     dockerfile: Dockerfile
+    args:
+      INSTALL_LOCAL_EXTRAS: "${INSTALL_LOCAL_EXTRAS:-false}"
+      INSTALL_OPTIONAL_EXTRAS: "${INSTALL_OPTIONAL_EXTRAS:-false}"
   restart: unless-stopped
   env_file:
     - .env

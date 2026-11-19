@@ -321,7 +321,7 @@ def create_reranker(settings: RerankerSettings) -> BaseReranker | None   # None 
 - Dockerfile `ARG INSTALL_LOCAL_EXTRAS=false` → installs `requirements-local.txt` when `true`; `ARG INSTALL_OPTIONAL_EXTRAS=false` → `requirements-optional.txt` (Pinecone).
 - `test_dependencies.py`: core requirements contain no dead packages (Cycle 1 list) **and** every third-party top-level import in `src/` is either in `requirements.txt`, a documented transitive pin, or lazily imported from an optional extra (AST scan with an explicit allow-map).
 
-- [ ] Steps: failing dependency test → implement → `docker build` both variants locally (or `docker compose config` + CI build) → commit `build: add local/optional dependency extras and declare httpx`.
+- [x] Steps: dependency test → implement → `docker compose config` validated with both build-arg values (local `docker build` not run: Docker daemon unavailable on the dev machine; CI builds the image) → commit `build: add local/optional dependency extras and declare httpx`.
 
 ---
 

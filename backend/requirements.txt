@@ -8,8 +8,12 @@ python-dotenv>=1.0,<2.0
 PyYAML>=6.0,<7.0
 loguru>=0.7,<1.0
 redis>=5.0,<6.0
+# Direct HTTP client for /rerank APIs and the CLI (also used by openai).
+httpx>=0.27,<1.0
 
 # RAG & AI Subsystem
+# langchain is not imported directly; it is the pinned runtime dependency of
+# langchain-community (keeps the 0.3.x family consistent).
 langchain>=0.3,<0.4
 langchain-community>=0.3,<0.4
 langchain-core>=0.3,<0.4
