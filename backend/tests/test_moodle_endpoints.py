@@ -110,6 +110,25 @@ class MoodleEndpointTest(unittest.TestCase):
         self.assertEqual(40.0, response.score)
         self.lock_mock.assert_called_once_with(12)
 
+    def test_grading_contract_forwards_source_filter(self):
+        with patch.object(self.fake_grader, "grade_essay", wraps=self.fake_grader.grade_essay) as spy:
+            response = moodle_grade_assignment(
+                MoodleAssignRequest(**{
+                    "course_id": 12,
+                    "question": "Question",
+                    "essay": "Student answer",
+                    "rubric": {},
+                    "maximum_grade": 100,
+                    "assignment_id": 45,
+                    "source_filter": ["week1.pdf", "week2.pptx"],
+                })
+            )
+        self.assertTrue(response.success)
+        self.assertEqual(
+            {"source": {"$in": ["week1.pdf", "week2.pptx"]}},
+            spy.call_args.kwargs["metadata_filter"],
+        )
+
     def test_material_upload_supports_all_plugin_formats(self):
         for extension in ("pdf", "pptx", "docx", "txt"):
             with self.subTest(extension=extension):

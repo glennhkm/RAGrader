@@ -17,13 +17,15 @@ Two complementary Moodle integration paths are included:
 ### 2. Python Backend (`backend/`)
 
 - **HAProxy (`deploy/haproxy.cfg`)**: Exposes port `8000`, balances traffic (`leastconn`) across 1–4 FastAPI replicas (`API_REPLICAS`), and checks `/health`.
-- **FastAPI Replicas (`src/api/app.py`, `src/api/moodle_routes.py`)**: Stateless API workers handling request validation (`request_utils.py`), optional Bearer token authentication (`auth.py`), document ingestion, and grading orchestration (`src/grading/grader.py`, `src/rag/pipeline.py`).
-- **ChromaDB Server (`chroma`)**: Shared HTTP vector store (`CHROMA_CLIENT_MODE=http`) isolating course collections by `course_id`.
-- **Redis (`redis`)**: Coordinates per-course distributed read/write locks (`src/api/locking.py`) so concurrent grading requests run in parallel while upload/delete/clear mutations remain mutually exclusive per course.
+- **FastAPI Replicas (`src/api/app.py`, `src/api/moodle_routes.py`, `src/api/v1_routes.py`)**: Stateless API workers handling request validation (`request_utils.py`), optional Bearer token authentication (`auth.py`), document ingestion, and grading orchestration (`src/grading/grader.py`, `src/rag/pipeline.py`).
+- **ChromaDB Server (`chroma`)**: Shared HTTP vector store (`CHROMA_CLIENT_MODE=http`) isolating collections by `course_id` (Moodle routes) or `namespace` (`/v1` routes), with metadata-scoped `where` filtering (`src/vectorstore/filters.py`).
+- **Redis (`redis`)**: Coordinates per-course / per-namespace distributed read/write locks (`src/api/locking.py`) so concurrent grading requests run in parallel while upload/delete/clear mutations remain mutually exclusive per course or namespace.
 
 ## HTTP API Contract
 
 When `API_AUTH_TOKEN` is set in `backend/.env`, all endpoints below except `GET /` and `GET /health` require `Authorization: Bearer <API_AUTH_TOKEN>`.
+
+### Moodle Adapter & System Endpoints
 
 | Method & Path | Caller | Purpose |
 | :--- | :--- | :--- |
@@ -35,5 +37,19 @@ When `API_AUTH_TOKEN` is set in `backend/.env`, all endpoints below except `GET 
 | `DELETE /course/materials/file` | `mod_airagmaterial`, `mod_airagassign` | Remove vector chunks for a deleted/replaced file |
 | `POST /course/materials/clear` | `mod_airagmaterial`, `local_assign_ai_rag` | Clear all vectors for a course |
 | `GET /course/materials/status/{course_id}` | Monitoring / Clients | Course material vectorization status |
-| `POST /assign/answer` | `mod_airagassign`, `local_assign_ai_rag` | Grade a student answer with `course_id`, `question`, `essay`, `rubric`, `maximum_grade`, `assignment_id` |
+| `POST /assign/answer` | `mod_airagassign`, `local_assign_ai_rag` | Grade a student answer with `course_id`, `question`, `essay`, `rubric`, `maximum_grade`, `assignment_id`, plus optional `source_filter` and `module_filter` |
+
+> **Scoped Retrieval in `mod_airagassign`:** When an assignment has linked vectorized `mod_airagmaterial` files or uploaded `manualfile` reference files, `mod_airagassign` automatically populates `source_filter` on `POST /assign/answer` requests (in both essay and quiz modes) so retrieval is restricted to those specific filenames.
+
+### Generic Autograder API (`/v1`)
+
+LMS-agnostic endpoints for namespace-isolated RAG autograding (`namespace` must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`).
+
+| Method & Path | Request Body / Params | Purpose |
+| :--- | :--- | :--- |
+| `POST /v1/namespaces/{namespace}/materials` | Multipart `file`, optional form `module`, `topic`, and `tags` (JSON object) | Upload & vectorize a material file (`.pdf`, `.pptx`, `.docx`, `.txt`) into an isolated namespace with optional module/topic/tag metadata |
+| `GET /v1/namespaces/{namespace}/materials` | Path param `namespace` | Inspect `collection_name`, `document_count`, `uploaded_files`, and `embedding_model` for a namespace |
+| `DELETE /v1/namespaces/{namespace}/materials/{filename}` | Path params `namespace`, `filename` | Remove a single uploaded file and its vector chunks from a namespace |
+| `DELETE /v1/namespaces/{namespace}` | Path param `namespace` | Delete all vectors and uploaded files for a namespace |
+| `POST /v1/namespaces/{namespace}/grade` | JSON: `question`, `essay`, optional `rubric`, `maximum_grade` (default `100.0`), optional `material_filter` (`modules`, `sources`, `tags`) | Grade a student answer against namespace materials, optionally scoped by `material_filter` |
 

@@ -8,7 +8,6 @@ from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI
-from langchain_groq import ChatGroq
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -131,7 +130,6 @@ class LLMWrapper:
             )
 
         self._use_provider_chain = True
-        self._use_openai_client = False
         logger.info(
             "Provider fallback chain initialized: "
             + ", ".join(endpoint.name for endpoint in self.provider_endpoints)
@@ -192,33 +190,6 @@ class LLMWrapper:
                 )
         return endpoints
     
-    def _init_groq(self):
-        """Initialize Groq LLM."""
-        api_token = os.getenv("GROQ_API_KEY")
-        if not api_token:
-            raise ValueError(
-                "GROQ_API_KEY not found in environment. "
-                "Please set it in .env file"
-            )
-        
-        logger.info(f"Initializing Groq API LLM: {self.model_name}")
-        logger.info("Using Groq cloud-based inference (ultra-fast)")
-        
-        try:
-            self.llm = ChatGroq(
-                model=self.model_name,
-                temperature=self.temperature,
-                max_tokens=self.max_new_tokens,
-                groq_api_key=api_token,
-                request_timeout=self.request_timeout
-            )
-            self._use_openai_client = False
-            logger.info("Groq LLM initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Error initializing Groq LLM: {e}")
-            raise
-    
     def _init_huggingface(self):
         """Initialize HuggingFace Inference API."""
         api_token = os.getenv("HUGGINGFACE_API_TOKEN")
@@ -239,7 +210,6 @@ class LLMWrapper:
                 timeout=self.request_timeout,
                 max_retries=0,
             )
-            self._use_openai_client = True
             logger.info("HuggingFace Inference API initialized successfully")
             
         except Exception as e:
@@ -259,11 +229,7 @@ class LLMWrapper:
         try:
             if getattr(self, "_use_provider_chain", False):
                 return self._generate_with_provider_chain(prompt)
-            if self._use_openai_client:
-                return self._generate_openai_style(prompt)
-            else:
-                return self._generate_langchain_style(prompt)
-                
+            return self._generate_openai_style(prompt)
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             raise
@@ -365,13 +331,6 @@ class LLMWrapper:
         except ValueError:
             return None
     
-    def _generate_langchain_style(self, prompt: str) -> str:
-        """Generate using LangChain style (Groq)."""
-        response = self.llm.invoke(prompt)
-        if hasattr(response, 'content'):
-            return response.content.strip()
-        return str(response).strip()
-    
     def _generate_openai_style(self, prompt: str) -> str:
         """Generate using OpenAI-compatible client (HuggingFace)."""
         completion = self.client.chat.completions.create(
@@ -386,9 +345,7 @@ class LLMWrapper:
         return completion.choices[0].message.content.strip()
     
     def get_llm_instance(self):
-        """Get the underlying LLM instance for LangChain."""
-        if hasattr(self, 'llm'):
-            return self.llm
+        """Return None; LangChain LLM client has been replaced by OpenAI-compatible clients."""
         return None
     
     def get_provider_info(self) -> Dict[str, Any]:

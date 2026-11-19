@@ -259,3 +259,4 @@ $string['submissions'] = 'Pengiriman';
 $string['submissions_help'] = 'Jawaban siswa dan konteks pengiriman';
 $string['gradeitem:submissions'] = 'Pengiriman';
 $string['knowledgebase_required_error'] = 'Setidaknya salah satu dari "Pilih materi pembelajaran" atau "Berkas Acuan / Kunci Jawaban (Manual)" harus diisi.';
+$string['manualfile_vectorize_failed'] = 'Berkas acuan manual gagal divektorisasi di server RAG: {$a}. Penilaian tidak akan menemukan bukti dari berkas ini sampai berhasil diunggah ulang.';

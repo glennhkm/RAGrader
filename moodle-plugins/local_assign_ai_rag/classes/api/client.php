@@ -187,6 +187,8 @@ class client {
         // Handle success/failure
         if (!($response['success'] ?? true)) {
             return [
+                'success' => false,
+                'error' => $response['error'] ?? $response['feedback'] ?? 'Error during AI grading.',
                 'feedback' => $response['feedback'] ?? $response['error'] ?? 'Error during AI grading.',
                 'grade' => null,
                 'rubric_scores' => [],
@@ -197,6 +199,8 @@ class client {
         }
 
         return [
+            'success' => true,
+            'error' => null,
             'feedback' => $response['feedback'] ?? '',
             'grade' => $response['score'] ?? null,
             'rubric_scores' => $response['criterion_scores'] ?? [],

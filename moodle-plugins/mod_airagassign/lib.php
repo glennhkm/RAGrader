@@ -136,7 +136,11 @@ function airagassign_add_instance($data, $mform = null) {
             0,
             ['subdirs' => false, 'maxfiles' => 1]
         );
-        airagassign_vectorize_manual_file($data->course, $context->id);
+        if (!empty(airagassign_get_uploaded_files($context->id))) {
+            airagassign_notify_manual_file_vectorization(
+                airagassign_vectorize_manual_file($data->course, $context->id)
+            );
+        }
     }
 
     // Update gradebook.
@@ -228,8 +232,8 @@ function airagassign_update_instance($data, $mform = null) {
     // Re-save manual file.
     $context = context_module::instance($data->coursemodule);
     if (isset($data->manualfile)) {
-        $oldfiles = airagassign_get_uploaded_files($context->id);
-        
+        $oldhashes = airagassign_get_manual_file_hashes($context->id);
+
         file_save_draft_area_files(
             $data->manualfile,
             $context->id,
@@ -238,37 +242,28 @@ function airagassign_update_instance($data, $mform = null) {
             0,
             ['subdirs' => false, 'maxfiles' => 1]
         );
-        
-        $newfiles = airagassign_get_uploaded_files($context->id);
-        
-        // If file changed/removed, delete old file's vectors.
-        foreach ($oldfiles as $oldfile) {
-            $oldname = $oldfile->get_filename();
-            $still_exists = false;
-            foreach ($newfiles as $newfile) {
-                if ($newfile->get_filename() === $oldname) {
-                    $still_exists = true;
-                    break;
-                }
-            }
-            if (!$still_exists) {
-                airagassign_delete_file_vectors($data->course, $oldname);
+
+        $newhashes = airagassign_get_manual_file_hashes($context->id);
+
+        // Removed files: delete their vectors (unless another activity in the
+        // course still uses the same filename).
+        foreach (array_diff_key($oldhashes, $newhashes) as $oldname => $unused) {
+            airagassign_delete_manual_file_vectors($data->course, $oldname, $context->id);
+        }
+
+        // New files, or an existing filename whose content was replaced, must be
+        // (re-)vectorized; comparing names alone would keep stale vectors.
+        $needsvectorize = false;
+        foreach ($newhashes as $newname => $hash) {
+            if (!isset($oldhashes[$newname]) || $oldhashes[$newname] !== $hash) {
+                $needsvectorize = true;
+                break;
             }
         }
-        
-        // Vectorize if new/changed.
-        foreach ($newfiles as $newfile) {
-            $newname = $newfile->get_filename();
-            $was_present = false;
-            foreach ($oldfiles as $oldfile) {
-                if ($oldfile->get_filename() === $newname) {
-                    $was_present = true;
-                    break;
-                }
-            }
-            if (!$was_present) {
-                airagassign_vectorize_manual_file($data->course, $context->id);
-            }
+        if ($needsvectorize) {
+            airagassign_notify_manual_file_vectorization(
+                airagassign_vectorize_manual_file($data->course, $context->id)
+            );
         }
     }
 
@@ -301,7 +296,7 @@ function airagassign_delete_instance($id) {
         $context = context_module::instance($cm->id);
         $files = airagassign_get_uploaded_files($context->id);
         foreach ($files as $file) {
-            airagassign_delete_file_vectors($assign->course, $file->get_filename());
+            airagassign_delete_manual_file_vectors($assign->course, $file->get_filename(), $context->id);
         }
     }
 
@@ -516,6 +511,54 @@ function airagassign_get_uploaded_files($contextid) {
 }
 
 /**
+ * Map manual reference filenames to their content hashes.
+ *
+ * @param int $contextid The module context ID
+ * @return array<string, string> filename => contenthash
+ */
+function airagassign_get_manual_file_hashes($contextid): array {
+    $hashes = [];
+    foreach (airagassign_get_uploaded_files($contextid) as $file) {
+        $hashes[$file->get_filename()] = $file->get_contenthash();
+    }
+    return $hashes;
+}
+
+/**
+ * Tell the teacher when the manual reference file could not be vectorized.
+ *
+ * Grading stays fail-closed (retrieval is scoped to the file, so an
+ * unvectorized file yields no evidence), but the teacher must know why.
+ *
+ * @param array $result Result of airagassign_vectorize_manual_file()
+ */
+function airagassign_notify_manual_file_vectorization(array $result): void {
+    if (empty($result['success'])) {
+        \core\notification::warning(get_string('manualfile_vectorize_failed', 'airagassign',
+            s($result['error'] ?? 'Unknown error')));
+    }
+}
+
+/**
+ * Delete a manual reference file's vectors unless another activity still uses them.
+ *
+ * The course collection identifies chunks by filename only, so a same-named
+ * file in an AI RAG Material or another assignment shares those vectors.
+ *
+ * @param int $courseid Course ID
+ * @param string $filename Manual reference filename
+ * @param int $contextid Context of the assignment doing the cleanup
+ * @return bool True if vectors were deleted or intentionally retained
+ */
+function airagassign_delete_manual_file_vectors($courseid, $filename, $contextid): bool {
+    if (\mod_airagmaterial\local\vector_ownership::is_filename_in_use(
+            (int)$courseid, (string)$filename, 0, (int)$contextid)) {
+        return true;
+    }
+    return airagassign_delete_file_vectors($courseid, $filename);
+}
+
+/**
  * Vectorize the manual reference/answer key file on the RAG server.
  *
  * @param int $courseid Course ID
@@ -673,6 +716,44 @@ function airagassign_delete_file_vectors($courseid, $filename) {
 }
 
 /**
+ * Collect linked airagmaterial filenames and manual reference filenames for scoped RAG retrieval.
+ *
+ * @param int $assignid Assignment instance ID
+ * @param int $contextid Module context ID
+ * @return array List of unique material basenames
+ */
+function airagassign_get_linked_material_filenames(int $assignid, int $contextid): array {
+    global $DB;
+
+    $filenames = [];
+    // {airagmaterial_files} tracks per-file vectorization via `vectorized` (0/1),
+    // while `vectorize_status` lives on {airagmaterial}.
+    $sql = "SELECT DISTINCT af.filename
+              FROM {airagassign_materials} aam
+              JOIN {airagmaterial} am ON am.id = aam.materialid
+              JOIN {airagmaterial_files} af ON af.materialid = am.id
+             WHERE aam.assignid = :assignid
+               AND am.vectorize_status = 'completed'
+               AND af.vectorized = 1";
+    $records = $DB->get_records_sql($sql, ['assignid' => $assignid]);
+    foreach ($records as $record) {
+        $name = basename(trim((string)($record->filename ?? '')));
+        if ($name !== '' && $name !== '.' && $name !== '..') {
+            $filenames[$name] = true;
+        }
+    }
+
+    foreach (airagassign_get_uploaded_files($contextid) as $file) {
+        $name = basename(trim((string)$file->get_filename()));
+        if ($name !== '' && $name !== '.' && $name !== '..') {
+            $filenames[$name] = true;
+        }
+    }
+
+    return array_keys($filenames);
+}
+
+/**
  * Grade a single submission using the RAG API.
  *
  * @param stdClass $assign The assignment record
@@ -696,10 +777,18 @@ function airagassign_grade_submission($assign, $submission, $context) {
         ];
     }
 
+    $sourcefilter = airagassign_get_linked_material_filenames((int)$assign->id, (int)$context->id);
+    if (empty($sourcefilter) && $DB->record_exists('airagassign_materials', ['assignid' => $assign->id])) {
+        return [
+            'success' => false,
+            'error' => 'Linked course materials are not vectorized yet. Please wait for vectorization to complete before grading.',
+        ];
+    }
+
     if ($assign->assignmode === 'quiz') {
-        return airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl);
+        return airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl, $sourcefilter);
     } else {
-        return airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl);
+        return airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl, $sourcefilter);
     }
 }
 
@@ -736,9 +825,10 @@ function airagassign_record_grading_failure($submissionid, $error, $requestid = 
  * @param stdClass $submission Submission record
  * @param array $rubric Rubric dictionary
  * @param string $serverurl RAG server URL
+ * @param array $sourcefilter Optional list of source filenames for scoped retrieval
  * @return array Result
  */
-function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl) {
+function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl, array $sourcefilter = []) {
     global $DB;
 
     $questions = $DB->get_records('airagassign_questions', ['assignid' => $assign->id], 'sortorder ASC');
@@ -759,6 +849,7 @@ function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serve
     $totalscore = 0;
     $allfeedback = [];
     $allerrors = [];
+    $confidences = [];
     $failedrequestid = '';
 
     foreach ($questions as $question) {
@@ -768,14 +859,18 @@ function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serve
         }
 
         // Call RAG API for this question.
-        $result = airagassign_call_rag_api($serverurl, [
+        $payload = [
             'course_id' => $assign->course,
             'question' => $question->questiontext,
             'essay' => $answer->answertext,
             'rubric' => $rubric,
             'maximum_grade' => $gradeperquestion,
             'assignment_id' => $assign->id,
-        ]);
+        ];
+        if (!empty($sourcefilter)) {
+            $payload['source_filter'] = array_values($sourcefilter);
+        }
+        $result = airagassign_call_rag_api($serverurl, $payload);
 
         if ($result['success']) {
             $qscore    = (float)($result['data']['score']    ?? 0);
@@ -790,6 +885,7 @@ function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serve
 
             $totalscore += $qscore;
             $allfeedback[] = "Q" . ($question->sortorder + 1) . ": " . $qfeedback;
+            $confidences[] = airagassign_normalize_confidence($result['data']['confidence'] ?? 0);
         } else {
             $allerrors[] = "Q" . ($question->sortorder + 1) . ": " . ($result['error'] ?? 'Unknown error');
             $failedrequestid = $result['requestid'] ?? $failedrequestid;
@@ -807,6 +903,9 @@ function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serve
     // Store AI suggestion — teacher must confirm via grade_review.php.
     $submission->ai_grade    = round($totalscore, 2);
     $submission->ai_feedback = implode("\n\n", $allfeedback);
+    // The submission is only as trustworthy as its least certain answer, so the
+    // minimum (not the mean) drives the HITL review signal in quiz mode.
+    $submission->confidence  = empty($confidences) ? null : min($confidences);
     $submission->status      = 'ai_suggested';
     $submission->grading_error = null;
     $submission->grading_requestid = null;
@@ -829,9 +928,10 @@ function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serve
  * @param stdClass $submission Submission record
  * @param array $rubric Rubric dictionary
  * @param string $serverurl RAG server URL
+ * @param array $sourcefilter Optional list of source filenames for scoped retrieval
  * @return array Result
  */
-function airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl) {
+function airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl, array $sourcefilter = []) {
     global $DB;
 
     // Get the essay answer.
@@ -840,14 +940,18 @@ function airagassign_grade_essay_submission($assign, $submission, $rubric, $serv
         return ['success' => false, 'error' => 'No essay answer found'];
     }
 
-    $result = airagassign_call_rag_api($serverurl, [
+    $payload = [
         'course_id' => $assign->course,
         'question' => $assign->essayprompt,
         'essay' => $answer->answertext,
         'rubric' => $rubric,
         'maximum_grade' => (float)$assign->maximumgrade,
         'assignment_id' => $assign->id,
-    ]);
+    ];
+    if (!empty($sourcefilter)) {
+        $payload['source_filter'] = array_values($sourcefilter);
+    }
+    $result = airagassign_call_rag_api($serverurl, $payload);
 
     if (!$result['success']) {
         return $result;
@@ -855,7 +959,7 @@ function airagassign_grade_essay_submission($assign, $submission, $rubric, $serv
 
     $score      = (float)($result['data']['score']      ?? 0);
     $feedback   = $result['data']['feedback']   ?? '';
-    $confidence = (float)($result['data']['confidence'] ?? 0);
+    $confidence = airagassign_normalize_confidence($result['data']['confidence'] ?? 0);
 
     // Store AI suggestion in separate columns — score/feedback remain empty
     // until the teacher confirms the grade in grade_review.php.
@@ -881,6 +985,30 @@ function airagassign_grade_essay_submission($assign, $submission, $rubric, $serv
         'ai_grade' => $submission->ai_grade,
         'feedback' => $feedback,
     ];
+}
+
+/**
+ * Clamp an API confidence value into the 0..1 range stored in the database.
+ *
+ * @param mixed $value Raw confidence from the RAG response
+ * @return float Confidence between 0 and 1
+ */
+function airagassign_normalize_confidence($value): float {
+    $confidence = is_numeric($value) ? (float)$value : 0.0;
+    if (!is_finite($confidence)) {
+        return 0.0;
+    }
+    return max(0.0, min(1.0, $confidence));
+}
+
+/**
+ * Whether a submission has a stored AI confidence value (0 is a valid value).
+ *
+ * @param stdClass $submission Submission record
+ * @return bool
+ */
+function airagassign_has_confidence($submission): bool {
+    return isset($submission->confidence) && is_numeric($submission->confidence);
 }
 
 /**

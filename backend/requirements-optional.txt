@@ -1,0 +1,2 @@
+# Optional cloud reranking (required only when ENABLE_RERANKING=true and RERANKER_TYPE=bge)
+pinecone>=5.0,<8.0

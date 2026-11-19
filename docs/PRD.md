@@ -215,20 +215,27 @@ sequenceDiagram
 #### Should-Have (P1 — Model Freedom, Self-Hosted Readiness & Quickstart)
 4. **Configurable Multi-Language Grading Prompt (`PROMPT_LANGUAGE`):**
    - Support `en`, `id`, and `auto` (match question/answer language) via config/env and optional per-request `language` override in `PromptBuilder`.
-   - *Acceptance Criteria:* English questions/answers receive English feedback; Indonesian questions/answers receive Indonesian feedback; JSON schema remains identical.
+   - Neutralize remaining hardcoded Indonesian strings in `src/rag/pipeline.py` (such as the retrieval query template `Pertanyaan: ... / Jawaban: ...` and `'Tidak Diketahui'` source fallback) so retrieval and citations are language-neutral.
+   - *Acceptance Criteria:* English questions/answers receive English feedback; Indonesian questions/answers receive Indonesian feedback; JSON schema and retrieval outputs remain language-consistent and identical in structure.
 5. **Universal Model Agnosticism (Any OpenAI-Compatible Platform + Local Execution for LLM, Embedding & Reranker):**
    - See **Section 7 (AI Model Agnosticism & Dependency Decoupling)** for the full specification covering arbitrary model IDs, OpenAI-compatible APIs, local server (Ollama/vLLM/TEI), and in-process local runtimes across all three AI stages (`LLM`, `Embedding`, `Reranker`), plus optional Vision Captioner.
-   - *Acceptance Criteria:* Backend boots and passes unit tests with OpenAI-compatible endpoints or local providers without requiring `HUGGINGFACE_API_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `PINECONE_API_KEY`.
+   - Centralize configuration resolution into `src/utils/config.py` (eliminating scattered `os.getenv()` reads across `llm.py`, `locking.py`, `vision_captioner.py`, `embeddings.py`, `grader.py`, `reranker.py`, `auth.py`, `request_utils.py`, and `app.py`) and adopt an explicit FastAPI `create_app()` / lifespan startup pattern so importing `src.api.app` does not initialize network/vectorstore clients prematurely during tests or tooling.
+   - *Acceptance Criteria:* Backend boots and passes unit tests with OpenAI-compatible endpoints or local providers without requiring `HUGGINGFACE_API_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `PINECONE_API_KEY`, and configuration overrides are tested from one central config layer.
 6. **Dependency Cleanup & Lean Packaging:**
-   - Remove truly unused packages (`nltk`, `tiktoken`, `pandas`, `numpy`, and redundant `langchain-groq` once legacy single-provider init is unified) from `backend/requirements.txt`, and isolate optional heavy local/cloud extras into `requirements-local.txt` / `requirements-optional.txt`.
-   - *Acceptance Criteria:* Core `requirements.txt` contains zero unimported packages; `python -m unittest discover -s tests` and Docker image build pass cleanly.
+   - Remove truly unused packages (`nltk`, `tiktoken`, `pandas`, `numpy`, `pydantic-settings`, and redundant `langchain-groq` once legacy single-provider init is unified) from `backend/requirements.txt`, and isolate optional heavy local/cloud extras into `requirements-local.txt` / `requirements-optional.txt`.
+   - *Acceptance Criteria:* Core `requirements.txt` contains zero unimported/unused packages (retaining only documented indirect runtime dependencies such as `pypdf`, `huggingface-hub`, `python-multipart`, and pinned `posthog`); `python -m unittest discover -s tests` and Docker image build pass cleanly.
 7. **10-Minute Quickstart, CLI Batch Grader, & Sample "Week 1–3 → Week 4 Quiz" Kit:**
    - Provide `backend/docker-compose.dev.yml` (single-container quickstart), `examples/week1_to_week4_quiz/` (sample materials, rubric, answers, demo script), and `POST /v1/namespaces/{namespace}/grade/batch` or CLI CSV script (`scripts/grade_csv.py`).
    - *Acceptance Criteria:* A new contributor can follow `README.md` to ingest the sample Week 1–3 files and grade Week 4 answers in under 10 minutes.
 
-#### Could-Have (P2 — Moodle Ecosystem Polish)
+#### Could-Have (P2 — Moodle Ecosystem Polish, Reliability & Hardening)
 8. **Moodle Privacy API (`classes/privacy/provider.php`)** across `mod_airagassign`, `mod_airagmaterial`, and `local_assign_ai_rag`.
-9. **Automated GitHub Releases** attaching `dist/*.zip` on `v*` tags, plus **Moodle 4.4 compatibility decision** (evaluate lowering `$plugin->requires` to `2024042200` on `mod_airagmaterial` and `mod_airagassign` after Moodle 4.4 test verification).
+9. **Moodle Plugin Reliability, Per-Activity Material Isolation & Code Modularization:**
+   - **Manual File Vectorization Verification (`mod_airagassign`):** Inspect the return status of `airagassign_vectorize_manual_file()` inside `airagassign_add_instance()` and `airagassign_update_instance()`, persist/surface vectorization errors to teachers, and ensure `airagassign_get_linked_material_filenames()` only includes `manualfile` filenames verified as vectorized (preventing silent fail-closed empty retrievals if the RAG API was unreachable during activity save).
+   - **Per-Activity Material Isolation (`material_id` Metadata):** Propagate `material_id` metadata from `mod_airagmaterial` through `/course/materials/upload`, `/course/materials/file`, and `/assign/answer` so two distinct `mod_airagmaterial` activities in the same Moodle course that happen to share identical filenames never collide on scoped retrieval or deletion.
+   - **PHP Modularization:** Refactor `moodle-plugins/mod_airagassign/lib.php` (>1,100 LOC) by extracting RAG HTTP client, rubric builder, and file-scoping helpers into autoloaded `classes/` helpers.
+10. **Automated GitHub Releases, Full-Stack Integration Tests & Moodle 4.4 Validation:**
+    - Publish `dist/*.zip` automatically on `v*` tags, evaluate lowering `$plugin->requires` to `2024042200` on `mod_airagmaterial` and `mod_airagassign` after Moodle 4.4 verification, and add full-stack integration tests covering Docker Compose (`chroma` HTTP + `redis` + `src.api.app` auth over `/v1/*` and Moodle routes) plus Moodle PHPUnit/Behat suites.
 
 ### 6.2 Explicit Non-Goals ("Don't Build List")
 To avoid scope creep and maintain reliability:
@@ -242,6 +249,7 @@ To avoid scope creep and maintain reliability:
 - **Concurrency & Horizontal Scaling:** Stateless API replicas behind HAProxy (`leastconn`), shared Chroma HTTP server, and Redis read/write locks per namespace/course so parallel grading does not collide with material uploads/deletes.
 - **Observability:** Correlation `X-Request-ID` propagation from Moodle/clients through FastAPI logs and `X-API-Instance` replica headers.
 - **Resilience:** Provider fallback chain (`groq` ↔ `openrouter`) with bounded request/total timeouts (`LLM_REQUEST_TIMEOUT`, `LLM_TOTAL_TIMEOUT`), plus recoverable failed states in Moodle (`grading_failed` + retry).
+- **Maintainability & Verification:** Centralized config resolution (`src/utils/config.py`) without scattered `os.getenv()` calls, lazy FastAPI `create_app()`/lifespan initialization (Cycle 2), modular Moodle PHP helper classes (`mod_airagassign/classes/`), and automated CI covering Python unit tests, real-stack Docker Compose integration tests (`chroma` HTTP + `redis` + `src.api.app`), PHP lint, and Moodle PHPUnit/Behat tests (Cycle 3).
 
 ---
 
@@ -288,10 +296,10 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
 ### 7.3 Third-Party Dependency Hygiene & Cleanup Plan
 
 1. **Remove Confirmed Dead/Unused Packages from `backend/requirements.txt`:**
-   - Verified zero imports in `backend/src/`, `run_api.py`, and `backend/tests/`: **`nltk`**, **`tiktoken`**, **`pandas`**, **`numpy`**.
+   - Verified zero direct or indirect usage in `backend/src/`, `run_api.py`, and `backend/tests/`: **`nltk`**, **`tiktoken`**, **`pandas`**, **`numpy`**, and **`pydantic-settings`**.
    - Remove **`langchain-groq`** once legacy `_init_groq()` is unified onto `openai.OpenAI` (`provider_chain` / `openai_compatible`), eliminating redundant SDK overlap.
-2. **Modular Optional Extras (Keep Core Image Small):**
-   - `backend/requirements.txt`: Lean core runtime only (FastAPI/Uvicorn/Gunicorn, Pydantic, Redis, `chromadb==0.6.3`, `openai`, document parsers `pypdf`/`PyMuPDF`/`python-pptx`/`python-docx`/`Pillow`, `rank-bm25`, `langchain-core`/`langchain-community`/`langchain-text-splitters`, `langchain-huggingface`).
+2. **Modular Optional Extras & Documented Runtime Pins (Keep Core Image Small):**
+   - `backend/requirements.txt`: Lean core runtime only (FastAPI/Uvicorn/Gunicorn, Pydantic, Redis, `chromadb==0.6.3`, `openai`, document parsers `PyMuPDF`/`python-pptx`/`python-docx`/`Pillow`, `rank-bm25`, `langchain-core`/`langchain-community`/`langchain-text-splitters`, `langchain-huggingface`), plus documented indirect runtime pins (`pypdf` for `PyPDFLoader`, `huggingface-hub` for `langchain-huggingface`, `python-multipart` for FastAPI form/file uploads, and `posthog<6.0` for `chromadb==0.6.3`).
    - `backend/requirements-local.txt`: Optional in-process local runtime packages (`fastembed` / `sentence-transformers` / optional `llama-cpp-python`) for air-gapped deployments without Ollama/vLLM.
    - `backend/requirements-optional.txt`: Optional cloud SDKs such as `pinecone`.
 3. **Current External Infrastructure Dependencies (Unchanged Core Stack):**
@@ -304,9 +312,9 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
 
 | Cycle | Theme | Deliverables | Done Criteria |
 | :--- | :--- | :--- | :--- |
-| **Cycle 1 (Weeks 1–2)** | **Core Engine Generalization, Scoped RAG & Dependency Cleanup** | Generic `/v1/` namespace routes, metadata tagging (`module`/`tags`), Chroma `where` filter in `Retriever`/`RAGPipeline`, `mod_airagassign` `source_filter` integration, removal of unused packages (`nltk`, `tiktoken`, `pandas`, `numpy`, `langchain-groq`) | All backend unit tests + scope-filter tests pass; Week 1–3 filter excludes Week 4+ docs; Moodle adapter tests stay green; core `requirements.txt` has zero dead packages |
-| **Cycle 2 (Weeks 3–4)** | **Universal Model Freedom (OpenAI-Compatible & Local), Multi-Lang & Quickstart** | Unified `openai_compatible` + `local` providers for **LLM, Embedding, Reranker** (& Vision), `PROMPT_LANGUAGE=auto|en|id`, `docker-compose.dev.yml`, `examples/week1_to_week4_quiz/`, batch CSV CLI | Zero mandatory cloud token when configured with OpenAI-compatible/Ollama or local mode; mocked tests cover all 3 stages; quickstart example runs end-to-end |
-| **Cycle 3 (Weeks 5–6)** | **Open-Source Release Polish & Moodle Directory** | Moodle Privacy API providers in all 4 plugins, `CHANGELOG.md`, GitHub Release ZIP automation, optional Moodle 4.4 validation | CI passes all Python tests + PHP lint + ZIP builds; `v1.0.0` release tag published cleanly |
+| **Cycle 1 (Weeks 1–2)** | **Core Engine Generalization, Scoped RAG & Dependency Cleanup** | Generic `/v1/` namespace routes (`module`/`topic`/`tags`), metadata tagging, Chroma `where` filter in `Retriever`/`RAGPipeline`, `mod_airagassign` `source_filter` integration, removal of unused packages (`nltk`, `tiktoken`, `pandas`, `numpy`, `langchain-groq`, `pydantic-settings`) & dead imports | All backend unit tests, app-level `/v1/` auth middleware wiring tests, & real-Chroma scope-filter tests pass; Week 1–3 filter excludes Week 4+ docs; Moodle adapter tests & PHP lint stay green; core `requirements.txt` has zero dead packages |
+| **Cycle 2 (Weeks 3–4)** | **Universal Model Freedom (OpenAI-Compatible & Local), Config Centralization, Multi-Lang & Quickstart** | Unified `openai_compatible` + `local` providers for **LLM, Embedding, Reranker** (& Vision), centralized config in `src/utils/config.py` (removing scattered `os.getenv()` calls) + clean FastAPI `create_app()`/lifespan startup, `PROMPT_LANGUAGE=auto|en|id` + neutral `pipeline.py` retrieval/fallback strings, `docker-compose.dev.yml`, `examples/week1_to_week4_quiz/`, batch CSV CLI | Zero mandatory cloud token when configured with OpenAI-compatible/Ollama or local mode; mocked tests cover all 3 stages; centralized config verified; quickstart example runs end-to-end |
+| **Cycle 3 (Weeks 5–6)** | **Moodle Deep Hardening, Full-Stack Tests & Open-Source Release Polish** | Moodle Privacy API providers in all 4 plugins, `mod_airagassign` `manualfile` vectorization verification/status tracking, per-activity `material_id` metadata scoping to avoid same-filename collisions per course, `mod_airagassign/lib.php` modularization (`classes/`), full-stack Docker Compose (`chroma` + `redis` + `app`) & Moodle PHPUnit integration tests, `CHANGELOG.md`, GitHub Release ZIP automation, optional Moodle 4.4 validation | CI passes all Python unit + integration tests, PHP lint/PHPUnit & ZIP builds; `manualfile` failures surface without silent empty retrieval; `v1.0.0` release tag published cleanly |
 
 ---
 

@@ -1,6 +1,6 @@
 """Text preprocessing and chunking with multimodal support."""
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from loguru import logger

@@ -4,7 +4,7 @@ import io
 import base64
 import hashlib
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Tuple
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
@@ -18,7 +18,6 @@ except ImportError:
 
 try:
     from pptx import Presentation
-    from pptx.util import Inches
     from pptx.enum.shapes import MSO_SHAPE_TYPE
     HAS_PPTX = True
 except ImportError:
