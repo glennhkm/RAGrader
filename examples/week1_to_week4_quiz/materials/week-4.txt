@@ -1,0 +1,5 @@
+Week 4 - Transport Layer Security (not part of the Week 4 quiz scope)
+
+TLS protects data in transit with encryption, integrity checks and server authentication. During the TLS handshake the client and server agree on a cipher suite, the server presents an X.509 certificate signed by a certificate authority, and both sides derive shared session keys, for example with ephemeral Diffie-Hellman key exchange. Application data is then encrypted with a symmetric cipher such as AES-GCM.
+
+HTTPS is HTTP carried over TLS, normally on TCP port 443.

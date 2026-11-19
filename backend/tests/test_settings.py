@@ -191,6 +191,13 @@ class SettingsParsingTest(unittest.TestCase):
         with self.assertRaises(ConfigError):
             load_settings(env={"PROMPT_LANGUAGE": "fr"})
 
+    def test_client_settings_for_cli(self):
+        self.assertEqual("http://127.0.0.1:8000", load_settings(env={}).client.api_url)
+        s = load_settings(env={"RAG_API_URL": "https://grader.example/", "API_AUTH_TOKEN": "srv"})
+        self.assertEqual("https://grader.example", s.client.api_url)
+        self.assertEqual("srv", s.client.api_token)
+        self.assertEqual("cli", load_settings(env={"RAG_API_TOKEN": "cli", "API_AUTH_TOKEN": "srv"}).client.api_token)
+
     def test_vision_key_falls_back_to_huggingface_token(self):
         s = load_settings(env={"HUGGINGFACE_API_TOKEN": "hf_x"})
         self.assertEqual("hf_x", s.vision.api_key)

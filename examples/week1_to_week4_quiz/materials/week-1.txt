@@ -1,0 +1,11 @@
+Week 1 - Layered Network Models
+
+Computer networks are designed in layers so that each layer solves one problem and offers a service to the layer above it.
+
+The OSI reference model has seven layers: physical, data link, network, transport, session, presentation and application. It is mainly used to teach and to discuss where a protocol fits.
+
+The TCP/IP model used on the Internet has four layers: link, internet, transport and application. The internet layer is where IP lives; the transport layer is where TCP and UDP live.
+
+Encapsulation: when an application sends data, each lower layer wraps the data with its own header. The transport layer creates segments, the internet layer creates packets, and the link layer creates frames. The receiver removes the headers in reverse order (decapsulation).
+
+A port number identifies an application process on a host, while an IP address identifies the host interface itself.

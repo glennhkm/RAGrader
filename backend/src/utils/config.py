@@ -364,6 +364,14 @@ class LoggingSettings(_SafeRepr):
 
 
 @dataclass(frozen=True, repr=False)
+class ClientSettings(_SafeRepr):
+    """Settings for API clients such as the CLI (``python -m src.cli``)."""
+
+    api_url: str
+    api_token: str
+
+
+@dataclass(frozen=True, repr=False)
 class Settings(_SafeRepr):
     llm: LLMSettings
     embeddings: EmbeddingSettings
@@ -373,6 +381,7 @@ class Settings(_SafeRepr):
     locks: LockSettings
     api: APISettings
     logging: LoggingSettings
+    client: ClientSettings
     raw: Mapping[str, Any]
 
 
@@ -647,6 +656,11 @@ def _build_settings(reader: _EnvReader) -> Settings:
         logging=LoggingSettings(
             level=reader.str("LOG_LEVEL", "INFO").upper(),
             to_file=reader.bool("LOG_TO_FILE", True),
+        ),
+        client=ClientSettings(
+            api_url=reader.str("RAG_API_URL", "http://127.0.0.1:8000").rstrip("/"),
+            # On the API host the server token is the natural default.
+            api_token=reader.str("RAG_API_TOKEN") or api.auth_token,
         ),
         raw=MappingProxyType(reader.raw),
     )

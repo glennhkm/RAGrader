@@ -4,6 +4,7 @@ import hashlib
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from threading import RLock
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -258,7 +259,9 @@ class EmbeddingMismatchHttpTest(unittest.TestCase):
         locks.write.side_effect = lambda resource: RLock()
         runtime = AppRuntime(grader=grader, operation_locks=locks, settings=load_settings(env={}))
 
-        with TestClient(create_app(runtime=runtime)) as client:
+        with tempfile.TemporaryDirectory() as data_dir, \
+                patch("src.utils.DATA_DIR", Path(data_dir)), \
+                TestClient(create_app(runtime=runtime)) as client:
             v1 = client.post("/v1/namespaces/cs-101/grade", json={"question": "Q", "essay": "A"})
             moodle = client.post("/assign/answer", json={"course_id": 3, "question": "Q", "essay": "A"})
             upload = client.post("/course/materials/upload", data={"course_id": "3"},

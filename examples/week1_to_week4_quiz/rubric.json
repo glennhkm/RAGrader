@@ -1,0 +1,14 @@
+{
+  "Accuracy": {
+    "description": "The answer is factually correct according to the Week 1-3 course materials.",
+    "max_score": 50
+  },
+  "Completeness": {
+    "description": "The answer covers every part of the question (all steps, both protocols, or all layers as asked).",
+    "max_score": 30
+  },
+  "Clarity": {
+    "description": "The explanation is well organized and uses correct terminology.",
+    "max_score": 20
+  }
+}
