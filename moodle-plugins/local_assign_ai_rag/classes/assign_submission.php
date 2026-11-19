@@ -76,11 +76,15 @@ class assign_submission {
     /**
      * Processes a submission against RAG AI logic depending on autograde configuration.
      *
-     * When autograde is enabled, sends the payload to the RAG AI server, stores the
-     * pending record with the AI response (including citations), and applies the feedback.
-     * Otherwise, only creates a pending record for later manual review.
+     * When autograde is enabled, sends the payload to the RAG AI server and stores
+     * the AI response in the single pending record for this assignment/user. The
+     * grade is applied to the gradebook only when a grader user is configured;
+     * otherwise the result stays pending for teacher review. Failed AI responses
+     * are never applied: the record is reset to the initial state so the teacher
+     * can retry with "Review with AI".
      *
      * @return void
+     * @throws \moodle_exception When the RAG server cannot grade the submission.
      */
     public function process_submission_ai(): void {
         global $DB;
@@ -95,58 +99,51 @@ class assign_submission {
         }
 
         $assignment = $this->assigninstance;
-        $cmid = $this->assign->get_course_module()->id;
+        $cmid = (int)$this->assign->get_course_module()->id;
+        $existing = self::get_pending_record($cmid, (int)$this->user->id);
 
         if (!local_assign_ai_rag_is_autograde_enabled($this->assign)) {
-            // Autograde disabled: create a basic pending record for teacher review later.
-            $record = (object) [
-                'courseid' => $this->course->id,
-                'assignmentid' => $cmid,
-                'userid' => $this->user->id,
-                'title' => $assignment->name,
-                'message' => null,
-                'grade' => null,
-                'rubric_response' => null,
-                'citations' => null,
-                'confidence' => null,
-                'retrieved_docs' => null,
-                'status' => self::STATUS_INITIAL,
-            ];
-            self::create_pending_submission($record);
+            // Autograde disabled: make sure a basic record exists for later review.
+            if (!$existing) {
+                self::create_pending_submission($this->build_initial_record($cmid));
+            }
             return;
         }
 
-        // Build payload and send to RAG AI server.
-        $payload = $this->build_payload();
-        $response = client::send_to_ai($payload);
+        try {
+            $data = self::parse_ai_response(client::send_to_ai($this->build_payload()));
+        } catch (\Throwable $e) {
+            // Never leave a half-processed or error-only result behind.
+            $reset = self::empty_ai_fields() + ['status' => self::STATUS_INITIAL];
+            if ($existing) {
+                self::update_pending_submission((int)$existing->id, $reset);
+            } else {
+                self::create_pending_submission($this->build_initial_record($cmid));
+            }
+            throw $e;
+        }
 
-        // Parse RAG response (same format as main_service pipeline).
-        $message = $response['feedback'] ?? null;
-        $grade = isset($response['grade']) ? (is_numeric($response['grade']) ? (float)$response['grade'] : null) : null;
-        $rubricresponse = !empty($response['rubric_scores']) ? json_encode($response['rubric_scores'], JSON_UNESCAPED_UNICODE) : null;
-        $citations = !empty($response['citations']) ? json_encode($response['citations'], JSON_UNESCAPED_UNICODE) : null;
-        $confidence = isset($response['confidence']) ? (float)$response['confidence'] : null;
-        $retrieveddocs = !empty($response['retrieved_documents']) ? json_encode($response['retrieved_documents'], JSON_UNESCAPED_UNICODE) : null;
+        $config = local_assign_ai_rag_get_assignment_config((int)$assignment->id);
+        $graderid = (!empty($config) && !empty($config->graderid)) ? (int)$config->graderid : 0;
 
-        $record = (object) [
-            'courseid' => $this->course->id,
-            'assignmentid' => $cmid,
-            'userid' => $this->user->id,
-            'title' => $assignment->name,
-            'message' => $message,
-            'grade' => $grade !== null ? (int)round($grade) : null,
-            'rubric_response' => $rubricresponse,
-            'citations' => $citations,
-            'confidence' => $confidence,
-            'retrieved_docs' => $retrieveddocs,
-            'status' => self::STATUS_APPROVED,
-        ];
-        $recordid = self::create_pending_submission($record);
+        // Without a grader nothing is written to the gradebook, so the result must
+        // stay visible for teacher review instead of being marked approved.
+        $data['status'] = $graderid ? self::STATUS_APPROVED : self::STATUS_PENDING;
 
-        $record = $DB->get_record('local_assign_ai_rag_pending', ['id' => $recordid]);
-        $config = local_assign_ai_rag_get_assignment_config($this->assigninstance->id);
-        if ($record && !empty($config) && !empty($config->graderid)) {
-            local_assign_ai_rag_apply_ai_feedback($this->assign, $record, $config->graderid);
+        if ($existing) {
+            $recordid = (int)$existing->id;
+            self::update_pending_submission($recordid, $data);
+        } else {
+            $record = $this->build_initial_record($cmid);
+            foreach ($data as $key => $value) {
+                $record->$key = $value;
+            }
+            $recordid = self::create_pending_submission($record);
+        }
+
+        if ($graderid) {
+            $record = $DB->get_record('local_assign_ai_rag_pending', ['id' => $recordid], '*', MUST_EXIST);
+            local_assign_ai_rag_apply_ai_feedback($this->assign, $record, $graderid);
         }
     }
 
@@ -159,6 +156,8 @@ class assign_submission {
      *
      * @param int $pendingid Pending record ID to update in local_assign_ai_rag_pending.
      * @return void
+     * @throws \moodle_exception When the RAG server cannot grade the submission;
+     *         the caller resets the record so an error is never approved as a grade.
      */
     public function process_submission_ai_review(int $pendingid): void {
         global $DB;
@@ -172,27 +171,89 @@ class assign_submission {
         // Find existing pending record to update.
         $existing = $DB->get_record('local_assign_ai_rag_pending', ['id' => $pendingid], '*', MUST_EXIST);
 
-        $payload = $this->build_payload();
-        $response = client::send_to_ai($payload);
-
-        // Parse RAG response.
-        $message = $response['feedback'] ?? null;
-        $grade = isset($response['grade']) ? (is_numeric($response['grade']) ? (float)$response['grade'] : null) : null;
-        $rubricresponse = !empty($response['rubric_scores']) ? json_encode($response['rubric_scores'], JSON_UNESCAPED_UNICODE) : null;
-        $citations = !empty($response['citations']) ? json_encode($response['citations'], JSON_UNESCAPED_UNICODE) : null;
-        $confidence = isset($response['confidence']) ? (float)$response['confidence'] : null;
-        $retrieveddocs = !empty($response['retrieved_documents']) ? json_encode($response['retrieved_documents'], JSON_UNESCAPED_UNICODE) : null;
-
-        $data = [
-            'message' => $message,
-            'grade' => $grade !== null ? (int)round($grade) : null,
-            'rubric_response' => $rubricresponse,
-            'citations' => $citations,
-            'confidence' => $confidence,
-            'retrieved_docs' => $retrieveddocs,
-            'status' => self::STATUS_PENDING,
-        ];
+        $data = self::parse_ai_response(client::send_to_ai($this->build_payload()));
+        $data['status'] = self::STATUS_PENDING;
         self::update_pending_submission($existing->id, $data);
+    }
+
+    /**
+     * Convert a RAG client response into pending-record fields.
+     *
+     * @param array $response Response from client::send_to_ai().
+     * @return array Pending record fields (without status).
+     * @throws \moodle_exception When the RAG server reported a grading failure.
+     */
+    public static function parse_ai_response(array $response): array {
+        if (array_key_exists('success', $response) && !$response['success']) {
+            $error = trim((string)($response['error'] ?? $response['feedback'] ?? ''));
+            throw new \moodle_exception('aigradingfailed', 'local_assign_ai_rag', '',
+                $error !== '' ? $error : 'Unknown error');
+        }
+
+        $grade = (isset($response['grade']) && is_numeric($response['grade'])) ? (float)$response['grade'] : null;
+        $confidence = (isset($response['confidence']) && is_numeric($response['confidence']))
+            ? max(0.0, min(1.0, (float)$response['confidence']))
+            : null;
+
+        return [
+            'message' => isset($response['feedback']) ? (string)$response['feedback'] : null,
+            // Keep decimals: the column has the same precision as assign_grades.grade.
+            'grade' => $grade,
+            'rubric_response' => !empty($response['rubric_scores'])
+                ? json_encode($response['rubric_scores'], JSON_UNESCAPED_UNICODE) : null,
+            'citations' => !empty($response['citations'])
+                ? json_encode($response['citations'], JSON_UNESCAPED_UNICODE) : null,
+            'confidence' => $confidence,
+            'retrieved_docs' => !empty($response['retrieved_documents'])
+                ? json_encode($response['retrieved_documents'], JSON_UNESCAPED_UNICODE) : null,
+        ];
+    }
+
+    /**
+     * Get the pending record for an assignment/user, tolerating legacy duplicates.
+     *
+     * @param int $cmid Assignment course module ID.
+     * @param int $userid Student user ID.
+     * @return stdClass|null Most recent pending record, or null.
+     */
+    public static function get_pending_record(int $cmid, int $userid): ?stdClass {
+        global $DB;
+
+        $records = $DB->get_records('local_assign_ai_rag_pending',
+            ['assignmentid' => $cmid, 'userid' => $userid], 'id DESC', '*', 0, 1);
+        return $records ? reset($records) : null;
+    }
+
+    /**
+     * AI result fields cleared when a record goes back to the initial state.
+     *
+     * @return array
+     */
+    private static function empty_ai_fields(): array {
+        return [
+            'message' => null,
+            'grade' => null,
+            'rubric_response' => null,
+            'citations' => null,
+            'confidence' => null,
+            'retrieved_docs' => null,
+        ];
+    }
+
+    /**
+     * Build a new pending record in the initial state for this submission.
+     *
+     * @param int $cmid Assignment course module ID.
+     * @return stdClass
+     */
+    private function build_initial_record(int $cmid): stdClass {
+        return (object) ([
+            'courseid' => $this->course->id,
+            'assignmentid' => $cmid,
+            'userid' => $this->user->id,
+            'title' => $this->assigninstance->name,
+            'status' => self::STATUS_INITIAL,
+        ] + self::empty_ai_fields());
     }
 
     /**

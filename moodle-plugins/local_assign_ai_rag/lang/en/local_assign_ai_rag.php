@@ -167,3 +167,6 @@ $string['invalidjson'] = 'Invalid JSON format. Please check your rubric.';
 $string['invalidrubricstructure'] = 'Invalid rubric structure. Must have a "criteria" object.';
 $string['exampleformat'] = 'Example Rubric Format';
 $string['editrubric'] = 'Edit Rubric';
+$string['aigradingfailed'] = 'AI grading failed: {$a}';
+$string['page'] = 'page {$a}';
+$string['unknownsource'] = 'Unknown source';

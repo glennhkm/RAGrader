@@ -232,7 +232,7 @@ echo '<div class="row mb-3">';
 echo '<div class="col-md-4">';
 echo '<div class="card bg-light">';
 echo '<div class="card-body text-center">';
-echo '<h3 class="mb-0">' . ($pending->grade !== null ? $pending->grade : '-') . ' / ' . $assignment->grade . '</h3>';
+echo '<h3 class="mb-0">' . ($pending->grade !== null ? format_float((float)$pending->grade, 2, true, true) : '-') . ' / ' . $assignment->grade . '</h3>';
 echo '<small class="text-muted">' . get_string('aigrade', 'local_assign_ai_rag') . '</small>';
 echo '</div></div></div>';
 
@@ -280,7 +280,25 @@ if (!empty($criterionScores)) {
     echo '<thead><tr><th>' . get_string('criterion', 'local_assign_ai_rag') . '</th><th>' . get_string('score', 'local_assign_ai_rag') . '</th></tr></thead>';
     echo '<tbody>';
     foreach ($criterionScores as $criterion => $score) {
-        echo '<tr><td>' . s($criterion) . '</td><td>' . s($score) . '</td></tr>';
+        // AI responses store {score, feedback, evidence} per criterion; manual
+        // rubric fillings store a list of {criterion, levels}. Render both.
+        if (is_array($score) && array_key_exists('criterion', $score)) {
+            $criterion = $score['criterion'];
+            $level = $score['levels'][0] ?? [];
+            $points = $level['points'] ?? '';
+            $comment = $level['comment'] ?? '';
+        } else if (is_array($score)) {
+            $points = $score['score'] ?? '';
+            $comment = $score['feedback'] ?? '';
+        } else {
+            $points = $score;
+            $comment = '';
+        }
+        $pointstext = is_numeric($points) ? format_float((float)$points, 2, true, true) : s((string)$points);
+        if ($comment !== '') {
+            $pointstext .= '<br><small class="text-muted">' . s((string)$comment) . '</small>';
+        }
+        echo '<tr><td>' . s((string)$criterion) . '</td><td>' . $pointstext . '</td></tr>';
     }
     echo '</tbody></table>';
     echo '</div>';

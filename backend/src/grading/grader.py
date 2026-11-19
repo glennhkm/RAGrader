@@ -7,6 +7,7 @@ from loguru import logger
 
 from ..ingestion import DocumentLoader, DocumentPreprocessor
 from ..rag import RAGPipeline
+from ..vectorstore.filters import sanitize_chunk_metadata
 
 
 class EssayGrader:
@@ -69,7 +70,9 @@ class EssayGrader:
         course_id: Optional[str] = None,
         progress_callback: Callable = None,
         enable_vision: bool = None,
-        vision_model: str = None
+        vision_model: str = None,
+        module: Optional[str] = None,
+        tags: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Ingest course material documents (PDF, PPTX, DOCX, TXT) with image support.
@@ -80,6 +83,8 @@ class EssayGrader:
             progress_callback: Optional callback(current, total, message)
             enable_vision: Override vision processing setting
             vision_model: Vision model to use for captioning
+            module: Optional module/week identifier attached to chunk metadata
+            tags: Optional arbitrary tag key-value pairs attached to chunk metadata
             
         Returns:
             Ingestion result dictionary
@@ -151,6 +156,11 @@ class EssayGrader:
             if progress_callback:
                 progress_callback(90, 100, "Menyimpan ke database...")
             
+            extra_meta = sanitize_chunk_metadata(module=module, tags=tags)
+            if chunks and extra_meta:
+                for chunk in chunks:
+                    chunk.metadata.update(extra_meta)
+
             if chunks:
                 # Uploading the same Moodle file again is a replacement, not an
                 # append operation. Remove prior chunks only after parsing works.
@@ -246,7 +256,8 @@ class EssayGrader:
         question: str,
         essay: str,
         rubric: Dict[str, Any],
-        course_id: Optional[str] = None
+        course_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Grade a student essay with question context.
@@ -256,6 +267,7 @@ class EssayGrader:
             essay: Student essay/answer text
             rubric: Grading rubric
             course_id: Optional course ID to restrict retrieval context
+            metadata_filter: Optional Chroma metadata filter dict
             
         Returns:
             Grading results
@@ -275,7 +287,7 @@ class EssayGrader:
                 "error": "Esai/Jawaban tidak boleh kosong"
             }
         
-        if not rubric:
+        if rubric is None:
             return {
                 "success": False,
                 "error": "Rubrik tidak boleh kosong"
@@ -289,7 +301,13 @@ class EssayGrader:
             }
         
         # Grade using RAG pipeline with question context
-        result = self.rag_pipeline.grade_essay(question, essay, rubric, course_id=course_id)
+        result = self.rag_pipeline.grade_essay(
+            question=question,
+            essay=essay,
+            rubric=rubric,
+            course_id=course_id,
+            metadata_filter=metadata_filter,
+        )
         result['success'] = 'error' not in result
         
         return result

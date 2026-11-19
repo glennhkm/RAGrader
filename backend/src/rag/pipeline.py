@@ -1,6 +1,6 @@
 """RAG pipeline orchestration."""
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional
 from pathlib import Path
 from loguru import logger
 
@@ -85,16 +85,18 @@ class RAGPipeline:
         question: str,
         essay: str,
         rubric: Dict[str, Any],
-        course_id: Optional[str] = None
+        course_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Grade an essay using RAG pipeline with question context.
+        Grade an essay using RAG pipeline with optional namespace and metadata filter.
         
         Args:
             question: The question/prompt that was asked
             essay: Student essay/answer text
             rubric: Grading rubric
-            course_id: Optional course ID to retrieve from
+            course_id: Optional course ID / namespace to retrieve from
+            metadata_filter: Optional Chroma metadata filter dict
             
         Returns:
             Grading results dictionary
@@ -106,16 +108,22 @@ class RAGPipeline:
             logger.info("Mengambil materi kuliah yang relevan...")
             # Combine question and answer for better retrieval
             query = f"Pertanyaan: {question}\n\nJawaban: {essay}"
-            retrieved_docs = self.retriever.retrieve(query, course_id=course_id)
+            retrieved_docs = self.retriever.retrieve(
+                query,
+                course_id=course_id,
+                metadata_filter=metadata_filter,
+            )
             
             if not retrieved_docs:
-                logger.warning("Tidak ada materi yang relevan ditemukan")
+                logger.warning("No relevant materials found within scope")
                 return {
+                    "success": False,
                     "score": 0,
-                    "feedback": "Tidak dapat menilai: Tidak ada materi kuliah yang relevan ditemukan.",
+                    "feedback": "Cannot grade: no relevant course materials found in the selected scope.",
                     "citations": [],
                     "confidence": 0.0,
-                    "error": "Tidak ada materi yang diambil"
+                    "retrieved_documents": [],
+                    "error": "No relevant materials retrieved",
                 }
             
             # Step 2: Build prompt with question context
@@ -365,7 +373,9 @@ class RAGPipeline:
         document_path: Path,
         rubric: Dict[str, Any],
         enable_vision: bool = False,
-        include_image_captions: bool = True
+        include_image_captions: bool = True,
+        course_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Grade an essay from an uploaded document.
@@ -379,6 +389,8 @@ class RAGPipeline:
             rubric: Grading rubric
             enable_vision: Whether to use vision model for image captioning
             include_image_captions: Whether to include image captions
+            course_id: Optional course ID / namespace to retrieve from
+            metadata_filter: Optional Chroma metadata filter dict
             
         Returns:
             Grading results dictionary with additional extraction info
@@ -415,10 +427,14 @@ class RAGPipeline:
             }
         
         # Grade the extracted essay
+        # Forward the namespace and scope so document-based grading retrieves
+        # from the same isolated collection as text grading (not the default one).
         grading_result = self.grade_essay(
             question=question,
             essay=extracted_text,
-            rubric=rubric
+            rubric=rubric,
+            course_id=course_id,
+            metadata_filter=metadata_filter,
         )
         
         # Add extraction info to the result

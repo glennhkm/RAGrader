@@ -10,6 +10,7 @@ import chromadb
 from chromadb.errors import NotFoundError
 
 from .embeddings import EmbeddingGenerator
+from .filters import build_collection_name
 
 
 class VectorStore:
@@ -82,17 +83,12 @@ class VectorStore:
         return True
     
     def _get_collection_name(self, course_id: Optional[str] = None) -> str:
-        """
-        Generate collection name from embedding model and optional course_id.
-        Sanitize model name to be valid collection name.
-        """
-        sanitized_model = self.current_embedding_model.replace("/", "_").replace("-", "_").lower()
-        if course_id:
-            # Chroma collections must be alphanumeric/underscore, between 3-63 chars
-            sanitized_course = str(course_id).replace("-", "_").lower()
-            return f"course_{sanitized_course}_{sanitized_model}"
-        else:
-            return f"{self.base_collection_name}_{sanitized_model}"
+        """Generate a Chroma-safe collection name from embedding model and namespace."""
+        return build_collection_name(
+            base_collection_name=self.base_collection_name,
+            embedding_model=self.current_embedding_model,
+            namespace=course_id,
+        )
             
     @property
     def collection_name(self) -> str:

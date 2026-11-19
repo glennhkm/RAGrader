@@ -157,16 +157,14 @@ function local_assign_ai_rag_apply_ai_feedback(assign $assign, stdClass $record,
         }
     }
 
-    // Build feedback message with citations if available.
-    $feedbacktext = $record->message;
+    // Build the HTML feedback. The AI message is plain text, so escape it before
+    // storing it with FORMAT_HTML; citations are structured objects
+    // ({text, source, page}) and must be rendered field by field.
+    $feedbacktext = nl2br(s((string)($record->message ?? '')));
     if (!empty($record->citations)) {
         $citations = json_decode($record->citations, true);
         if (!empty($citations) && is_array($citations)) {
-            $feedbacktext .= "\n\n<hr><strong>" . get_string('citations', 'local_assign_ai_rag') . ":</strong>\n<ul>";
-            foreach ($citations as $citation) {
-                $feedbacktext .= "<li>" . s($citation) . "</li>";
-            }
-            $feedbacktext .= "</ul>";
+            $feedbacktext .= \local_assign_ai_rag\utils::format_citations($citations);
         }
     }
 
@@ -234,10 +232,7 @@ function local_assign_ai_rag_sync_existing_submissions(int $cmid): int {
 
     foreach ($submissions as $submission) {
         // Check if pending record already exists.
-        $existing = $DB->get_record('local_assign_ai_rag_pending', [
-            'assignmentid' => $cmid,
-            'userid' => $submission->userid,
-        ]);
+        $existing = \local_assign_ai_rag\assign_submission::get_pending_record((int)$cmid, (int)$submission->userid);
 
         if (!$existing) {
             $record = (object) [

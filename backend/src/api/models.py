@@ -3,6 +3,8 @@
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 
+from .. import __version__
+
 
 class ChunkingConfig(BaseModel):
     """Chunking configuration."""
@@ -70,4 +72,4 @@ class SystemStatus(BaseModel):
 class HealthResponse(BaseModel):
     """Health check response."""
     status: str
-    version: str = "1.1.1"
+    version: str = __version__

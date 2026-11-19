@@ -169,23 +169,43 @@ class Retriever:
             f"reranking={self.enable_reranking}, reranker={self.reranker_type}"
         )
     
-    def retrieve(self, query: str, course_id: Optional[str] = None) -> List[Document]:
+    def _search_vectorstore(
+        self,
+        query: str,
+        course_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Document]:
+        """Run initial similarity search on the vector store."""
+        k_val = self.top_k if self.enable_reranking else self.rerank_top_k
+        return self.vectorstore.similarity_search(
+            query=query,
+            k=k_val,
+            filter=metadata_filter,
+            course_id=course_id,
+        )
+
+    def retrieve(
+        self,
+        query: str,
+        course_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Document]:
         """
-        Retrieve relevant documents with optional reranking.
+        Retrieve relevant documents with optional metadata filter and reranking.
         
         Args:
             query: Query text
-            course_id: Optional course ID to retrieve from
+            course_id: Optional course ID / namespace to retrieve from
+            metadata_filter: Optional Chroma metadata filter dict
             
         Returns:
             List of relevant documents
         """
         # Get initial results from vector store (semantic search)
-        k_val = self.top_k if self.enable_reranking else self.rerank_top_k
-        results = self.vectorstore.similarity_search(
+        results = self._search_vectorstore(
             query=query,
-            k=k_val,
-            course_id=course_id
+            course_id=course_id,
+            metadata_filter=metadata_filter,
         )
         
         if not results:
@@ -202,23 +222,28 @@ class Retriever:
         
         return results
     
-    def retrieve_with_scores(self, query: str, course_id: Optional[str] = None) -> List[tuple[Document, float]]:
+    def retrieve_with_scores(
+        self,
+        query: str,
+        course_id: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+    ) -> List[tuple[Document, float]]:
         """
-        Retrieve documents with relevance scores.
+        Retrieve documents with relevance scores and optional metadata filter.
         
         Args:
             query: Query text
-            course_id: Optional course ID to retrieve from
+            course_id: Optional course ID / namespace to retrieve from
+            metadata_filter: Optional Chroma metadata filter dict
             
         Returns:
             List of (document, score) tuples
         """
         # Get initial results from vector store
-        k_val = self.top_k if self.enable_reranking else self.rerank_top_k
-        results = self.vectorstore.similarity_search(
+        results = self._search_vectorstore(
             query=query,
-            k=k_val,
-            course_id=course_id
+            course_id=course_id,
+            metadata_filter=metadata_filter,
         )
         
         if not results:

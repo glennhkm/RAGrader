@@ -176,25 +176,44 @@ class utils {
             return '';
         }
 
-        $html = '<div class="rag-citations mt-3">';
-        $html .= '<h6>Referensi dari Materi Kuliah:</h6>';
-        $html .= '<ul class="list-unstyled">';
-
-        foreach ($citations as $index => $citation) {
-            $source = $citation['source'] ?? 'Tidak diketahui';
-            $page = isset($citation['page']) ? " (hal. {$citation['page']})" : '';
-            $text = $citation['text'] ?? '';
-            
-            $html .= '<li class="mb-2">';
-            $html .= '<small class="text-muted">[' . ($index + 1) . '] ' . htmlspecialchars($source) . $page . '</small>';
-            if (!empty($text)) {
-                $html .= '<br><em>"' . htmlspecialchars(substr($text, 0, 200)) . '..."</em>';
+        $items = '';
+        $number = 0;
+        foreach ($citations as $citation) {
+            if (is_string($citation)) {
+                $citation = ['text' => $citation];
             }
-            $html .= '</li>';
+            if (!is_array($citation)) {
+                continue;
+            }
+
+            $text = trim((string)($citation['text'] ?? $citation['content'] ?? ''));
+            $source = trim((string)($citation['source'] ?? ''));
+            $page = $citation['page'] ?? null;
+            if ($text === '' && $source === '') {
+                continue;
+            }
+            $number++;
+
+            $label = '[' . $number . '] ' . s($source !== '' ? $source : get_string('unknownsource', 'local_assign_ai_rag'));
+            if (is_numeric($page) && (int)$page > 0) {
+                $label .= ' (' . s(get_string('page', 'local_assign_ai_rag', (int)$page)) . ')';
+            }
+
+            $item = '<small class="text-muted">' . $label . '</small>';
+            if ($text !== '') {
+                // Multibyte-safe truncation; only add an ellipsis when text was cut.
+                $excerpt = \core_text::strlen($text) > 200 ? \core_text::substr($text, 0, 200) . '…' : $text;
+                $item .= '<br><em>“' . s($excerpt) . '”</em>';
+            }
+            $items .= '<li class="mb-2">' . $item . '</li>';
         }
 
-        $html .= '</ul></div>';
-        return $html;
+        if ($items === '') {
+            return '';
+        }
+
+        return '<div class="rag-citations mt-3"><hr><strong>' . s(get_string('citations', 'local_assign_ai_rag'))
+            . ':</strong><ul class="list-unstyled">' . $items . '</ul></div>';
     }
 
     /**
