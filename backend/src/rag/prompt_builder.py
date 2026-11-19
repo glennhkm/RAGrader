@@ -1,72 +1,46 @@
-"""Prompt builder for rubric-aware grading."""
+"""Prompt builder for rubric-aware grading in English or Indonesian."""
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 from langchain_core.documents import Document
 from loguru import logger
+
+from ..utils.config import get_settings
+from .prompts import CONTEXT_LABELS, PROMPT_TEMPLATES, resolve_language
 
 
 class PromptBuilder:
     """Build prompts for rubric-aware essay grading."""
     
-    def __init__(self):
-        """Initialize prompt builder."""
+    def __init__(self, language: Optional[str] = None):
+        """
+        Initialize prompt builder.
+
+        Args:
+            language: Default prompt language: "auto" (detect from question and
+                answer), "en" or "id". Defaults to PROMPT_LANGUAGE.
+        """
+        self.default_language = language or get_settings().prompt.language
+        # Legacy attribute: the historical (Indonesian) template.
         self.template = self._get_template()
+        self.last_prompt: Optional[str] = None
+        self.last_language: Optional[str] = None
     
-    def _get_template(self) -> str:
-        """Get the grading prompt template."""
-        return """Anda adalah seorang penilai esai ahli. Nilai jawaban mahasiswa berikut berdasarkan pertanyaan yang diajukan, rubrik yang diberikan, dan materi kuliah.
+    def _get_template(self, language: str = "id") -> str:
+        """Get the grading prompt template for a language."""
+        return PROMPT_TEMPLATES[language]
 
-PERTANYAAN/SOAL:
-{question}
-
-RUBRIK PENILAIAN:
-{rubric}
-
-MATERI KULIAH (Bukti/Referensi):
-{context}
-
-JAWABAN MAHASISWA:
-{essay}
-
-INSTRUKSI:
-1. Pertama, periksa apakah jawaban sesuai dengan pertanyaan yang diajukan
-2. Evaluasi jawaban berdasarkan setiap kriteria dalam rubrik
-3. Gunakan bukti dari materi kuliah untuk memverifikasi keakuratan
-4. Berikan umpan balik spesifik untuk setiap kriteria
-5. Field "score" WAJIB berupa persentase keseluruhan 0 sampai 100, terlepas dari nilai maksimum tugas
-6. Field skor pada setiap criterion_scores WAJIB mengikuti batas poin kriteria pada rubrik
-7. Sertakan kutipan dari materi kuliah
-
-Berikan respons Anda dalam format JSON berikut:
-{{
-    "score": <persentase keseluruhan 0-100>,
-    "feedback": "Umpan balik keseluruhan di sini",
-    "criterion_scores": {{
-        "nama_kriteria": {{
-            "score": <skor>,
-            "feedback": "Umpan balik spesifik",
-            "evidence": "Kutipan dari materi kuliah"
-        }}
-    }},
-    "citations": [
-        {{
-            "text": "Teks kutipan dari materi",
-            "source": "Referensi sumber",
-            "page": <nomor halaman jika tersedia>
-        }}
-    ],
-    "confidence": <0.0 sampai 1.0>
-}}
-
-Respons:"""
+    def resolve_language(self, question: str, essay: str, language: Optional[str] = None) -> str:
+        """Language for this request: explicit override -> builder default -> detection."""
+        return resolve_language(language, self.default_language, question, essay)
     
     def build_prompt(
         self,
         question: str,
         essay: str,
         rubric: Dict[str, Any],
-        retrieved_docs: List[Document]
+        retrieved_docs: List[Document],
+        language: Optional[str] = None,
     ) -> str:
         """
         Build grading prompt with question context.
@@ -76,18 +50,16 @@ Respons:"""
             essay: Student essay/answer text
             rubric: Grading rubric dictionary
             retrieved_docs: Retrieved course material documents
+            language: Optional per-request language ("auto", "en", "id")
             
         Returns:
             Formatted prompt string
         """
-        # Format rubric
+        lang = self.resolve_language(question, essay, language)
         rubric_text = self._format_rubric(rubric)
+        context_text = self._format_context(retrieved_docs, lang)
         
-        # Format context from retrieved documents
-        context_text = self._format_context(retrieved_docs)
-        
-        # Fill template
-        prompt = self.template.format(
+        prompt = PROMPT_TEMPLATES[lang].format(
             question=question,
             rubric=rubric_text,
             context=context_text,
@@ -96,8 +68,9 @@ Respons:"""
         
         # Store the last built prompt for debugging/evaluation
         self.last_prompt = prompt
+        self.last_language = lang
         
-        logger.info(f"Built prompt with question and {len(retrieved_docs)} context documents")
+        logger.info(f"Built {lang} prompt with question and {len(retrieved_docs)} context documents")
         return prompt
     
     def _format_rubric(self, rubric: Dict[str, Any]) -> str:
@@ -123,31 +96,27 @@ Respons:"""
             logger.warning(f"Error formatting rubric: {e}")
             return str(rubric)
     
-    def _format_context(self, documents: List[Document]) -> str:
+    def _format_context(self, documents: List[Document], language: str = "id") -> str:
         """
         Format retrieved documents as context.
         
         Args:
             documents: List of retrieved documents
+            language: Prompt language for the labels
             
         Returns:
             Formatted context string
         """
+        labels = CONTEXT_LABELS.get(language, CONTEXT_LABELS["id"])
         if not documents:
-            return "Tidak ada materi kuliah yang relevan ditemukan."
+            return labels["no_material"]
         
         context_parts = []
-        
         for i, doc in enumerate(documents, 1):
-            # Extract metadata
-            source = doc.metadata.get('source', 'Tidak Diketahui')
+            source = doc.metadata.get('source', labels["unknown_source"])
             page = doc.metadata.get('page', 'N/A')
-            
-            # Format document
-            context_parts.append(
-                f"[Dokumen {i}] (Sumber: {source}, Halaman: {page})\n"
-                f"{doc.page_content}\n"
-            )
+            header = labels["document"].format(index=i, source=source, page=page)
+            context_parts.append(f"{header}\n{doc.page_content}\n")
         
         return "\n".join(context_parts)
     
@@ -172,11 +141,11 @@ Respons:"""
                 parsed = json.loads(json_str)
                 return parsed
             else:
-                logger.warning("Tidak dapat menemukan JSON dalam respons")
+                logger.warning("No JSON object found in the LLM response")
                 return self._create_fallback_response(response)
                 
         except json.JSONDecodeError as e:
-            logger.warning(f"Error parsing respons JSON: {e}")
+            logger.warning(f"Error parsing LLM JSON response: {e}")
             return self._create_fallback_response(response)
     
     def _create_fallback_response(self, raw_response: str) -> Dict[str, Any]:
@@ -195,5 +164,5 @@ Respons:"""
             "criterion_scores": {},
             "citations": [],
             "confidence": 0.5,
-            "error": "Gagal mengurai respons terstruktur"
+            "error": "Failed to parse structured LLM response"
         }

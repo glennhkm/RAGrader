@@ -87,6 +87,7 @@ class RAGPipeline:
         rubric: Dict[str, Any],
         course_id: Optional[str] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
+        language: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Grade an essay using RAG pipeline with optional namespace and metadata filter.
@@ -97,6 +98,7 @@ class RAGPipeline:
             rubric: Grading rubric
             course_id: Optional course ID / namespace to retrieve from
             metadata_filter: Optional Chroma metadata filter dict
+            language: Optional prompt language override ("auto", "en", "id")
             
         Returns:
             Grading results dictionary
@@ -104,10 +106,11 @@ class RAGPipeline:
         logger.info("Starting essay grading with question context...")
         
         try:
-            # Step 1: Retrieve relevant course materials based on QUESTION + ANSWER
-            logger.info("Mengambil materi kuliah yang relevan...")
-            # Combine question and answer for better retrieval
-            query = f"Pertanyaan: {question}\n\nJawaban: {essay}"
+            # Step 1: Retrieve relevant course materials based on QUESTION + ANSWER.
+            # The query carries no language-specific labels so retrieval behaves
+            # the same for English and Indonesian content.
+            logger.info("Retrieving relevant course materials...")
+            query = f"{question}\n\n{essay}"
             retrieved_docs = self.retriever.retrieve(
                 query,
                 course_id=course_id,
@@ -127,28 +130,30 @@ class RAGPipeline:
                 }
             
             # Step 2: Build prompt with question context
-            logger.info("Membuat prompt penilaian...")
+            logger.info("Building grading prompt...")
             prompt = self.prompt_builder.build_prompt(
                 question=question,
                 essay=essay,
                 rubric=rubric,
-                retrieved_docs=retrieved_docs
+                retrieved_docs=retrieved_docs,
+                language=language,
             )
             
             # Step 3: Generate grading with LLM
-            logger.info("Menghasilkan penilaian dengan LLM...")
+            logger.info("Generating grade with LLM...")
             llm_response = self.llm.generate(prompt)
             
             # Step 4: Parse response
-            logger.info("Mengurai respons LLM...")
+            logger.info("Parsing LLM response...")
             result = self.prompt_builder.parse_llm_response(llm_response)
             
             # Add question and retrieved documents to result
             result['question'] = question
+            result['language'] = getattr(self.prompt_builder, 'last_language', None)
             result['retrieved_documents'] = [
                 {
                     'content': doc.page_content[:200] + '...',
-                    'source': doc.metadata.get('source', 'Tidak Diketahui'),
+                    'source': doc.metadata.get('source', 'Unknown'),
                     'page': doc.metadata.get('page', 'N/A')
                 }
                 for doc in retrieved_docs
@@ -157,16 +162,16 @@ class RAGPipeline:
             # Add prompt used for transparency/evaluation
             result['prompt_used'] = getattr(self.prompt_builder, 'last_prompt', None)
             
-            logger.info(f"Penilaian selesai. Skor: {result.get('score', 'N/A')}")
+            logger.info(f"Grading finished. Score: {result.get('score', 'N/A')}")
             return result
             
         except EmbeddingMismatchError:
             raise
         except Exception as e:
-            logger.error(f"Error saat menilai: {e}")
+            logger.error(f"Error while grading: {e}")
             return {
                 "score": 0,
-                "feedback": f"Error saat menilai: {str(e)}",
+                "feedback": f"Error while grading: {str(e)}",
                 "citations": [],
                 "confidence": 0.0,
                 "error": str(e)
@@ -314,7 +319,7 @@ class RAGPipeline:
                     'images_found': 0,
                     'image_captions': [],
                     'pages_processed': 0,
-                    'error': 'Tidak ada teks yang dapat diekstrak dari dokumen'
+                    'error': 'No text could be extracted from the document'
                 }
             
             # Combine all document text
@@ -378,6 +383,7 @@ class RAGPipeline:
         include_image_captions: bool = True,
         course_id: Optional[str] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
+        language: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Grade an essay from an uploaded document.
@@ -409,7 +415,7 @@ class RAGPipeline:
         if not extraction_result['success']:
             return {
                 'score': 0,
-                'feedback': f"Gagal mengekstrak jawaban dari dokumen: {extraction_result['error']}",
+                'feedback': f"Failed to extract the answer from the document: {extraction_result['error']}",
                 'citations': [],
                 'confidence': 0.0,
                 'error': extraction_result['error'],
@@ -421,7 +427,7 @@ class RAGPipeline:
         if not extracted_text.strip():
             return {
                 'score': 0,
-                'feedback': "Dokumen tidak mengandung teks jawaban yang dapat dinilai.",
+                'feedback': "The document contains no answer text that can be graded.",
                 'citations': [],
                 'confidence': 0.0,
                 'error': 'Empty document',
@@ -437,6 +443,7 @@ class RAGPipeline:
             rubric=rubric,
             course_id=course_id,
             metadata_filter=metadata_filter,
+            language=language,
         )
         
         # Add extraction info to the result

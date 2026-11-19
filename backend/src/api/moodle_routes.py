@@ -30,6 +30,7 @@ from .request_utils import (
 )
 from .locking import LockAcquisitionError
 from .runtime import get_runtime
+from ..rag.prompts import normalize_language
 from ..vectorstore.embeddings import EmbeddingMismatchError
 from ..vectorstore.filters import build_chroma_where_filter
 
@@ -114,6 +115,10 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
             modules=request.module_filter,
             sources=request.source_filter,
         )
+        # `lang` defaults to "en" in the request model, so only an explicitly
+        # sent value may override PROMPT_LANGUAGE; otherwise existing Indonesian
+        # Moodle classes would silently switch to English prompts.
+        language = normalize_language(request.lang) if "lang" in request.model_fields_set else None
         with get_operation_lock(request.course_id):
             result = grader.grade_essay(
                 question=request.question,
@@ -121,6 +126,7 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
                 rubric=rubric,
                 course_id=str(request.course_id),
                 metadata_filter=metadata_filter,
+                language=language,
             )
         
         # Check for errors
@@ -182,6 +188,7 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
             citations=citations,
             confidence=confidence,
             retrieved_documents=retrieved_docs,
+            language=result.get('language'),
             # Legacy fields
             reply=feedback,
             grade=scaled_score,

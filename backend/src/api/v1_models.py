@@ -1,6 +1,6 @@
 """Pydantic models for generic /v1/ namespace-scoped autograding endpoints."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -22,6 +22,10 @@ class V1GradeRequest(BaseModel):
     material_filter: Optional[V1MaterialFilter] = Field(
         default=None,
         description="Optional scope filter limiting retrieval to selected modules, filenames, or tags",
+    )
+    language: Optional[Literal["auto", "en", "id"]] = Field(
+        default=None,
+        description="Prompt/feedback language; defaults to PROMPT_LANGUAGE (auto detects from the question and answer)",
     )
 
 
@@ -60,6 +64,7 @@ class V1GradeResponse(BaseModel):
     citations: List[V1Citation] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     retrieved_documents: List[V1RetrievedDoc] = Field(default_factory=list)
+    language: Optional[str] = Field(default=None, description="Prompt language used for grading")
     error: Optional[str] = None
 
 
