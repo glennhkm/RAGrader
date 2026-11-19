@@ -1,8 +1,6 @@
 """Contract tests for generic /v1/namespaces/* autograding endpoints."""
 
-import importlib
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +10,9 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.utils.config import override_settings
+from src.api.app import create_app
+from src.api.runtime import AppRuntime
+from src.utils.config import load_settings, override_settings
 from src.api.v1_routes import router as v1_router
 
 
@@ -266,41 +266,28 @@ class V1EndpointTest(unittest.TestCase):
         fake_locks.read.return_value = RLock()
         fake_locks.write.return_value = RLock()
 
-        had_app = "src.api.app" in sys.modules
-        try:
-            with (
-                patch("src.grading.EssayGrader", return_value=fake_grader),
-                patch("src.api.locking.OperationLockManager", return_value=fake_locks),
-            ):
-                sys.modules.pop("src.api.app", None)
-                app_mod = importlib.import_module("src.api.app")
+        runtime = AppRuntime(grader=fake_grader, operation_locks=fake_locks,
+                             settings=load_settings(env={}))
+        with (
+            override_settings(API_AUTH_TOKEN="cycle1-secret"),
+            TestClient(create_app(runtime=runtime)) as client,
+        ):
+            health = client.get("/health")
+            unauth = client.get("/v1/namespaces/cs-101/materials")
+            wrong = client.get(
+                "/v1/namespaces/cs-101/materials",
+                headers={"Authorization": "Bearer wrong-token"},
+            )
+            authed = client.get(
+                "/v1/namespaces/cs-101/materials",
+                headers={"Authorization": "Bearer cycle1-secret"},
+            )
 
-            with (
-                patch.object(app_mod, "grader", fake_grader),
-                patch.object(app_mod, "operation_locks", fake_locks),
-                override_settings(API_AUTH_TOKEN="cycle1-secret"),
-            ):
-                client = TestClient(app_mod.app)
-                health = client.get("/health")
-                unauth = client.get("/v1/namespaces/cs-101/materials")
-                wrong = client.get(
-                    "/v1/namespaces/cs-101/materials",
-                    headers={"Authorization": "Bearer wrong-token"},
-                )
-                authed = client.get(
-                    "/v1/namespaces/cs-101/materials",
-                    headers={"Authorization": "Bearer cycle1-secret"},
-                )
-
-            self.assertEqual(200, health.status_code)
-            self.assertEqual(401, unauth.status_code)
-            self.assertEqual(401, wrong.status_code)
-            self.assertEqual(200, authed.status_code)
-            self.assertEqual("cs-101", authed.json()["namespace"])
-        finally:
-            if not had_app:
-                sys.modules.pop("src.api.app", None)
-
+        self.assertEqual(200, health.status_code)
+        self.assertEqual(401, unauth.status_code)
+        self.assertEqual(401, wrong.status_code)
+        self.assertEqual(200, authed.status_code)
+        self.assertEqual("cs-101", authed.json()["namespace"])
 
 if __name__ == "__main__":
     unittest.main()
