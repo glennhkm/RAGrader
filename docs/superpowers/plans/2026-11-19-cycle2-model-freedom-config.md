@@ -188,8 +188,8 @@ app = create_app()                       # gunicorn entrypoint unchanged; builds
 - Router helpers keep names: `get_grader()` → `get_runtime().grader`; `get_operation_lock(...)` → `get_runtime().operation_locks`. Legacy routes in `app.py` (`/upload`, `/grade`, `/status`, `/clear`, `/config/chunking`, `/health`) use the same helpers.
 - `/health` returns 503 (not 500) if the runtime failed to initialize.
 
-- [ ] **Step 1: Failing tests:** (a) importing `src.api.app` with `EssayGrader`, `OperationLockManager`, `VectorStore` patched to raise → import succeeds and none is called; (b) `create_app(runtime=fake)` + `TestClient` serves `/health` and auth-protected `/v1` routes (port the existing wiring test to injection, no `sys.modules` juggling); (c) lifespan calls `build_runtime` exactly once and clears runtime on exit.
-- [ ] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `refactor(api): add create_app factory with lifespan-managed runtime`.
+- [x] **Step 1: Failing tests:** (a) importing `src.api.app` with `EssayGrader`, `OperationLockManager`, `VectorStore` patched to raise → import succeeds and none is called; (b) `create_app(runtime=fake)` + `TestClient` serves `/health` and auth-protected `/v1` routes (port the existing wiring test to injection, no `sys.modules` juggling); (c) lifespan calls `build_runtime` exactly once and clears runtime on exit.
+- [x] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `refactor(api): add create_app factory with lifespan-managed runtime`.
 
 ---
 

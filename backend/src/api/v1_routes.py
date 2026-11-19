@@ -14,6 +14,7 @@ from loguru import logger
 
 from ..vectorstore.filters import build_chroma_where_filter
 from .locking import LockAcquisitionError
+from .runtime import get_runtime
 from .request_utils import normalize_grade, optional_page, safe_filename, save_upload, validate_material_filename
 from .v1_models import (
     V1Citation,
@@ -32,13 +33,12 @@ NAMESPACE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 def get_grader():
     """Return the shared EssayGrader instance from the main FastAPI app."""
-    from .app import grader
-    return grader
+    return get_runtime().grader
 
 
 def get_operation_lock(namespace: str, write: bool = False):
     """Acquire a namespace-scoped read or write lock."""
-    from .app import operation_locks
+    operation_locks = get_runtime().operation_locks
     resource = f"namespace:{namespace}"
     return operation_locks.write(resource) if write else operation_locks.read(resource)
 

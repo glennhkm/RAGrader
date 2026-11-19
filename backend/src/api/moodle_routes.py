@@ -29,6 +29,7 @@ from .request_utils import (
     validate_material_filename,
 )
 from .locking import LockAcquisitionError
+from .runtime import get_runtime
 from ..vectorstore.filters import build_chroma_where_filter
 
 # Router for Moodle endpoints
@@ -36,14 +37,13 @@ router = APIRouter(prefix="", tags=["Moodle Integration"])
 
 
 def get_grader():
-    """Get the grader instance from main app."""
-    from .app import grader
-    return grader
+    """Get the grader of the running application."""
+    return get_runtime().grader
 
 
 def get_operation_lock(course_id: object = "default", write: bool = False):
     """Get a replica-safe read or write lock for one course."""
-    from .app import operation_locks
+    operation_locks = get_runtime().operation_locks
     resource = f"course:{course_id}"
     return operation_locks.write(resource) if write else operation_locks.read(resource)
 
