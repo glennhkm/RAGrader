@@ -260,3 +260,4 @@ $string['submissions'] = 'Submissions';
 $string['submissions_help'] = 'Students\' answers and submissions context';
 $string['gradeitem:submissions'] = 'Submissions';
 $string['knowledgebase_required_error'] = 'At least one of "Select course materials" or "Manual Reference / Answer Key File" must be provided.';
+$string['manualfile_vectorize_failed'] = 'The manual reference file could not be vectorized on the RAG server: {$a}. Grading will not find evidence in this file until it is uploaded again successfully.';

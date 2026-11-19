@@ -100,21 +100,47 @@ if ($canmanage && $action && confirm_sesskey()) {
         \core\notification::info(get_string('vectorize_queued_notice', 'airagmaterial'));
     } else if ($action === 'clearvectors') {
         require_once($CFG->dirroot . '/mod/airagmaterial/lib.php');
-        // Clear vectors from RAG server.
-        $cleared = airagmaterial_clear_course_vectors((int)$material->course);
 
-        $material->vectorize_status = 'pending';
-        $material->chunks_created = 0;
-        $material->documents_loaded = 0;
-        $material->total_in_db = 0;
-        $DB->update_record('airagmaterial', $material);
-        $DB->delete_records('airagmaterial_files', ['materialid' => $material->id]);
-
-        if ($cleared) {
-            \core\notification::success('Vectors cleared successfully.');
+        if (in_array($material->vectorize_status, ['queued', 'processing'], true)) {
+            // A running vectorization task would re-create the vectors right away.
+            \core\notification::warning(get_string('clearvectors_busy', 'airagmaterial'));
         } else {
-            \core\notification::warning('Local material records cleared, but the RAG server returned an error.');
+            // Remove only this material's files from the course collection. Clearing
+            // the whole course collection would also wipe other materials and
+            // assignment reference files while their status still says 'completed'.
+            $cleanup = airagmaterial_delete_material_vectors($material,
+                airagmaterial_get_tracked_filenames((int)$material->id));
+
+            $handled = array_merge($cleanup['deleted'], $cleanup['retained']);
+            if (!empty($handled)) {
+                [$insql, $params] = $DB->get_in_or_equal($handled, SQL_PARAMS_NAMED, 'fn');
+                $params['materialid'] = $material->id;
+                $DB->delete_records_select('airagmaterial_files', "materialid = :materialid AND filename $insql", $params);
+            }
+
+            $material->chunks_created = 0;
+            $material->documents_loaded = 0;
+            $material->total_in_db = 0;
+            if (empty($cleanup['failed'])) {
+                $material->vectorize_status = 'pending';
+                $material->vectorize_error = null;
+                \core\notification::success(get_string('clearvectors_success', 'airagmaterial'));
+            } else {
+                // Keep the failed files tracked so the teacher can retry, and take the
+                // material out of 'completed' so assignments stop using it meanwhile.
+                $material->vectorize_status = 'failed';
+                $material->vectorize_error = get_string('clearvectors_failed', 'airagmaterial',
+                    implode(', ', $cleanup['failed']));
+                \core\notification::warning($material->vectorize_error);
+            }
+            $DB->update_record('airagmaterial', $material);
+
+            if (!empty($cleanup['retained'])) {
+                \core\notification::info(get_string('clearvectors_retained', 'airagmaterial',
+                    implode(', ', $cleanup['retained'])));
+            }
         }
+        redirect(new moodle_url('/mod/airagmaterial/view.php', ['id' => $cm->id]));
     }
 }
 
@@ -223,7 +249,7 @@ echo html_writer::tag('tr',
     html_writer::tag('td', $lastprocessed)
 );
 
-if (!empty($material->vectorize_error) && $material->vectorize_status !== 'completed') {
+if (!empty($material->vectorize_error) && !in_array($material->vectorize_status, ['queued', 'processing'], true)) {
     echo html_writer::tag('tr',
         html_writer::tag('th', 'Error') .
         html_writer::tag('td', html_writer::tag('pre', s($material->vectorize_error),
@@ -310,8 +336,9 @@ if ($canmanage && !empty($uploadedfiles)) {
         get_string('revectorize', 'airagmaterial'),
         ['class' => 'btn btn-primary mr-2 me-2']);
 
-    // Clear vectors button — only when vectorization has completed.
-    if ($material->vectorize_status === 'completed') {
+    // Clear vectors button — whenever this material still tracks files and no
+    // vectorization task is running.
+    if (!$isbusy && $DB->record_exists('airagmaterial_files', ['materialid' => $material->id])) {
         $clearurl = new moodle_url('/mod/airagmaterial/view.php', [
             'id'      => $cm->id,
             'action'  => 'clearvectors',
@@ -319,7 +346,7 @@ if ($canmanage && !empty($uploadedfiles)) {
         ]);
         echo html_writer::link($clearurl, get_string('clearvectors', 'airagmaterial'),
             ['class' => 'btn btn-danger',
-             'onclick' => "return confirm('" . get_string('confirmclear', 'airagmaterial') . "');"]);
+             'onclick' => 'return confirm(' . json_encode(get_string('confirmclear', 'airagmaterial')) . ');']);
     }
 
     echo html_writer::end_tag('div');

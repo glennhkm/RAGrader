@@ -24,8 +24,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026071901;
+$plugin->version   = 2026071902;
 $plugin->requires  = 2024100700;
 $plugin->component = 'mod_airagmaterial';
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '1.1.1';
+$plugin->release   = '1.1.2';
