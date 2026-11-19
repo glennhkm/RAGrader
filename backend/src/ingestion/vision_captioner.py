@@ -1,14 +1,19 @@
-"""Vision captioning for images using Vision Language Models via HuggingFace Router."""
+"""Vision captioning for images via any OpenAI-compatible multimodal endpoint.
+
+Defaults to the HuggingFace Router (legacy behavior); VISION_BASE_URL,
+VISION_API_KEY and VISION_MODEL point it at Ollama vision models, OpenAI,
+vLLM or any other OpenAI-compatible server.
+"""
 
 import time
-from typing import List, Dict, Any
+from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass
 from loguru import logger
 
 # Use OpenAI client for HuggingFace Router (same approach as llm.py)
 from openai import OpenAI
 
-from ..utils.config import get_settings
+from ..utils.config import PromptSettings, VisionSettings, get_settings
 from .image_extractor import ExtractedImage
 
 
@@ -23,13 +28,13 @@ class ImageCaption:
 
 
 class VisionCaptioner:
-    """Generate captions for images using Vision Language Models via HuggingFace Router.
-    
-    Uses the same approach as llm.py - OpenAI-compatible client with HuggingFace Router.
-    Base URL: https://router.huggingface.co/v1
+    """Generate captions for images with an OpenAI-compatible vision model.
+
+    Defaults to the HuggingFace Router (https://router.huggingface.co/v1);
+    VISION_BASE_URL / VISION_API_KEY / VISION_MODEL select any other endpoint.
     """
     
-    # HuggingFace Router base URL (same as llm.py)
+    # Default endpoint (legacy behavior)
     HUGGINGFACE_BASE_URL = "https://router.huggingface.co/v1"
     
     # Available Vision LLM models that support image input via HuggingFace Router
@@ -63,72 +68,78 @@ class VisionCaptioner:
     
     DEFAULT_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
     
-#     # Prompt for educational image description
-#     EDUCATIONAL_PROMPT = """Describe this educational image in detail. Focus on:
-# 1. Main subjects, objects, and visual elements
-# 2. Any text, labels, or annotations visible
-# 3. Diagrams, charts, flowcharts, or technical illustrations
-# 4. Key concepts or information conveyed visually
-# 5. Educational context and learning points
-
-# Provide a comprehensive, detailed description:"""
-
-    # Prompt for educational image description
-    EDUCATIONAL_PROMPT = """Jelaskan gambar ini secara detail dengan fokus pada hal-hal berikut:
+    # Caption prompts per language. PROMPT_LANGUAGE=auto keeps Indonesian, the
+    # historical default, so captions of existing deployments do not change.
+    PROMPTS = {
+        "id": """Jelaskan gambar ini secara detail dengan fokus pada hal-hal berikut:
 1. Subjek utama, objek, dan elemen visual penting
 2. Teks, label, atau anotasi yang terlihat
 3. Diagram, grafik, flowchart, atau ilustrasi teknis apa pun
 4. Konsep atau informasi kunci yang ditampilkan secara visual
-Berikan deskripsi yang komprehensif dan mendalam."""
-    
+Berikan deskripsi yang komprehensif dan mendalam.""",
+        "en": """Describe this educational image in detail. Focus on:
+1. Main subjects, objects, and important visual elements
+2. Any visible text, labels, or annotations
+3. Diagrams, charts, flowcharts, or technical illustrations
+4. Key concepts or information conveyed visually
+Provide a comprehensive, detailed description.""",
+    }
+    EDUCATIONAL_PROMPT = PROMPTS["id"]
+
     def __init__(
         self,
         model_name: str = None,
         api_token: str = None,
         prompt_template: str = None,
         max_retries: int = 3,
-        retry_delay: float = 2.0
+        retry_delay: float = 2.0,
+        base_url: Optional[str] = None,
+        settings: Optional[VisionSettings] = None,
+        prompt_settings: Optional[PromptSettings] = None,
+        client_factory: Optional[Callable[..., Any]] = None,
     ):
         """
-        Initialize Vision Captioner using HuggingFace Router (same as llm.py approach).
+        Initialize the vision captioner.
         
         Args:
-            model_name: HuggingFace model name for vision captioning
-            api_token: HuggingFace API token
+            model_name: Vision model id (default: VISION_MODEL); any id is accepted
+            api_token: API key (default: VISION_API_KEY, falling back to HUGGINGFACE_API_TOKEN)
             prompt_template: Custom prompt for detailed descriptions
             max_retries: Maximum retries on API failure
             retry_delay: Delay between retries in seconds
+            base_url: OpenAI-compatible base URL (default: VISION_BASE_URL)
+            settings: Vision settings (defaults to get_settings().vision)
+            prompt_settings: Prompt language settings (defaults to get_settings().prompt)
+            client_factory: OpenAI-compatible client factory (tests)
         """
-        self.model_name = model_name or self.DEFAULT_MODEL
-        self.api_token = api_token or get_settings().vision.api_key
-        self.prompt_template = prompt_template or self.EDUCATIONAL_PROMPT
+        if settings is None or prompt_settings is None:
+            current = get_settings()
+            settings = settings or current.vision
+            prompt_settings = prompt_settings or current.prompt
+        self._client_factory = client_factory
+        self.base_url = (base_url or settings.base_url or self.HUGGINGFACE_BASE_URL).rstrip("/")
+        self.model_name = model_name or settings.model or self.DEFAULT_MODEL
+        self.api_token = api_token or settings.api_key
+        language = prompt_settings.language if prompt_settings.language in self.PROMPTS else "id"
+        self.prompt_template = prompt_template or self.PROMPTS[language]
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         
-        if not self.api_token:
+        if not self.api_token and self.base_url == self.HUGGINGFACE_BASE_URL:
             raise ValueError(
-                "HUGGINGFACE_API_TOKEN not found. "
-                "Set it in environment or pass as api_token parameter."
+                "HUGGINGFACE_API_TOKEN (or VISION_API_KEY) is required for the HuggingFace Router; "
+                "set VISION_BASE_URL to use another OpenAI-compatible endpoint."
             )
         
         self._init_client()
         logger.info(f"VisionCaptioner initialized with model: {self.model_name}")
-        logger.info(f"Using HuggingFace Router: {self.HUGGINGFACE_BASE_URL}")
     
     def _init_client(self):
-        """Initialize OpenAI-compatible client for HuggingFace Router.
-        
-        Same approach as llm.py - using OpenAI client with HuggingFace base URL.
-        """
-        logger.info(f"Initializing OpenAI client with HuggingFace Router...")
-        logger.info(f"Base URL: {self.HUGGINGFACE_BASE_URL}")
-        
-        self.client = OpenAI(
-            base_url=self.HUGGINGFACE_BASE_URL,
-            api_key=self.api_token,
-        )
-        
-        logger.info("HuggingFace Router client initialized successfully")
+        """Initialize the OpenAI-compatible multimodal client."""
+        factory = self._client_factory or OpenAI
+        # Self-hosted servers often need no key, but the SDK requires a value.
+        self.client = factory(base_url=self.base_url, api_key=self.api_token or "not-needed")
+        logger.info(f"Vision client initialized: {self.base_url}")
     
     def _get_model_info(self) -> Dict[str, Any]:
         """Get info about the current model."""
@@ -153,9 +164,6 @@ Berikan deskripsi yang komprehensif dan mendalam."""
         model_info = self._get_model_info()
         max_tokens = model_info.get("max_tokens", 512)
         
-        # Encode image to base64
-        image_b64 = image.to_base64()
-        
         # Build message with image (OpenAI vision format)
         messages = [
             {
@@ -164,7 +172,7 @@ Berikan deskripsi yang komprehensif dan mendalam."""
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/png;base64,{image_b64}"
+                            "url": image.get_data_uri()
                         }
                     },
                     {
@@ -181,7 +189,7 @@ Berikan deskripsi yang komprehensif dan mendalam."""
             try:
                 logger.info(f"🌐 API Call attempt {attempt + 1}/{self.max_retries}")
                 logger.info(f"   Model: {self.model_name}")
-                logger.info(f"   Base URL: {self.HUGGINGFACE_BASE_URL}")
+                logger.info(f"   Base URL: {self.base_url}")
                 
                 # Use chat.completions.create (same as llm.py)
                 completion = self.client.chat.completions.create(
@@ -231,7 +239,7 @@ Berikan deskripsi yang komprehensif dan mendalam."""
         logger.info(f"🔢 Image Index: {image.image_index}")
         logger.info(f"📐 Dimensions: {image.width}x{image.height} pixels")
         logger.info(f"🤖 Model: {self.model_name}")
-        logger.info(f"🌐 API: HuggingFace Router ({self.HUGGINGFACE_BASE_URL})")
+        logger.info(f"🌐 API: ({self.base_url})")
         
         try:
             # Use the router-based API call
@@ -335,7 +343,7 @@ Berikan deskripsi yang komprehensif dan mendalam."""
         logger.info(f"#  Batch size: {batch_size} images")
         logger.info(f"#  Number of batches: {num_batches}")
         logger.info(f"#  Model: {self.model_name}")
-        logger.info(f"#  API: HuggingFace Router ({self.HUGGINGFACE_BASE_URL})")
+        logger.info(f"#  API: ({self.base_url})")
         logger.info(f"{'#'*70}\n")
         
         for i, image in enumerate(images):
@@ -407,13 +415,7 @@ Berikan deskripsi yang komprehensif dan mendalam."""
         Returns:
             Status dictionary
         """
-        if model_name not in self.VISION_MODELS:
-            return {
-                "success": False,
-                "message": f"Unknown model: {model_name}",
-                "available_models": list(self.VISION_MODELS.keys())
-            }
-        
+        # VISION_MODELS is a catalog of suggestions, not an allow-list.
         old_model = self.model_name
         self.model_name = model_name
         
@@ -423,7 +425,7 @@ Berikan deskripsi yang komprehensif dan mendalam."""
             "success": True,
             "previous_model": old_model,
             "current_model": model_name,
-            "model_info": self.VISION_MODELS[model_name]
+            "model_info": self._get_model_info()
         }
     
     @classmethod
@@ -436,5 +438,5 @@ Berikan deskripsi yang komprehensif dan mendalam."""
         return {
             "model": self.model_name,
             "info": self.VISION_MODELS.get(self.model_name, {}),
-            "base_url": self.HUGGINGFACE_BASE_URL
+            "base_url": self.base_url
         }
