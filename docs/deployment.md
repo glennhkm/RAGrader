@@ -68,6 +68,8 @@ docker compose ps
 
 Expected running services: 2 `api` replicas (or `API_REPLICAS`), 1 `chroma`, 1 `redis`, and 1 `load-balancer`. Only `load-balancer` publishes port `8000`.
 
+The `chown` above is required: the API and Chroma containers cannot create `data/chroma_db` in a directory owned by another user (Chroma fails with `unable to open database file`). Redis runs as its image user (`999:1000`) with all capabilities dropped, so it restarts cleanly with existing append-only files; existing `redis_locks` volumes keep working after upgrading.
+
 ## 4. Firewall & Verification
 
 Allow TCP port `8000` **only** from your Moodle server's source IP. Then verify:
@@ -158,5 +160,5 @@ INSTALL_OPTIONAL_EXTRAS=true docker compose build   # Pinecone SDK
 
 ## 7. Single-Container Dev Stack
 
-`backend/docker-compose.dev.yml` runs one API container with embedded Chroma and no Redis/HAProxy (plus an optional pinned Ollama under `--profile local`). It is meant for evaluation and development only; see the README quickstart.
+`backend/docker-compose.dev.yml` runs one API container with embedded Chroma and no Redis/HAProxy (plus an optional pinned Ollama under `--profile local`). Its data lives in the named volume `api_data` (no `chown` needed); `docker compose -f docker-compose.dev.yml down -v` removes it. It is meant for evaluation and development only; see the README quickstart.
 
