@@ -205,8 +205,8 @@ app = create_app()                       # gunicorn entrypoint unchanged; builds
 - `local`: delegate to `LocalLlamaCppLLM` (Task 8); `ImportError` → actionable message.
 - Error when no usable endpoint names the variables to set for the chosen provider.
 
-- [ ] **Step 1: Failing tests** with a fake `client_factory` recording `base_url`, `api_key`, `model`, headers: openai_compatible without key; custom_1 → groq fallback order; first endpoint 429 with `retry-after` then second succeeds; total deadline stops the chain; huggingface preset uses router URL; arbitrary model id passes through untouched; `get_provider_info()` never contains a key.
-- [ ] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(llm): support any OpenAI-compatible endpoint and custom provider chains`.
+- [x] **Step 1: Failing tests** with a fake `client_factory` recording `base_url`, `api_key`, `model`, headers: openai_compatible without key; custom_1 → groq fallback order; first endpoint 429 with `retry-after` then second succeeds; total deadline stops the chain; huggingface preset uses router URL; arbitrary model id passes through untouched; `get_provider_info()` never contains a key.
+- [x] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(llm): support any OpenAI-compatible endpoint and custom provider chains`.
 
 ---
 
