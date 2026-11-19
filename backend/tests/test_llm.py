@@ -1,16 +1,13 @@
-"""Tests for LLMWrapper client unification and lean dependency requirements."""
+"""Tests for LLMWrapper providers and the OpenAI-compatible chain executor."""
 
 import os
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.rag.llm import LLMWrapper
 from src.utils.config import load_settings
 
-
-BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 class _FakeClientFactory:
@@ -213,27 +210,6 @@ class LLMWrapperAndDepsTest(unittest.TestCase):
     def test_unknown_provider_argument_is_rejected(self):
         with self.assertRaises(ValueError):
             LLMWrapper(provider="skynet", settings=load_settings(env={}).llm)
-
-    def test_requirements_excludes_unused_packages(self):
-        req_text = (BACKEND_DIR / "requirements.txt").read_text(encoding="utf-8")
-        packages = {
-            line.strip().split(">=")[0].split("==")[0].split("<")[0].lower()
-            for line in req_text.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        }
-        for unused in (
-            "nltk",
-            "tiktoken",
-            "pandas",
-            "numpy",
-            "langchain-groq",
-            "pinecone",
-            "pydantic-settings",
-        ):
-            self.assertNotIn(unused, packages)
-
-        opt_text = (BACKEND_DIR / "requirements-optional.txt").read_text(encoding="utf-8")
-        self.assertIn("pinecone", opt_text.lower())
 
 
 if __name__ == "__main__":

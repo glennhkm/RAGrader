@@ -1,2 +1,6 @@
-# Optional cloud reranking (required only when ENABLE_RERANKING=true and RERANKER_TYPE=bge)
+# Optional cloud SDKs (not needed for OpenAI-compatible or local setups).
+# Install with: pip install -r requirements.txt -r requirements-optional.txt
+# Docker: docker compose build --build-arg INSTALL_OPTIONAL_EXTRAS=true
+
+# Pinecone Inference reranking (ENABLE_RERANKING=true with RERANKER_TYPE=pinecone, legacy "bge")
 pinecone>=5.0,<8.0
