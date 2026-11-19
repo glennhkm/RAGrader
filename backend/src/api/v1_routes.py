@@ -248,6 +248,7 @@ def grade_in_namespace(
                 rubric=rubric,
                 course_id=storage_ns,
                 metadata_filter=where_filter,
+                language=request.language,
             )
 
         if not result.get("success", True) and result.get("error"):
@@ -282,6 +283,7 @@ def grade_in_namespace(
                 if isinstance(c, dict)
             ],
             confidence=confidence,
+            language=result.get("language"),
             retrieved_documents=[
                 V1RetrievedDoc(
                     content=str(d.get("content", "")),

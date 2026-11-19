@@ -70,7 +70,7 @@ class PipelineScopingTest(unittest.TestCase):
         )
 
         pipeline.retriever.retrieve.assert_called_once_with(
-            "Pertanyaan: What is TCP?\n\nJawaban: Reliable stream.",
+            "What is TCP?\n\nReliable stream.",
             course_id="net-101",
             metadata_filter=where,
         )
@@ -105,6 +105,7 @@ class PipelineScopingTest(unittest.TestCase):
             rubric={},
             course_id="net-101",
             metadata_filter=where,
+            language=None,
         )
         self.assertEqual(80, result["score"])
         self.assertEqual(1, result["extraction_info"]["pages_processed"])
@@ -157,6 +158,7 @@ class PipelineScopingTest(unittest.TestCase):
                     rubric={},
                     course_id="net-101",
                     metadata_filter=where,
+                    language=None,
                 )
 
 

@@ -108,7 +108,7 @@ class EssayGrader:
             if not valid_paths:
                 return {
                     "success": False,
-                    "message": "Tidak ada file yang didukung (PDF/PPTX/DOCX/TXT)",
+                    "message": "No supported files (PDF/PPTX/DOCX/TXT)",
                     "documents_loaded": 0,
                     "chunks_created": 0,
                     "images_extracted": 0,
@@ -117,7 +117,7 @@ class EssayGrader:
             
             # Load documents with multimodal support
             if progress_callback:
-                progress_callback(0, 100, "Memuat dokumen...")
+                progress_callback(0, 100, "Loading documents...")
             
             result = self.document_loader.load_multiple_documents(
                 valid_paths,
@@ -131,7 +131,7 @@ class EssayGrader:
             if not documents and not captions:
                 return {
                     "success": False,
-                    "message": "Tidak ada konten yang dapat diproses",
+                    "message": "No processable content found",
                     "documents_loaded": 0,
                     "chunks_created": 0,
                     "images_extracted": len(images),
@@ -140,7 +140,7 @@ class EssayGrader:
             
             # Process with preprocessor (includes image captions)
             if progress_callback:
-                progress_callback(70, 100, "Memproses chunk...")
+                progress_callback(70, 100, "Chunking documents...")
             
             chunks = self.preprocessor.process_multimodal_content(
                 documents=documents,
@@ -149,7 +149,7 @@ class EssayGrader:
             
             # Add to vector store
             if progress_callback:
-                progress_callback(90, 100, "Menyimpan ke database...")
+                progress_callback(90, 100, "Saving to the vector store...")
             
             extra_meta = sanitize_chunk_metadata(module=module, tags=tags)
             if chunks and extra_meta:
@@ -171,11 +171,11 @@ class EssayGrader:
             image_chunks = len([c for c in chunks if c.metadata.get('content_type') == 'image_caption'])
             
             if progress_callback:
-                progress_callback(100, 100, "Selesai!")
+                progress_callback(100, 100, "Done")
             
             result_dict = {
                 "success": True,
-                "message": "Materi kuliah berhasil diproses",
+                "message": "Course materials processed successfully",
                 "documents_loaded": len(documents),
                 "chunks_created": len(chunks),
                 "text_chunks": text_chunks,
@@ -255,6 +255,7 @@ class EssayGrader:
         rubric: Dict[str, Any],
         course_id: Optional[str] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
+        language: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Grade a student essay with question context.
@@ -265,6 +266,7 @@ class EssayGrader:
             rubric: Grading rubric
             course_id: Optional course ID to restrict retrieval context
             metadata_filter: Optional Chroma metadata filter dict
+            language: Optional prompt language override ("auto", "en", "id")
             
         Returns:
             Grading results
@@ -275,26 +277,26 @@ class EssayGrader:
         if not question or not question.strip():
             return {
                 "success": False,
-                "error": "Pertanyaan tidak boleh kosong"
+                "error": "Question must not be empty"
             }
         
         if not essay or not essay.strip():
             return {
                 "success": False,
-                "error": "Esai/Jawaban tidak boleh kosong"
+                "error": "Essay/answer must not be empty"
             }
         
         if rubric is None:
             return {
                 "success": False,
-                "error": "Rubrik tidak boleh kosong"
+                "error": "Rubric must not be empty"
             }
         
         # Check if vector store has documents
         if self.rag_pipeline.vectorstore.get_count(course_id) == 0:
             return {
                 "success": False,
-                "error": "Tidak ada materi kuliah di database. Silakan unggah materi terlebih dahulu."
+                "error": "No course materials in the vector store. Upload materials first."
             }
         
         # Grade using RAG pipeline with question context
@@ -304,6 +306,7 @@ class EssayGrader:
             rubric=rubric,
             course_id=course_id,
             metadata_filter=metadata_filter,
+            language=language,
         )
         result['success'] = 'error' not in result
         

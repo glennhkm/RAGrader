@@ -45,7 +45,7 @@
 | OpenAI-compatible embeddings | Own `OpenAICompatibleEmbeddings(langchain_core.embeddings.Embeddings)` on the `openai` SDK | Avoids adding `langchain-openai`; same SDK as the LLM path. |
 | Rerank HTTP contract | `RERANKER_API_STYLE=cohere` (default: `{model, query, documents, top_n}` → `results[].{index, relevance_score}`; Jina/Cohere/vLLM/Infinity/SiliconFlow) or `tei` (`{query, texts}` → `[{index, score}]`) | The two dominant `/rerank` dialects; parser accepts both response shapes defensively. |
 | Reranker failure policy | Any reranker error → log + fall back to original vector order (never fail grading) | Same as today's Pinecone behavior. |
-| Language detection (`auto`) | Dependency-free stopword-ratio heuristic over question + answer (`id` vs `en`), default `en` when unsure | Deterministic, testable, no new package; two target languages only. |
+| Language detection (`auto`) | Dependency-free stopword-ratio heuristic over question + answer (`id` vs `en`); inconclusive input (fewer than two marker words, or a tie) falls back to `id` | Deterministic, testable, no new package; the `id` fallback keeps today's behavior for short answers (implementation decision in Task 9, overriding the earlier `en` default to honor the backward-compatibility constraint). |
 | Moodle `lang` field | Used as an override **only if explicitly sent** (`"lang" in request.model_fields_set`) | `MoodleAssignRequest.lang` defaults to `"en"`; treating the default as an override would silently switch every Indonesian Moodle class to English prompts. |
 | CLI transport | `src/cli.py` talks to the `/v1` HTTP API with `httpx` | One grading path (same locks/auth/validation); works against local dev or production. A `/grade/batch` endpoint is **out of scope** for Cycle 2. |
 | In-process local LLM | `LLM_PROVIDER=local` via optional `llama-cpp-python` (GGUF path) | PRD §7.2-A; air-gapped single process. Ollama/vLLM users should prefer `openai_compatible`. |
@@ -303,14 +303,14 @@ def create_reranker(settings: RerankerSettings) -> BaseReranker | None   # None 
 
 **Behavior:**
 - `PROMPT_TEMPLATES = {"en": ..., "id": ...}` — same JSON schema/keys in both; the Indonesian template is today's text verbatim (regression-safe).
-- `detect_language(*texts) -> "en" | "id"`: lowercase word tokens; ratio of Indonesian vs English stopword hits; tie / too-short → `"en"`.
+- `detect_language(*texts) -> "en" | "id"`: lowercase word tokens; ratio of Indonesian vs English stopword hits; tie / too-short → `"id"` (backward compatible).
 - Resolution order: per-request `language` (v1: `V1GradeRequest.language: Literal["auto","en","id"] | None`; Moodle: `lang` **only if explicitly sent**, mapped `id*`→`id`, `en*`→`en`, others → auto) → `PROMPT_LANGUAGE` → `auto`.
 - `PromptBuilder.build_prompt(..., language=...)`; context lines localized (`[Document 1] (Source: …, Page: …)` / `[Dokumen 1] (Sumber: …, Halaman: …)`).
 - Pipeline: retrieval query becomes language-neutral `f"{question}\n\n{essay}"`; source fallback `"Unknown"`; result includes `"language"` used. Grader/pipeline user-facing errors become English (matching the rest of the API); fallback parse error `"Failed to parse structured LLM response"`.
 - Update the Cycle 1 pipeline test that asserted the Indonesian query string.
 
-- [ ] **Step 1: Failing tests:** detection on EN/ID samples and short/mixed input; v1 explicit `language` wins; Moodle request **without** `lang` + Indonesian text → `id` template (backward-compat guard); Moodle with explicit `lang="en"` → `en`; both templates produce prompts the existing parser handles; Indonesian template unchanged byte-for-byte from Task 0 snapshot.
-- [ ] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(prompt): add PROMPT_LANGUAGE auto/en/id and language-neutral retrieval`.
+- [x] **Step 1: Failing tests:** detection on EN/ID samples and short/mixed input; v1 explicit `language` wins; Moodle request **without** `lang` + Indonesian text → `id` template (backward-compat guard); Moodle with explicit `lang="en"` → `en`; both templates produce prompts the existing parser handles; Indonesian template unchanged byte-for-byte from Task 0 snapshot.
+- [x] **Step 2:** Implement. **Step 3:** Suite → PASS. Commit `feat(prompt): add PROMPT_LANGUAGE auto/en/id and language-neutral retrieval`.
 
 ---
 

@@ -32,7 +32,7 @@ class MoodleAssignRequest(BaseModel):
     
     # Additional metadata
     cmi_id: int = Field(default=0, description="Course module ID")
-    lang: str = Field(default="en", description="Language code")
+    lang: str = Field(default="en", description="Language code; overrides PROMPT_LANGUAGE only when sent explicitly")
     moodle_site_id: str = Field(default="", description="Moodle site identifier")
     source_filter: Optional[List[str]] = Field(
         default=None,
@@ -88,6 +88,7 @@ class MoodleAssignResponse(BaseModel):
         description="Documents retrieved from vector store"
     )
     error: Optional[str] = Field(default=None, description="Error message if failed")
+    language: Optional[str] = Field(default=None, description="Prompt language used for grading")
     
     # Legacy fields for backward compatibility with datacurso format
     reply: str = Field(default="", description="Alias for feedback")
