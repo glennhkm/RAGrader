@@ -141,8 +141,8 @@ def override_settings(**env: str) -> Iterator[Settings]   # tests: patch env + r
 - Secrets: custom `__repr__` on settings dataclasses masks any field named `*api_key*`, `*token*`.
 - `load_config()` stays (returns `settings.raw`) for backward compatibility.
 
-- [ ] **Step 1: Failing tests** in `test_settings.py`: defaults equal today's behavior with an empty env; numbered Groq/OpenRouter keys expand in `LLM_PROVIDER_ORDER` order; `custom_1` endpoint resolves; `RERANKER_TYPE=bge` → `pinecone`; `EMBEDDING_DEVICE=cloud` → `cpu`; invalid `LLM_REQUEST_TIMEOUT=abc` raises `ConfigError` mentioning the var; `repr(settings)` contains no key value; `override_settings` isolates and resets.
-- [ ] **Step 2:** Implement; run suite → PASS. Commit `feat(config): add central typed settings layer`.
+- [x] **Step 1: Failing tests** in `test_settings.py`: defaults equal today's behavior with an empty env; numbered Groq/OpenRouter keys expand in `LLM_PROVIDER_ORDER` order; `custom_1` endpoint resolves; `RERANKER_TYPE=bge` → `pinecone`; `EMBEDDING_DEVICE=cloud` → `cpu`; invalid `LLM_REQUEST_TIMEOUT=abc` raises `ConfigError` mentioning the var; `repr(settings)` contains no key value; `override_settings` isolates and resets.
+- [x] **Step 2:** Implement; run suite → PASS. Commit `feat(config): add central typed settings layer`.
 
 ---
 
