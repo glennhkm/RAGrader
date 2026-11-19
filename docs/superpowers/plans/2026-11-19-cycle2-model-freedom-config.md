@@ -60,12 +60,12 @@
 
 **Why first:** `PromptBuilder` has zero tests and Tasks 9 changes it; lock current behavior before refactoring.
 
-- [ ] **Step 1: Write characterization tests** (they must pass against current code):
+- [x] **Step 1: Write characterization tests** (they must pass against current code):
   - `build_prompt` output contains question, essay, JSON-dumped rubric, and `[Dokumen 1] (Sumber: w1.pdf, Halaman: 2)` context line; `last_prompt` is set.
   - `_format_context([])` returns the "no material" sentence.
   - `parse_llm_response` extracts JSON wrapped in prose / markdown fences; malformed JSON → fallback dict with `error`, `confidence == 0.5`, `score == 0`.
-- [ ] **Step 2:** Update PRD §2.2 to plugin versions `mod_airagmaterial 2026071902/1.1.2`, `mod_airagassign 2026071906/1.1.6`, `local_assign_ai_rag 2026071902/1.1.2`; mark §2.3 gaps 1, 2, 4 and the §5.3 "Target improvement" as delivered in Cycle 1.
-- [ ] **Step 3:** Run full suite → PASS. Commit `test(rag): add PromptBuilder characterization tests and refresh PRD baseline`.
+- [x] **Step 2:** Update PRD §2.2 to plugin versions `mod_airagmaterial 2026071902/1.1.2`, `mod_airagassign 2026071906/1.1.6`, `local_assign_ai_rag 2026071902/1.1.2`; mark §2.3 gaps 1, 2, 4 and the §5.3 "Target improvement" as delivered in Cycle 1.
+- [x] **Step 3:** Run full suite → PASS. Commit `test(rag): add PromptBuilder characterization tests and refresh PRD baseline`.
 
 ---
 
