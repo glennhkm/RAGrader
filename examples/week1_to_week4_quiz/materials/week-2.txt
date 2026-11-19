@@ -1,0 +1,12 @@
+Week 2 - Transport Layer: TCP and UDP
+
+TCP (Transmission Control Protocol) is connection-oriented. Before data is exchanged, TCP performs a three-way handshake:
+1. The client sends a SYN segment with an initial sequence number.
+2. The server answers with SYN-ACK, acknowledging the client's sequence number and sending its own.
+3. The client sends an ACK, and the connection is established.
+
+TCP provides reliable, ordered delivery. It uses sequence numbers and acknowledgements, retransmits segments that are not acknowledged before a timeout, and uses a sliding window for flow control so a fast sender does not overwhelm a slow receiver. Congestion control (slow start, congestion avoidance) reduces the sending rate when the network is congested.
+
+A TCP connection is closed with a FIN/ACK exchange in each direction.
+
+UDP (User Datagram Protocol) is connectionless. It has no handshake, no retransmission and no ordering guarantee, so it has very low overhead. UDP suits real-time traffic such as voice, video calls, online games and DNS queries, where a late packet is worse than a lost one.

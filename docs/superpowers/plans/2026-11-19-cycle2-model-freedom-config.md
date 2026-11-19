@@ -346,9 +346,9 @@ Common: --api-url (env RAG_API_URL, default http://127.0.0.1:8000)  --token (env
 - Bounded concurrency with a thread pool; `X-Request-ID` per row.
 - Demo script ingests Weeks 1–3 with `module=week-N`, also ingests Week 4 to prove the filter, then grades with `--module week-1 --module week-2 --module week-3`.
 
-- [ ] **Step 1: Failing tests** with `httpx.MockTransport`: multipart ingest fields, grade payload (`material_filter`), CSV round-trip incl. a failing row and `needs_review`, token header.
-- [ ] **Step 2:** Implement. **Step 3:** Manual run: `docker compose -f docker-compose.dev.yml up` + `examples/week1_to_week4_quiz/run_demo.sh` against a local OpenAI-compatible model; record timing in the example README.
-- [ ] Commit `feat(cli): add quickstart dev compose, sample Week 1-4 kit, and CSV batch grader`.
+- [x] **Step 1: Failing tests** with `httpx.MockTransport`: multipart ingest fields, grade payload (`material_filter`), CSV round-trip incl. a failing row and `needs_review`, token header.
+- [x] **Step 2:** Implement. **Step 3:** Manual run: `docker compose -f docker-compose.dev.yml up` + `examples/week1_to_week4_quiz/run_demo.sh` against a local OpenAI-compatible model; record timing in the example README.
+- [x] Commit `feat(cli): add quickstart dev compose, sample Week 1-4 kit, and CSV batch grader`.
 
 ---
 

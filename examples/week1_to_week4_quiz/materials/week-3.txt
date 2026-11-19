@@ -1,0 +1,9 @@
+Week 3 - IP Addressing, Routing and DNS
+
+An IPv4 address has 32 bits, usually written as four decimal numbers (for example 192.168.10.25). A subnet mask or CIDR prefix such as /24 splits the address into a network part and a host part.
+
+Routers forward packets between networks. Each router keeps a routing table and chooses the next hop by longest-prefix match on the destination address. Routes can be configured statically or learned with routing protocols: RIP uses hop count (distance vector), while OSPF builds a map of the network and computes shortest paths (link state).
+
+NAT (Network Address Translation) lets many devices with private addresses share one public address.
+
+DNS (Domain Name System) translates names such as www.example.org into IP addresses. A client asks a recursive resolver; the resolver queries a root server, then the top-level-domain server, then the authoritative server for the domain, and caches the answer for the record's TTL. DNS normally uses UDP port 53.

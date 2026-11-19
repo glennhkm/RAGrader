@@ -1,0 +1,55 @@
+# Single-container quickstart: one API process, embedded Chroma, no Redis, no
+# load balancer. Not for production (use docker-compose.yml there).
+#
+#   cp .env.dev.example .env.dev
+#   docker compose -f docker-compose.dev.yml --profile local up -d --build   # with bundled Ollama
+#   docker compose -f docker-compose.dev.yml up -d --build                   # bring your own endpoint
+#
+# With --profile local, pull the models once:
+#   docker compose -f docker-compose.dev.yml exec ollama ollama pull qwen2.5:7b-instruct
+#   docker compose -f docker-compose.dev.yml exec ollama ollama pull bge-m3
+
+services:
+  api:
+    image: ai-rag-grading-api:${API_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_LOCAL_EXTRAS: "${INSTALL_LOCAL_EXTRAS:-false}"
+        INSTALL_OPTIONAL_EXTRAS: "${INSTALL_OPTIONAL_EXTRAS:-false}"
+    restart: unless-stopped
+    env_file:
+      - .env.dev
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      CHROMA_CLIENT_MODE: persistent
+      CHROMA_PERSIST_DIRECTORY: /app/data/chroma_db
+      DISTRIBUTED_LOCK_ENABLED: "false"
+      LOG_TO_FILE: "false"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data:Z
+    # Lets the container reach an Ollama/vLLM server running on the host
+    # (use http://host.docker.internal:11434/v1 in .env.dev).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ollama:
+    image: ollama/ollama:0.40.15
+    profiles: ["local"]
+    restart: unless-stopped
+    expose:
+      - "11434"
+    volumes:
+      - ollama_models:/root/.ollama
+
+volumes:
+  ollama_models:
