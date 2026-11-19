@@ -1,12 +1,12 @@
 """Validation and normalization helpers for Moodle-facing API requests."""
 
-import os
 from pathlib import Path
 from typing import Any, Dict, Mapping, Tuple
 
 from fastapi import HTTPException, UploadFile
 
 from .. import __version__
+from ..utils.config import get_settings
 
 API_VERSION = __version__
 ALLOWED_MATERIAL_EXTENSIONS = frozenset({".pdf", ".pptx", ".docx", ".txt"})
@@ -39,7 +39,7 @@ def validate_material_filename(filename: str) -> str:
 
 def save_upload(upload: UploadFile, destination: Path) -> int:
     """Save an upload with a hard size limit and remove partial files on error."""
-    max_size_mb = max(1, int(os.getenv("MAX_UPLOAD_SIZE_MB", "50")))
+    max_size_mb = get_settings().api.max_upload_size_mb
     max_size_bytes = max_size_mb * 1024 * 1024
     written = 0
     destination.parent.mkdir(parents=True, exist_ok=True)

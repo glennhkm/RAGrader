@@ -2,13 +2,14 @@
 
 from contextlib import contextmanager
 import hashlib
-import os
 from threading import RLock
 import time
 from typing import Any, Iterator, Optional
 import uuid
 
 from loguru import logger
+
+from ..utils.config import LockSettings, get_settings
 
 try:
     import redis
@@ -66,15 +67,14 @@ class OperationLockManager:
         return 0
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Optional[LockSettings] = None) -> None:
+        settings = settings or get_settings().locks
         self._local_lock = RLock()
-        self.enabled = os.getenv("DISTRIBUTED_LOCK_ENABLED", "false").lower() in {
-            "1", "true", "yes", "on",
-        }
+        self.enabled = settings.enabled
         self._redis: Optional[Any] = None
-        self._prefix = os.getenv("DISTRIBUTED_LOCK_PREFIX", "airag:lock")
-        self._lease_ms = max(60, int(os.getenv("DISTRIBUTED_LOCK_TTL_SECONDS", "900"))) * 1000
-        self._wait_seconds = max(1, int(os.getenv("DISTRIBUTED_LOCK_WAIT_SECONDS", "120")))
+        self._prefix = settings.prefix
+        self._lease_ms = settings.ttl_seconds * 1000
+        self._wait_seconds = settings.wait_seconds
         self._poll_seconds = 0.1
 
         if self.enabled:
@@ -82,9 +82,8 @@ class OperationLockManager:
                 raise RuntimeError(
                     "Distributed locking is enabled but the redis package is not installed"
                 )
-            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
             self._redis = redis.Redis.from_url(
-                redis_url,
+                settings.redis_url,
                 decode_responses=True,
                 socket_connect_timeout=5,
                 socket_timeout=5,

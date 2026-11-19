@@ -1,12 +1,12 @@
 """Essay grading orchestrator with multimodal document support."""
 
-import os
 from typing import Dict, Any, List, Callable, Optional
 from pathlib import Path
 from loguru import logger
 
 from ..ingestion import DocumentLoader, DocumentPreprocessor
 from ..rag import RAGPipeline
+from ..utils.config import VisionSettings, get_settings
 from ..vectorstore.filters import sanitize_chunk_metadata
 
 
@@ -19,7 +19,8 @@ class EssayGrader:
         provider: str = "provider_chain",
         model_name: str = None,
         enable_image_extraction: Optional[bool] = None,
-        enable_vision_captioning: Optional[bool] = None
+        enable_vision_captioning: Optional[bool] = None,
+        vision_settings: Optional[VisionSettings] = None,
     ):
         """
         Initialize essay grader.
@@ -30,27 +31,20 @@ class EssayGrader:
             model_name: Model name override (optional)
             enable_image_extraction: Enable image extraction from documents
             enable_vision_captioning: Enable vision captioning for images
+            vision_settings: Multimodal settings (defaults to get_settings().vision)
         """
         self.config = config
-        
-        # Resolve multimodal settings from argument override, env variables, or config file
+        vision = vision_settings or get_settings().vision
+        multimodal = config.get('multimodal', {}) or {}
+
+        # Resolution: explicit argument -> config dict (config.yaml values are
+        # already env-resolved) -> central settings (env / defaults).
         if enable_image_extraction is None:
-            env_val = os.getenv('ENABLE_IMAGE_EXTRACTION')
-            if env_val is not None:
-                self.enable_image_extraction = env_val.lower() == 'true'
-            else:
-                self.enable_image_extraction = config.get('multimodal', {}).get('enable_image_extraction', True)
-        else:
-            self.enable_image_extraction = enable_image_extraction
-            
+            enable_image_extraction = multimodal.get('enable_image_extraction', vision.enable_image_extraction)
         if enable_vision_captioning is None:
-            env_val = os.getenv('ENABLE_VISION_CAPTIONING')
-            if env_val is not None:
-                self.enable_vision_captioning = env_val.lower() == 'true'
-            else:
-                self.enable_vision_captioning = config.get('multimodal', {}).get('enable_vision_captioning', True)
-        else:
-            self.enable_vision_captioning = enable_vision_captioning
+            enable_vision_captioning = multimodal.get('enable_vision_captioning', vision.enable_vision_captioning)
+        self.enable_image_extraction = bool(enable_image_extraction)
+        self.enable_vision_captioning = bool(enable_vision_captioning)
         
         # Initialize components
         self.document_loader = DocumentLoader(enable_multimodal=self.enable_image_extraction)

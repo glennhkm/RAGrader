@@ -1,13 +1,12 @@
 """Unit and HTTP middleware tests for optional API bearer token authentication."""
 
-import os
 import unittest
-from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.api.auth import check_api_auth, extract_bearer_token
+from src.utils.config import override_settings
 
 
 class ApiAuthTest(unittest.TestCase):
@@ -44,13 +43,13 @@ class ApiAuthTest(unittest.TestCase):
 
     def test_open_mode_when_api_auth_token_unset(self):
         client = self._build_client()
-        with patch.dict(os.environ, {"API_AUTH_TOKEN": ""}, clear=False):
+        with override_settings(API_AUTH_TOKEN=""):
             resp = client.post("/assign/answer")
         self.assertEqual(200, resp.status_code)
 
     def test_protected_endpoint_rejects_missing_or_wrong_token(self):
         client = self._build_client()
-        with patch.dict(os.environ, {"API_AUTH_TOKEN": "top-secret-token"}, clear=False):
+        with override_settings(API_AUTH_TOKEN="top-secret-token"):
             missing = client.post("/assign/answer")
             wrong = client.post(
                 "/assign/answer",

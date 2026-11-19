@@ -1,6 +1,5 @@
 """Vision captioning for images using Vision Language Models via HuggingFace Router."""
 
-import os
 import time
 from typing import List, Dict, Any
 from dataclasses import dataclass
@@ -9,6 +8,7 @@ from loguru import logger
 # Use OpenAI client for HuggingFace Router (same approach as llm.py)
 from openai import OpenAI
 
+from ..utils.config import get_settings
 from .image_extractor import ExtractedImage
 
 
@@ -100,7 +100,7 @@ Berikan deskripsi yang komprehensif dan mendalam."""
             retry_delay: Delay between retries in seconds
         """
         self.model_name = model_name or self.DEFAULT_MODEL
-        self.api_token = api_token or os.getenv("HUGGINGFACE_API_TOKEN")
+        self.api_token = api_token or get_settings().vision.api_key
         self.prompt_template = prompt_template or self.EDUCATIONAL_PROMPT
         self.max_retries = max_retries
         self.retry_delay = retry_delay
