@@ -1,8 +1,15 @@
-"""LLM wrapper for Groq/OpenRouter fallback and legacy HuggingFace inference."""
+"""LLM wrapper: any OpenAI-compatible endpoint, fallback chains, and presets.
+
+Every remote provider (Groq, OpenRouter, HuggingFace Router, custom_N
+endpoints, or a single ``openai_compatible`` server such as Ollama, vLLM,
+LM Studio, llama.cpp server, LiteLLM or OpenAI) runs through the same
+OpenAI-compatible chain executor with per-request and total deadlines.
+"""
 
 import time
 from dataclasses import replace
-from typing import Dict, Any, List, Optional
+from types import MappingProxyType
+from typing import Any, Callable, Dict, List, Optional
 from loguru import logger
 from openai import OpenAI
 
@@ -11,11 +18,22 @@ from ..utils.config import LLMEndpointSettings, LLMSettings, get_settings
 # Backward-compatible name for the endpoint type used by the fallback chain.
 ProviderEndpoint = LLMEndpointSettings
 
+_PRESET_ORDERS = {
+    "groq": ["groq", "openrouter"],
+    "openrouter": ["openrouter", "groq"],
+    "huggingface": ["huggingface"],
+}
+_CHAIN_ALIASES = {"provider_chain", "chain", "auto"}
+
 
 class LLMWrapper:
-    """Wrapper for LLM supporting Groq/OpenRouter fallback and legacy providers."""
+    """Grade-prompt generator over OpenAI-compatible providers.
+
+    Model strings are never validated against a list: ``PROVIDERS`` is only a
+    catalog of suggestions for UIs and status endpoints.
+    """
     
-    # Available providers and their models
+    # Suggested models per provider (documentation only, not an allow-list).
     PROVIDERS = {
         "groq": {
             "name": "Groq (Ultra-Fast)",
@@ -38,11 +56,25 @@ class LLMWrapper:
             "default_model": "openai/gpt-oss-120b"
         },
         "provider_chain": {
-            "name": "Groq/OpenRouter Fallback Chain",
+            "name": "Fallback Chain (Groq, OpenRouter, custom_N endpoints)",
             "models": [
                 "openai/gpt-oss-120b",
             ],
             "default_model": "openai/gpt-oss-120b"
+        },
+        "openai_compatible": {
+            "name": "Any OpenAI-Compatible Endpoint (Ollama, vLLM, LM Studio, llama.cpp, LiteLLM, OpenAI)",
+            "models": [
+                "qwen2.5:14b-instruct",
+                "llama3.1:8b-instruct",
+                "gpt-4o-mini",
+            ],
+            "default_model": "qwen2.5:14b-instruct"
+        },
+        "local": {
+            "name": "In-Process llama.cpp (GGUF, requires requirements-local.txt)",
+            "models": [],
+            "default_model": ""
         },
         "huggingface": {
             "name": "HuggingFace Inference",
@@ -61,66 +93,80 @@ class LLMWrapper:
     
     def __init__(
         self,
-        model_name: str = "openai/gpt-oss-120b",
-        temperature: float = 0.3,
-        max_new_tokens: int = 2048,
+        model_name: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_new_tokens: Optional[int] = None,
         device: str = "cpu",  # Not used, kept for compatibility
-        provider: str = "provider_chain",
+        provider: Optional[str] = None,
         settings: Optional[LLMSettings] = None,
+        client_factory: Optional[Callable[..., Any]] = None,
     ):
         """
         Initialize LLM wrapper with specified provider.
         
         Args:
-            model_name: Model name (provider-specific)
-            temperature: Sampling temperature
-            max_new_tokens: Maximum tokens to generate
-            device: Not used (cloud-based), kept for compatibility
-            provider: LLM provider ("provider_chain", "groq", "openrouter", or "huggingface")
+            model_name: Model name; any string the provider accepts (default: LLM_MODEL)
+            temperature: Sampling temperature (default: LLM_TEMPERATURE)
+            max_new_tokens: Maximum tokens to generate (default: LLM_MAX_NEW_TOKENS)
+            device: Not used, kept for compatibility
+            provider: provider_chain | openai_compatible | local | groq | openrouter |
+                huggingface (default: LLM_PROVIDER)
             settings: LLM settings (defaults to get_settings().llm); endpoints,
                 keys and timeouts come from here, never from the environment
+            client_factory: Callable building an OpenAI-compatible client
+                (tests inject fakes; defaults to ``openai.OpenAI``)
         """
         self._settings = settings or get_settings().llm
-        self.model_name = model_name
-        self.temperature = temperature
-        self.max_new_tokens = max_new_tokens
-        self.device = "cloud"  # Always cloud-based
-        self.provider = provider.lower()
+        self._client_factory = client_factory
+        self.model_name = model_name or self._settings.model
+        self.temperature = self._settings.temperature if temperature is None else temperature
+        self.max_new_tokens = self._settings.max_new_tokens if max_new_tokens is None else max_new_tokens
+        self.device = "cloud"
+        self.provider = (provider or self._settings.provider).lower()
         self.request_timeout = self._settings.request_timeout
         self.total_timeout = self._settings.total_timeout
+        self.provider_endpoints: List[LLMEndpointSettings] = []
+        self._local_llm = None
         
         logger.info(f"Initializing LLM with provider: {self.provider}")
-        logger.info(f"Model: {model_name}")
+        logger.info(f"Model: {self.model_name}")
         
         self._last_provider = None
         self._provider_failures: List[Dict[str, str]] = []
 
-        if self.provider in {"provider_chain", "chain", "auto"}:
+        if self.provider in _CHAIN_ALIASES:
             self._init_provider_chain()
-        elif self.provider == "openrouter":
-            self._init_provider_chain(["openrouter", "groq"])
-        elif self.provider == "groq":
-            self._init_provider_chain(["groq", "openrouter"])
-        elif self.provider == "huggingface":
-            self._init_huggingface()
+        elif self.provider in _PRESET_ORDERS:
+            self._init_provider_chain(_PRESET_ORDERS[self.provider])
+        elif self.provider in {"openai_compatible", "openai"}:
+            self._init_openai_compatible()
+        elif self.provider == "local":
+            self._init_local()
         else:
             raise ValueError(
-                f"Unknown provider: {provider}. Use 'provider_chain', 'groq', 'openrouter', or 'huggingface'"
+                f"Unknown provider: {self.provider}. Use 'provider_chain', 'openai_compatible', "
+                "'local', 'groq', 'openrouter', or 'huggingface'"
             )
+
+    def _with_wrapper_model(self, endpoint: LLMEndpointSettings) -> LLMEndpointSettings:
+        return endpoint if endpoint.model_overridden else replace(endpoint, model=self.model_name)
 
     def _init_provider_chain(self, preferred_order: Optional[List[str]] = None):
         """Initialize the OpenAI-compatible fallback chain from settings."""
         provider_order = preferred_order or list(self._settings.provider_order)
         self.provider_endpoints = [
-            endpoint if endpoint.model_overridden else replace(endpoint, model=self.model_name)
+            self._with_wrapper_model(endpoint)
             for endpoint in self._settings.chain(provider_order)
         ]
 
         if not self.provider_endpoints:
+            if provider_order == ["huggingface"]:
+                hint = "Set HUGGINGFACE_API_TOKEN"
+            else:
+                hint = ("Set GROQ_API_KEY, OPENROUTER_API_KEY or LLM_CUSTOM_<N>_BASE_URL, "
+                        "or use LLM_PROVIDER=openai_compatible with LLM_BASE_URL")
             raise ValueError(
-                "No LLM endpoint configured for provider order "
-                f"{', '.join(provider_order)}. Set GROQ_API_KEY, OPENROUTER_API_KEY "
-                "or LLM_CUSTOM_<N>_BASE_URL in .env"
+                f"No LLM endpoint configured for provider order {', '.join(provider_order)}. {hint} in .env"
             )
 
         self._use_provider_chain = True
@@ -129,32 +175,34 @@ class LLMWrapper:
             + ", ".join(endpoint.name for endpoint in self.provider_endpoints)
         )
 
-    def _init_huggingface(self):
-        """Initialize HuggingFace Inference API."""
-        hf_endpoints = self._settings.presets.get("huggingface", ())
-        api_token = hf_endpoints[0].api_key if hf_endpoints else ""
-        if not api_token:
+    def _init_openai_compatible(self):
+        """Single OpenAI-compatible endpoint (Ollama, vLLM, LM Studio, OpenAI, ...)."""
+        if not self._settings.base_url:
             raise ValueError(
-                "HUGGINGFACE_API_TOKEN not found in environment. "
-                "Please set it in .env file"
+                "LLM_PROVIDER=openai_compatible requires LLM_BASE_URL "
+                "(e.g. http://localhost:11434/v1 for Ollama); LLM_API_KEY is optional"
             )
-        
-        logger.info(f"Initializing HuggingFace Inference API: {self.model_name}")
-        logger.info("Using HuggingFace serverless inference")
-        
-        try:
-            # Use OpenAI-compatible client for HuggingFace
-            self.client = OpenAI(
-                base_url="https://router.huggingface.co/v1",
-                api_key=api_token,
-                timeout=self.request_timeout,
-                max_retries=0,
-            )
-            logger.info("HuggingFace Inference API initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Error initializing HuggingFace LLM: {e}")
-            raise
+        self.provider_endpoints = [LLMEndpointSettings(
+            name="openai_compatible",
+            base_url=self._settings.base_url,
+            api_key=self._settings.api_key,
+            model=self.model_name,
+            extra_headers=MappingProxyType({}),
+        )]
+        self._use_provider_chain = True
+        logger.info(f"OpenAI-compatible endpoint initialized: {self._settings.base_url}")
+
+    def _init_local(self):
+        """In-process llama.cpp model (optional dependency, loaded lazily)."""
+        from .local_llm import LocalLlamaCppLLM
+
+        self._local_llm = LocalLlamaCppLLM(
+            self._settings,
+            temperature=self.temperature,
+            max_new_tokens=self.max_new_tokens,
+        )
+        self._use_provider_chain = False
+        logger.info("In-process local LLM initialized")
     
     def generate(self, prompt: str) -> str:
         """
@@ -167,15 +215,17 @@ class LLMWrapper:
             Generated text
         """
         try:
-            if getattr(self, "_use_provider_chain", False):
-                return self._generate_with_provider_chain(prompt)
-            return self._generate_openai_style(prompt)
+            if self._local_llm is not None:
+                text = self._local_llm.generate(prompt)
+                self._last_provider = "local"
+                return text
+            return self._generate_with_provider_chain(prompt)
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             raise
 
     def _generate_with_provider_chain(self, prompt: str) -> str:
-        """Generate with fallback across Groq and OpenRouter endpoints."""
+        """Generate with fallback across the configured OpenAI-compatible endpoints."""
         self._provider_failures = []
         last_error: Optional[Exception] = None
         deadline = time.monotonic() + self.total_timeout
@@ -203,8 +253,11 @@ class LLMWrapper:
                     max_tokens=self.max_new_tokens,
                     timeout=timeout,
                 )
+                content = completion.choices[0].message.content if completion.choices else None
+                if not content or not str(content).strip():
+                    raise RuntimeError("empty completion content")
                 self._last_provider = endpoint.name
-                return completion.choices[0].message.content.strip()
+                return str(content).strip()
             except Exception as exc:
                 last_error = exc
                 error_type = self._classify_provider_error(exc)
@@ -234,7 +287,8 @@ class LLMWrapper:
     ) -> OpenAI:
         """Create OpenAI-compatible client with provider-specific headers."""
         default_headers = dict(endpoint.extra_headers) or None
-        return OpenAI(
+        factory = self._client_factory or OpenAI
+        return factory(
             base_url=endpoint.base_url,
             api_key=api_key,
             default_headers=default_headers,
@@ -266,19 +320,6 @@ class LLMWrapper:
         except ValueError:
             return None
     
-    def _generate_openai_style(self, prompt: str) -> str:
-        """Generate using OpenAI-compatible client (HuggingFace)."""
-        completion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            temperature=self.temperature,
-            max_tokens=self.max_new_tokens,
-            timeout=self.request_timeout,
-        )
-        return completion.choices[0].message.content.strip()
-    
     def get_llm_instance(self):
         """Return None; LangChain LLM client has been replaced by OpenAI-compatible clients."""
         return None
@@ -291,8 +332,10 @@ class LLMWrapper:
             "temperature": self.temperature,
             "max_tokens": self.max_new_tokens,
             "last_provider": self._last_provider,
-            "provider_chain": [
-                endpoint.name for endpoint in getattr(self, "provider_endpoints", [])
+            "provider_chain": [endpoint.name for endpoint in self.provider_endpoints],
+            "endpoints": [
+                {"name": endpoint.name, "base_url": endpoint.base_url, "model": endpoint.model}
+                for endpoint in self.provider_endpoints
             ],
             "provider_failures": self._provider_failures,
         }
