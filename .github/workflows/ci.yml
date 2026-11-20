@@ -244,10 +244,10 @@ jobs:
       - name: Relax requires for Moodle 4.4 (CI copy only)
         if: matrix.moodle == 'MOODLE_404_STABLE'
         run: |
-          sed -i 's/\$plugin->requires = 2024100700;/$plugin->requires = 2024042200;/' \
+          sed -i 's/\$plugin->requires *= 2024100700;/$plugin->requires = 2024042200;/' \
             "plugin/moodle-plugins/${{ matrix.plugin }}/version.php"
           if [ -d "$EXTRA_PLUGINS_DIR/mod_airagmaterial" ]; then
-            sed -i 's/\$plugin->requires = 2024100700;/$plugin->requires = 2024042200;/' \
+            sed -i 's/\$plugin->requires *= 2024100700;/$plugin->requires = 2024042200;/' \
               "$EXTRA_PLUGINS_DIR/mod_airagmaterial/version.php"
           fi
           grep -n 'plugin->requires' "plugin/moodle-plugins/${{ matrix.plugin }}/version.php"
