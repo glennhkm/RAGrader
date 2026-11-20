@@ -30,24 +30,29 @@ First public release. It summarizes three development cycles.
 
 ### Changed
 
-- AI grading is refused while any linked material is not fully vectorized (previously it silently ran on partial material).
-- Chroma telemetry is disabled by default.
 - Document image captions are labelled in the answer's language; caption text and answer paths are kept out of INFO logs.
 
 ### Fixed
 
 - Moodle-rubric grading crashed (undefined `get_method()`).
 - Reference-file vector deletes never sent the filename (`&amp;` separators).
-- Backup/restore and duplication of AI RAG Assignments failed (`prepare_activity_structure` was missing).
+- Backup/restore and duplication of AI RAG Assignments and AI RAG Materials failed (`prepare_activity_structure` was missing); restoring a course now also re-links assignments to their restored materials.
 - Deleting a file that has no vectors was reported as a failure.
+- A vector store failure while deleting a material file was reported as HTTP 200 `{"success": false}` (indistinguishable from "nothing to delete"), so the plugins dropped the retry; `DELETE /course/materials/file` now returns 500, and a re-upload whose old vectors cannot be removed fails instead of adding duplicates.
 - Grading was run while linked materials were only partially vectorized; it is now refused until vectorization finishes.
 - `DELETE /collections` now also removes the uploaded files of the collection.
 - Chroma telemetry is off by default.
+- Privacy context deletion in `local_assign_ai_rag` now also anonymises teacher references (config, rubric and course material rows).
+
+### Security
+
+- The reference (model answer) file of an AI RAG Assignment could be downloaded by any user with course access, including students; it now requires `mod/airagassign:grade`.
 
 ### Upgrade notes
 
-- After upgrading, all AI RAG Materials and reference files are re-vectorized in the background (Moodle cron). Grading of affected assignments is refused until that finishes.
-- Legacy vectors of files that were removed before the upgrade may remain in the course collection. This is harmless for retrieval, which is owner-scoped; clear the course collection to remove them.
-- The backend must be 1.4.0 for owner scoping; older backends keep working with filename scoping.
+- Upgrade the backend to 1.4.0 BEFORE upgrading the Moodle plugins. The Cycle 3 plugins require backend 1.4.0: an older backend ignores `material_id`, so plugin deletes would remove other activities' vectors of the same filename, and materials vectorized there would be stored unowned and then not be found by owner-scoped grading after a later backend upgrade.
+- After upgrading, all AI RAG Materials and reference files are re-vectorized in the background (Moodle cron). Grading of affected assignments is refused until that finishes; retry gradings that failed during the upgrade once cron has finished re-vectorization.
+- Legacy vectors of files that were removed before the upgrade may remain in the course collection. AI RAG Assignment grading is owner-scoped and ignores them, but `local_assign_ai_rag` grades against the whole course collection and can still retrieve them; if that matters, clear the course collection and then re-vectorize the course's materials.
+- The AI RAG Material and AI RAG Assignment activity modules now call the RAG server through Moodle's HTTP client, which honours `$CFG->proxyhost`. If a proxy is configured, add the RAG server host to `$CFG->proxybypass`.
 
 [Unreleased]: https://github.com/glennhkm/RAGrader/compare/v1.0.0...HEAD
