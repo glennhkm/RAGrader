@@ -39,7 +39,7 @@ final class pluginfile_test extends \advanced_testcase {
     /**
      * Create an assignment with a manual reference file plus an enrolled student and teacher.
      *
-     * @return array [course, cm, context, student, teacher]
+     * @return array [course, cmid, context, student, teacher]
      */
     private function setup_assignment(): array {
         $this->resetAfterTest();
@@ -53,16 +53,31 @@ final class pluginfile_test extends \advanced_testcase {
         ], 'model answer key');
         $student = $generator->create_and_enrol($course, 'student');
         $teacher = $generator->create_and_enrol($course, 'editingteacher');
-        $cm = get_fast_modinfo($course)->get_cm($assign->cmid);
-        return [$course, $cm, $context, $student, $teacher];
+        return [$course, (int)$assign->cmid, $context, $student, $teacher];
+    }
+
+    /**
+     * Log in as a user and return the course module as that user sees it.
+     *
+     * Modinfo is per user: a cm_info fetched before setUser() is not visible to the
+     * logged-in user, and require_login() would redirect.
+     *
+     * @param \stdClass $course Course.
+     * @param int $cmid Course module id.
+     * @param \stdClass $user User to log in as.
+     * @return \cm_info
+     */
+    private function login_as(\stdClass $course, int $cmid, \stdClass $user): \cm_info {
+        $this->setUser($user);
+        return get_fast_modinfo($course, $user->id)->get_cm($cmid);
     }
 
     /**
      * An enrolled student cannot download the manual reference file (the answer key).
      */
     public function test_student_cannot_download_manualfile(): void {
-        [$course, $cm, $context, $student] = $this->setup_assignment();
-        $this->setUser($student);
+        [$course, $cmid, $context, $student] = $this->setup_assignment();
+        $cm = $this->login_as($course, $cmid, $student);
 
         $this->expectException(\required_capability_exception::class);
         airagassign_pluginfile($course, $cm, $context, 'manualfile', [0, 'key.txt'], true);
@@ -74,8 +89,8 @@ final class pluginfile_test extends \advanced_testcase {
      * The existing file is not requested because send_stored_file() ends the request.
      */
     public function test_teacher_passes_manualfile_access_check(): void {
-        [$course, $cm, $context, , $teacher] = $this->setup_assignment();
-        $this->setUser($teacher);
+        [$course, $cmid, $context, , $teacher] = $this->setup_assignment();
+        $cm = $this->login_as($course, $cmid, $teacher);
 
         $this->assertTrue(has_capability('mod/airagassign:grade', $context));
         $this->assertFalse(airagassign_pluginfile($course, $cm, $context, 'manualfile', [0, 'missing.txt'], true));
@@ -85,8 +100,8 @@ final class pluginfile_test extends \advanced_testcase {
      * Other file areas keep their behaviour: nothing is served, for students too.
      */
     public function test_other_areas_are_not_served(): void {
-        [$course, $cm, $context, $student] = $this->setup_assignment();
-        $this->setUser($student);
+        [$course, $cmid, $context, $student] = $this->setup_assignment();
+        $cm = $this->login_as($course, $cmid, $student);
 
         $this->assertFalse(airagassign_pluginfile($course, $cm, $context, 'intro', [0, 'key.txt'], true));
     }
