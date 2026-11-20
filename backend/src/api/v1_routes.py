@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, File, Form, HTTPException, Path as PathParam, UploadFile
 from loguru import logger
 
-from ..vectorstore.filters import build_chroma_where_filter
+from ..vectorstore.filters import EmptyScopeFilterError, build_explicit_scope_filter
 from .locking import LockAcquisitionError
 from .request_utils import normalize_grade, optional_page, safe_filename, save_upload, validate_material_filename
 from .v1_models import (
@@ -232,11 +232,20 @@ def grade_in_namespace(
 
     where_filter = None
     if request.material_filter is not None:
-        where_filter = build_chroma_where_filter(
-            modules=request.material_filter.modules,
-            sources=request.material_filter.sources,
-            tags=request.material_filter.tags,
-        )
+        try:
+            where_filter = build_explicit_scope_filter(
+                modules=request.material_filter.modules,
+                sources=request.material_filter.sources,
+                tags=request.material_filter.tags,
+            )
+        except EmptyScopeFilterError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "material_filter must contain at least one non-empty module, source or tag; "
+                    "omit material_filter to grade against all namespace materials."
+                ),
+            ) from exc
 
     try:
         grader = get_grader()

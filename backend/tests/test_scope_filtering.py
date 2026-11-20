@@ -11,6 +11,8 @@ from langchain_core.embeddings import Embeddings
 from src.vectorstore.chroma_store import VectorStore
 from src.vectorstore.filters import (
     build_chroma_where_filter,
+    build_explicit_scope_filter,
+    EmptyScopeFilterError,
     build_collection_name,
     sanitize_chunk_metadata,
 )
@@ -119,6 +121,24 @@ class ScopeFilteringTest(unittest.TestCase):
                     "ignored_blank": "   ",
                 }
             ),
+        )
+
+    def test_explicit_scope_filter_rejects_filters_that_normalize_to_nothing(self):
+        # An explicitly requested scope must never silently widen to the whole
+        # collection: blank values, None tags and empty lists are rejected.
+        for kwargs in (
+            {},
+            {"modules": []},
+            {"modules": ["  "], "sources": [""]},
+            {"tags": {"topic": None, "week": []}},
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(EmptyScopeFilterError):
+                    build_explicit_scope_filter(**kwargs)
+
+        self.assertEqual(
+            {"source": {"$eq": "week-1.txt"}},
+            build_explicit_scope_filter(sources=["week-1.txt", " "]),
         )
 
     def test_real_chroma_filters_week1_to_week3_and_excludes_week4(self):

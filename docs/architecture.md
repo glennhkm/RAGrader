@@ -53,3 +53,5 @@ LMS-agnostic endpoints for namespace-isolated RAG autograding (`namespace` must 
 | `DELETE /v1/namespaces/{namespace}` | Path param `namespace` | Delete all vectors and uploaded files for a namespace |
 | `POST /v1/namespaces/{namespace}/grade` | JSON: `question`, `essay`, optional `rubric`, `maximum_grade` (default `100.0`), optional `material_filter` (`modules`, `sources`, `tags`) | Grade a student answer against namespace materials, optionally scoped by `material_filter` |
 
+**Scope filters fail closed:** omitting `material_filter` (or sending `null`) searches every material in the namespace. A `material_filter` that is present but selects nothing (`{}`, empty lists, blank strings, `null` tag values) returns **HTTP 400** instead of silently widening retrieval to the whole namespace. The same rule applies to an explicitly sent but empty `source_filter` / `module_filter` on `POST /assign/answer`.
+

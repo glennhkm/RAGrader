@@ -115,6 +115,30 @@ class V1EndpointTest(unittest.TestCase):
             self.fake_grader.last_grade_kwargs["metadata_filter"],
         )
 
+    def test_grade_rejects_material_filter_that_scopes_nothing(self):
+        # Sending material_filter means "restrict retrieval"; an empty or blank
+        # filter must fail loudly (400) instead of grading against everything.
+        for material_filter in ({}, {"modules": []}, {"modules": [" "], "tags": {"topic": None}}):
+            with self.subTest(material_filter=material_filter):
+                self.fake_grader.last_grade_kwargs = None
+                response = self.client.post(
+                    "/v1/namespaces/cs-101/grade",
+                    json={"question": "Q", "essay": "A", "material_filter": material_filter},
+                )
+                self.assertEqual(400, response.status_code)
+                self.assertIn("material_filter", response.json()["detail"])
+                self.assertIsNone(self.fake_grader.last_grade_kwargs)
+
+    def test_grade_without_or_with_null_material_filter_is_unscoped(self):
+        for extra in ({}, {"material_filter": None}):
+            with self.subTest(extra=extra):
+                response = self.client.post(
+                    "/v1/namespaces/cs-101/grade",
+                    json={"question": "Q", "essay": "A", **extra},
+                )
+                self.assertEqual(200, response.status_code)
+                self.assertIsNone(self.fake_grader.last_grade_kwargs["metadata_filter"])
+
     def test_list_delete_file_and_clear_namespace(self):
         self.client.post(
             "/v1/namespaces/bio-101/materials",
