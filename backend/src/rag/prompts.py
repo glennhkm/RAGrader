@@ -6,7 +6,7 @@ historical prompt, kept byte-for-byte (see tests/fixtures/prompt_template_id.txt
 """
 
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence, Tuple
 
 SUPPORTED_LANGUAGES = ("en", "id")
 FALLBACK_LANGUAGE = "id"  # inconclusive detection keeps the historical behavior
@@ -165,3 +165,22 @@ def resolve_language(requested: Optional[str], default: str, *texts: Optional[st
     if choice == "auto":
         return detect_language(*texts)
     return choice
+
+
+# Labels for image captions appended to an answer extracted from a document.
+# The extracted text becomes the student's essay, so its labels follow the
+# grading language instead of always being Indonesian.
+IMAGE_CAPTION_LABELS: Dict[str, Tuple[str, str]] = {
+    "id": ("Deskripsi Gambar dalam Dokumen", "Gambar"),
+    "en": ("Image Descriptions in the Document", "Image"),
+}
+
+
+def format_image_captions(captions: Sequence[str], language: str) -> str:
+    """Render captions as a labelled section to append to extracted answer text."""
+    if not captions:
+        return ""
+    heading, item = IMAGE_CAPTION_LABELS.get(language, IMAGE_CAPTION_LABELS[FALLBACK_LANGUAGE])
+    lines = [f"\n\n--- {heading} ---\n"]
+    lines.extend(f"\n[{item} {index}]: {caption}" for index, caption in enumerate(captions, 1))
+    return "".join(lines)
