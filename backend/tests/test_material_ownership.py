@@ -109,6 +109,38 @@ class MaterialOwnershipTest(unittest.TestCase):
         self.assertEqual(["new0"], got["ids"])
         self.assertEqual("airagmaterial:1", got["metadatas"][0]["material_id"])
 
+    def test_store_error_in_replace_before_add_fails_ingest_without_duplicating(self):
+        _add(self.collection, ["old"], "notes.txt", "airagmaterial:1")
+        grader = EssayGrader.__new__(EssayGrader)
+        grader.enable_vision_captioning = False
+        grader.document_loader = MagicMock()
+        grader.document_loader.load_multiple_documents.return_value = {
+            "documents": [Document(page_content="x", metadata={"source": "notes.txt"})],
+            "images": [], "captions": [], "files_processed": ["notes.txt"], "errors": [],
+        }
+        grader.preprocessor = MagicMock()
+        grader.preprocessor.process_multimodal_content.return_value = [
+            Document(page_content="chunk", metadata={"source": "notes.txt"})]
+        grader.rag_pipeline = MagicMock()
+        grader.rag_pipeline.vectorstore = self.store
+        added = []
+        self.store.add_documents = lambda chunks, course_id=None: added.extend(chunks)
+
+        def broken_get_collection(name):
+            raise RuntimeError("chroma unavailable")
+
+        self.store.client = MagicMock()
+        self.store.client.get_collection.side_effect = broken_get_collection
+
+        from pathlib import Path
+        result = grader.ingest_course_materials(
+            [Path("notes.txt")], course_id="204", material_id="airagmaterial:1")
+
+        self.assertFalse(result["success"])
+        self.assertIn("chroma unavailable", result["message"])
+        self.assertEqual([], added)
+        self.assertEqual({"old"}, self._ids())
+
     def test_where_filter_material_ids(self):
         ids = ["airagmaterial:1", "airagassign:5"]
         self.assertEqual({"material_id": {"$in": ids}}, build_chroma_where_filter(material_ids=ids))

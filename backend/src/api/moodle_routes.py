@@ -588,7 +588,7 @@ def delete_course_material_file(
             
         return {
             "success": success,
-            "message": f"Successfully deleted vectors for '{filename}'" if success else f"No vectors found or failed to delete for '{filename}'",
+            "message": f"Successfully deleted vectors for '{filename}'" if success else f"No vectors found for '{filename}'",
             "course_id": course_id,
             "filename": filename
         }

@@ -396,7 +396,11 @@ class VectorStore:
             material_id: Optional owner id (e.g. 'airagmaterial:12')
 
         Returns:
-            True if deletion was successful, False otherwise
+            True if chunks were deleted, False if there was nothing to delete
+            (no matching chunks, or the collection does not exist).
+
+        Raises:
+            Exception: any other store error is re-raised.
         """
         col_name = self._get_collection_name(course_id)
         logger.info(f"Attempting to delete document '{source_name}' from collection: {col_name}")
@@ -428,8 +432,11 @@ class VectorStore:
             logger.info(f"Collection {col_name} does not exist; nothing to delete")
             return False
         except Exception as e:
+            # A genuine store failure must not look like "nothing to delete":
+            # callers (DELETE route, replace-before-add) have to fail loudly so
+            # the Moodle plugins keep the material queued for retry.
             logger.error(f"Error deleting chunks for '{source_name}': {e}")
-            return False
+            raise
 
     def clear(self, course_id: Optional[str] = None):
         """

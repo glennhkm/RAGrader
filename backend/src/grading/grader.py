@@ -169,6 +169,8 @@ class EssayGrader:
             if chunks:
                 # Uploading the same Moodle file again is a replacement, not an
                 # append operation. Remove prior chunks only after parsing works.
+                # A store error here propagates (ingest fails) instead of
+                # appending duplicates next to the stale chunks.
                 for source_name in result.get('files_processed', []):
                     self.rag_pipeline.vectorstore.delete_document_by_source(
                         source_name=source_name,
@@ -448,7 +450,8 @@ class EssayGrader:
             material_id: Optional owner id; without it only unowned chunks are removed
             
         Returns:
-            True if deletion was successful, False otherwise
+            True if chunks were deleted, False if there was nothing to delete.
+            Store errors propagate so callers can report a real failure.
         """
         success = self.rag_pipeline.vectorstore.delete_document_by_source(
             source_name=filename,

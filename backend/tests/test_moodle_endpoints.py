@@ -188,6 +188,32 @@ class MoodleEndpointTest(unittest.TestCase):
         self.assertEqual(Path(self.tempdir.name) / "uploads" / "course_12" / "airagmaterial_7" / "a.txt", path)
         self.assertEqual("airagmaterial:7", spy.call_args.kwargs["material_id"])
 
+    def test_delete_forwards_valid_material_id_and_legacy_delete_passes_none(self):
+        with patch.object(self.fake_grader, "delete_course_material_file",
+                          return_value=True) as spy:
+            delete_course_material_file(course_id=12, filename="a.txt",
+                                        material_id=" airagassign:9 ")
+            delete_course_material_file(course_id=12, filename="a.txt", material_id=None)
+        self.assertEqual(call("12", "a.txt", material_id="airagassign:9"), spy.call_args_list[0])
+        self.assertEqual(call("12", "a.txt"), spy.call_args_list[1])
+
+    def test_delete_store_failure_returns_500_not_success_false(self):
+        with patch.object(self.fake_grader, "delete_course_material_file",
+                          side_effect=RuntimeError("chroma unavailable")):
+            with self.assertRaises(HTTPException) as ctx:
+                delete_course_material_file(course_id=12, filename="a.txt",
+                                            material_id="airagmaterial:7")
+        self.assertEqual(500, ctx.exception.status_code)
+
+    def test_upload_surfaces_ingest_store_failure_as_500(self):
+        failed = {"success": False, "message": "Error: chroma unavailable"}
+        with patch.object(self.fake_grader, "ingest_course_materials", return_value=failed):
+            with self.assertRaises(HTTPException) as ctx:
+                upload_course_material(file=UploadFile(filename="a.txt", file=BytesIO(b"x")),
+                                       course_id=12, course_name="",
+                                       material_id="airagmaterial:7")
+        self.assertEqual(500, ctx.exception.status_code)
+
     def test_grading_rejects_explicit_filter_that_scopes_nothing(self):
         for filters in ({"source_filter": []}, {"source_filter": ["  "]}, {"module_filter": [""]}):
             with self.subTest(filters=filters):
