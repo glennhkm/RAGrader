@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from langchain_core.embeddings import Embeddings
 from loguru import logger
 
-from ..utils.config import EmbeddingSettings, get_settings
+from ..utils.config import LOCAL_FASTEMBED_EMBEDDING_MODEL, EmbeddingSettings, get_settings
 
 
 class EmbeddingMismatchError(RuntimeError):
@@ -92,13 +92,19 @@ def _load_local_model(backend: str, model: str, device: str) -> Any:
                     "fastembed: pip install -r requirements-local.txt"
                 ) from exc
             kwargs = {"cuda": True} if device == "cuda" else {}
+            if device == "mps":
+                logger.warning(
+                    "fastembed has no MPS support; embedding on CPU. Use "
+                    "EMBEDDING_LOCAL_BACKEND=sentence_transformers to run on MPS."
+                )
             try:
                 loaded = TextEmbedding(model_name=model, **kwargs)
             except ValueError as exc:
                 raise ValueError(
-                    f"fastembed cannot load embedding model {model!r}: {exc}. "
-                    "Choose a fastembed-supported model or set "
-                    "EMBEDDING_LOCAL_BACKEND=sentence_transformers"
+                    f"fastembed cannot load EMBEDDING_MODEL={model!r} ({exc}). Pick a "
+                    f"fastembed model (default {LOCAL_FASTEMBED_EMBEDDING_MODEL!r}; see "
+                    "fastembed.TextEmbedding.list_supported_models()) or set "
+                    "EMBEDDING_LOCAL_BACKEND=sentence_transformers for any Hugging Face model."
                 ) from exc
         else:
             try:

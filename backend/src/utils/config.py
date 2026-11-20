@@ -589,32 +589,71 @@ def _build_llm_settings(reader: _EnvReader) -> LLMSettings:
 _DEVICE_ALIASES = {"cloud": "cpu", "gpu": "cuda"}
 
 
+# Default models per provider/type. Cloud/legacy defaults are unchanged so the
+# existing collection names (which embed the model id) stay stable; local
+# runtimes get models they actually ship (fastembed has no dense BAAI/bge-m3).
+LEGACY_EMBEDDING_MODEL = "BAAI/bge-m3"
+LOCAL_FASTEMBED_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+_RERANKER_MODEL_DEFAULTS = {
+    "pinecone": "bge-reranker-v2-m3",           # Pinecone Inference model name
+    "local_cross_encoder": "BAAI/bge-reranker-v2-m3",
+    "http_rerank": "BAAI/bge-reranker-v2-m3",
+    "llm_rerank": "",                            # a chat model; must be configured
+    "bm25": "",
+    "none": "",
+}
+
+
+def _default_embedding_model(provider: str, local_backend: str) -> str:
+    if provider == "local" and local_backend == "fastembed":
+        return LOCAL_FASTEMBED_EMBEDDING_MODEL
+    return LEGACY_EMBEDDING_MODEL
+
+
+def _sync_resolved_models(raw: Dict[str, Any], embedding_model: str, reranker_model: str) -> None:
+    """Make the resolved YAML agree with the typed settings for model ids.
+
+    The pipeline still reads ``raw['embeddings']['model_name']`` and
+    ``raw['retrieval']['reranker_model']``; their YAML placeholders default to
+    empty so the provider-aware defaults above apply.
+    """
+    if isinstance(raw.get("embeddings"), dict):
+        raw["embeddings"]["model_name"] = embedding_model
+    if isinstance(raw.get("retrieval"), dict):
+        raw["retrieval"]["reranker_model"] = reranker_model
+
+
 def _build_settings(reader: _EnvReader) -> Settings:
     hf_token = reader.str("HUGGINGFACE_API_TOKEN")
 
+    embedding_provider = reader.choice("EMBEDDING_PROVIDER", "huggingface",
+                                       ("huggingface", "openai_compatible", "local"),
+                                       aliases={"hf": "huggingface", "openai": "openai_compatible"})
+    embedding_backend = reader.choice("EMBEDDING_LOCAL_BACKEND", "fastembed",
+                                      ("fastembed", "sentence_transformers"),
+                                      aliases={"sentence-transformers": "sentence_transformers"})
     embeddings = EmbeddingSettings(
-        provider=reader.choice("EMBEDDING_PROVIDER", "huggingface",
-                               ("huggingface", "openai_compatible", "local"),
-                               aliases={"hf": "huggingface", "openai": "openai_compatible"}),
-        model=reader.str("EMBEDDING_MODEL", "BAAI/bge-m3", ("embeddings", "model_name")),
+        provider=embedding_provider,
+        model=reader.str("EMBEDDING_MODEL", _default_embedding_model(embedding_provider, embedding_backend),
+                         ("embeddings", "model_name")),
         base_url=reader.str("EMBEDDING_BASE_URL"),
         api_key=reader.str("EMBEDDING_API_KEY"),
         device=reader.choice("EMBEDDING_DEVICE", "cpu", ("cpu", "cuda", "mps"),
                              ("embeddings", "device"), _DEVICE_ALIASES),
-        local_backend=reader.choice("EMBEDDING_LOCAL_BACKEND", "fastembed",
-                                    ("fastembed", "sentence_transformers"),
-                                    aliases={"sentence-transformers": "sentence_transformers"}),
+        local_backend=embedding_backend,
         batch_size=reader.int("EMBEDDING_BATCH_SIZE", 64, minimum=1),
         huggingface_token=hf_token,
     )
 
+    reranker_type = reader.choice("RERANKER_TYPE", "pinecone",
+                                  ("none", "bm25", "local_cross_encoder", "http_rerank", "llm_rerank", "pinecone"),
+                                  ("retrieval", "reranker_type"),
+                                  {"bge": "pinecone", "disabled": "none", "cross_encoder": "local_cross_encoder"})
     reranker = RerankerSettings(
         enabled=reader.bool("ENABLE_RERANKING", False, ("retrieval", "enable_reranking")),
-        type=reader.choice("RERANKER_TYPE", "pinecone",
-                           ("none", "bm25", "local_cross_encoder", "http_rerank", "llm_rerank", "pinecone"),
-                           ("retrieval", "reranker_type"),
-                           {"bge": "pinecone", "disabled": "none", "cross_encoder": "local_cross_encoder"}),
-        model=reader.str("RERANKER_MODEL", "bge-reranker-v2-m3", ("retrieval", "reranker_model")),
+        type=reranker_type,
+        model=reader.str("RERANKER_MODEL", _RERANKER_MODEL_DEFAULTS.get(reranker_type, ""),
+                         ("retrieval", "reranker_model")),
         base_url=reader.str("RERANKER_BASE_URL"),
         api_key=reader.str("RERANKER_API_KEY"),
         api_style=reader.choice("RERANKER_API_STYLE", "cohere", ("cohere", "tei")),
@@ -650,6 +689,8 @@ def _build_settings(reader: _EnvReader) -> Settings:
         max_upload_size_mb=reader.int("MAX_UPLOAD_SIZE_MB", 50, minimum=1),
         instance_id=reader.str("HOSTNAME") or socket.gethostname(),
     )
+
+    _sync_resolved_models(reader.raw, embeddings.model, reranker.model)
 
     return Settings(
         llm=_build_llm_settings(reader),

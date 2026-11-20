@@ -8,6 +8,7 @@ from pathlib import Path
 from src.utils.config import (
     ConfigError,
     get_settings,
+    LOCAL_FASTEMBED_EMBEDDING_MODEL,
     load_settings,
     override_settings,
     reset_settings,
@@ -48,6 +49,42 @@ class SettingsDefaultsTest(unittest.TestCase):
         self.assertEqual("https://router.huggingface.co/v1", s.vision.base_url)
         self.assertEqual("Qwen/Qwen2.5-VL-7B-Instruct", s.vision.model)
         self.assertEqual("auto", s.prompt.language)
+
+    def test_model_defaults_follow_provider_and_reranker_type(self):
+        # Legacy (cloud) defaults are unchanged so existing collection names stay stable.
+        legacy = load_settings(env={})
+        self.assertEqual("BAAI/bge-m3", legacy.embeddings.model)
+        self.assertEqual("bge-reranker-v2-m3", legacy.reranker.model)
+        self.assertEqual("BAAI/bge-m3", legacy.raw["embeddings"]["model_name"])
+        self.assertEqual("bge-reranker-v2-m3", legacy.raw["retrieval"]["reranker_model"])
+
+        # Local providers default to models the local runtimes actually ship.
+        local = load_settings(env={"EMBEDDING_PROVIDER": "local", "RERANKER_TYPE": "local_cross_encoder"})
+        self.assertEqual(LOCAL_FASTEMBED_EMBEDDING_MODEL, local.embeddings.model)
+        self.assertEqual("BAAI/bge-reranker-v2-m3", local.reranker.model)
+        # The resolved YAML seen by the pipeline agrees with the typed settings.
+        self.assertEqual(local.embeddings.model, local.raw["embeddings"]["model_name"])
+        self.assertEqual(local.reranker.model, local.raw["retrieval"]["reranker_model"])
+
+        st = load_settings(env={"EMBEDDING_PROVIDER": "local", "EMBEDDING_LOCAL_BACKEND": "sentence_transformers"})
+        self.assertEqual("BAAI/bge-m3", st.embeddings.model)
+        self.assertEqual("", load_settings(env={"RERANKER_TYPE": "llm_rerank"}).reranker.model)
+
+        explicit = load_settings(env={"EMBEDDING_PROVIDER": "local", "EMBEDDING_MODEL": "BAAI/bge-small-en-v1.5",
+                                      "RERANKER_TYPE": "local_cross_encoder", "RERANKER_MODEL": "Xenova/ms-marco-MiniLM-L-6-v2"})
+        self.assertEqual("BAAI/bge-small-en-v1.5", explicit.embeddings.model)
+        self.assertEqual("Xenova/ms-marco-MiniLM-L-6-v2", explicit.reranker.model)
+
+    def test_local_defaults_are_supported_by_installed_fastembed(self):
+        try:
+            from fastembed import TextEmbedding
+            from fastembed.rerank.cross_encoder import TextCrossEncoder
+        except ImportError:
+            self.skipTest("fastembed (requirements-local.txt) not installed")
+        self.assertIn(LOCAL_FASTEMBED_EMBEDDING_MODEL,
+                      [m["model"] for m in TextEmbedding.list_supported_models()])
+        reranker = load_settings(env={"RERANKER_TYPE": "local_cross_encoder"}).reranker.model
+        self.assertIn(reranker, [m["model"] for m in TextCrossEncoder.list_supported_models()])
 
     def test_vectorstore_telemetry_defaults_off_and_follows_env(self):
         self.assertFalse(load_settings(env={}).vectorstore.anonymized_telemetry)

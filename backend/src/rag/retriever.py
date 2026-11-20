@@ -62,6 +62,9 @@ class Retriever:
         self.reranker_type = _normalize_type(reranker_type)
         self.reranker_model = reranker_model
         self._settings = settings
+        # Set when the configured reranker could not start and BM25 is used instead.
+        self.requested_reranker_type = self.reranker_type
+        self.reranker_error: Optional[str] = None
         
         self._reranker: Optional[BaseReranker] = reranker
         if reranker is not None:
@@ -85,12 +88,19 @@ class Retriever:
         if self.reranker_type == "none":
             self._reranker = None
             return
+        self.requested_reranker_type = self.reranker_type
+        self.reranker_error = None
         try:
             self._reranker = create_reranker(self._reranker_settings())
             logger.info(f"Reranker initialized: {self.reranker_type} ({self.reranker_model})")
         except Exception as e:
-            logger.warning(f"Failed to initialize {self.reranker_type} reranker: {e}")
-            logger.info("Falling back to BM25 reranker")
+            # Grading keeps working, but this is a misconfiguration the operator
+            # must see: log it as an error and report it in the status endpoints.
+            self.reranker_error = str(e)
+            logger.error(
+                f"Configured reranker {self.reranker_type} ({self.reranker_model}) failed to start: {e}. "
+                "Falling back to BM25; fix the RERANKER_* settings to restore it."
+            )
             self._reranker = BM25Reranker()
             self.reranker_type = "bm25"
     
@@ -152,6 +162,9 @@ class Retriever:
             "rerank_top_k": self.rerank_top_k,
             "reranker_type": self.reranker_type,
             "reranker_model": "BM25" if self.reranker_type == "bm25" else self.reranker_model,
+            "requested_reranker_type": self.requested_reranker_type,
+            "reranker_fallback": self.reranker_error is not None,
+            "reranker_error": self.reranker_error,
             "available_rerankers": self.RERANKER_TYPES
         }
     

@@ -314,6 +314,7 @@ class LocalCrossEncoderReranker(BaseReranker):
     def _load(model: str, device: str, backend: Optional[str]):
         backends = [backend] if backend else ["fastembed", "sentence_transformers"]
         errors = []
+        model_rejected = False
         for name in backends:
             key = (name, model, device)
             with _CROSS_ENCODER_LOCK:
@@ -323,15 +324,27 @@ class LocalCrossEncoderReranker(BaseReranker):
                     if name == "fastembed":
                         from fastembed.rerank.cross_encoder import TextCrossEncoder
                         kwargs = {"cuda": True} if device == "cuda" else {}
+                        if device == "mps":
+                            logger.warning("fastembed has no MPS support; cross-encoder runs on CPU")
                         loaded = TextCrossEncoder(model_name=model, **kwargs)
                     else:
                         from sentence_transformers import CrossEncoder
                         loaded = CrossEncoder(model, device=device)
                 except ImportError as exc:
+                    errors.append(f"{name}: not installed ({exc})")
+                    continue
+                except ValueError as exc:
+                    # fastembed rejects models outside its catalog; try the next backend.
+                    model_rejected = True
                     errors.append(f"{name}: {exc}")
                     continue
                 _CROSS_ENCODER_CACHE[key] = loaded
                 return name, loaded
+        if model_rejected:
+            raise ValueError(
+                f"No local cross-encoder backend can load RERANKER_MODEL={model!r} "
+                "(fastembed default: 'BAAI/bge-reranker-v2-m3'). " + "; ".join(errors)
+            )
         raise ImportError(
             "RERANKER_TYPE=local_cross_encoder requires fastembed or sentence-transformers "
             "(pip install -r requirements-local.txt). " + "; ".join(errors)

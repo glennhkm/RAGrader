@@ -134,4 +134,6 @@ class MoodleStatusResponse(BaseModel):
     vectorstore: Dict[str, Any] = Field(default_factory=dict)
     llm_info: Dict[str, Any] = Field(default_factory=dict)
     embedding_model: str = ""
+    # Retriever/reranker state, incl. reranker_fallback and reranker_error.
+    retrieval: Dict[str, Any] = Field(default_factory=dict)
     ready: bool = True
