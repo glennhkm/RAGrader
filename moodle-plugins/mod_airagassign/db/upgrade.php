@@ -182,5 +182,28 @@ function xmldb_airagassign_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026071902, 'airagassign');
     }
 
+    // Track manual reference file vectorization and own its vectors as airagassign:{id}.
+    // Existing files are re-vectorized in the background; no HTTP call is made here.
+    if ($oldversion < 2026112100) {
+        $table = new xmldb_table('airagassign_manualfiles');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('assignid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('filename', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('contenthash', XMLDB_TYPE_CHAR, '40', null, null, null, null);
+        $table->add_field('status', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'pending');
+        $table->add_field('error_message', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('assignid', XMLDB_KEY_FOREIGN, ['assignid'], 'airagassign', ['id']);
+        $table->add_index('assignid_filename', XMLDB_INDEX_UNIQUE, ['assignid', 'filename']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        \mod_airagassign\local\material_scope::queue_all_manualfiles();
+
+        upgrade_mod_savepoint(true, 2026112100, 'airagassign');
+    }
+
     return true;
 }

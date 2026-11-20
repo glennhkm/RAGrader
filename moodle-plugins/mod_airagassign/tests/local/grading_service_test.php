@@ -210,6 +210,7 @@ final class grading_service_test extends \advanced_testcase {
             'maximum_grade' => 80,
             'assignment_id' => (string)$assign->id,
             'source_filter' => ['w1.pdf'],
+            'material_ids' => ['airagmaterial:' . $week1->id],
         ], $requests[0]['json']);
 
         $stored = $DB->get_record('airagassign_submissions', ['id' => $submission->id]);
@@ -312,6 +313,64 @@ final class grading_service_test extends \advanced_testcase {
             'error' => get_string('linkedmaterials_not_ready', 'airagassign', 'Week 2 (Queued for vectorization)'),
         ], $result);
         $this->assertSame([], $this->requests());
+    }
+
+    /**
+     * Store a manual reference file and its status row.
+     *
+     * @param \context_module $context Module context.
+     * @param int $assignid Assignment ID.
+     * @param string $status Row status.
+     * @param string|null $error Row error message.
+     */
+    private function manualfile(\context_module $context, int $assignid, string $status, ?string $error = null): void {
+        global $DB;
+        $file = get_file_storage()->create_file_from_string([
+            'contextid' => $context->id, 'component' => 'mod_airagassign', 'filearea' => 'manualfile',
+            'itemid' => 0, 'filepath' => '/', 'filename' => 'key.txt',
+        ], 'answer key');
+        $DB->insert_record('airagassign_manualfiles', (object)[
+            'assignid' => $assignid, 'filename' => 'key.txt', 'contenthash' => $file->get_contenthash(),
+            'status' => $status, 'error_message' => $error, 'timemodified' => time(),
+        ]);
+    }
+
+    /**
+     * A failed manual reference file blocks grading with a reason naming the file, before any HTTP request.
+     */
+    public function test_failed_manualfile_blocks_grading_with_reason(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        [$assign, $submission, $context] = $this->essay(['course' => $course->id]);
+        $this->manualfile($context, (int)$assign->id, 'failed', 'HTTP 500: disk full');
+        $this->queue([]);
+
+        $result = $this->grade($assign, $submission, $context);
+
+        $this->assertFalse($result['success']);
+        $this->assertSame(get_string('manualfile_not_ready', 'airagassign',
+            'key.txt (' . get_string('manualfile_status_failed', 'airagassign') . ': HTTP 500: disk full)'),
+            $result['error']);
+        $this->assertStringContainsString('key.txt', $result['error']);
+        $this->assertSame([], $this->requests());
+    }
+
+    /**
+     * The payload scopes retrieval by owner ids and keeps the filename filter for older backends.
+     */
+    public function test_grading_payload_has_material_ids_and_source_filter(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $week1 = $this->material($course->id, 'Week 1', 'completed', ['w1.pdf' => 1]);
+        [$assign, $submission, $context] = $this->essay(['course' => $course->id, 'materials' => [$week1->id]]);
+        $this->manualfile($context, (int)$assign->id, 'completed');
+        $this->queue([[200, ['score' => 5, 'feedback' => 'ok', 'confidence' => 0.5]]]);
+
+        $this->assertTrue($this->grade($assign, $submission, $context)['success']);
+
+        $json = $this->requests()[0]['json'];
+        $this->assertSame(['airagmaterial:' . $week1->id, 'airagassign:' . $assign->id], $json['material_ids']);
+        $this->assertSame(['w1.pdf', 'key.txt'], $json['source_filter']);
     }
 
     /**

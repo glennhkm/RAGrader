@@ -136,5 +136,24 @@
         <INDEX NAME="submissionid_questionid" UNIQUE="true" FIELDS="submissionid,questionid"/>
       </INDEXES>
     </TABLE>
+    <!-- Vectorization state of the manual reference files (owner airagassign:{assignid}) -->
+    <TABLE NAME="airagassign_manualfiles" COMMENT="Vectorization status of manual reference files">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="assignid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="filename" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="contenthash" TYPE="char" LENGTH="40" NOTNULL="false" SEQUENCE="false" COMMENT="Content hash of the file last uploaded or queued"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="pending" SEQUENCE="false" COMMENT="pending, queued, processing, completed or failed"/>
+        <FIELD NAME="error_message" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="assignid" TYPE="foreign" FIELDS="assignid" REFTABLE="airagassign" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="assignid_filename" UNIQUE="true" FIELDS="assignid,filename"/>
+      </INDEXES>
+    </TABLE>
   </TABLES>
 </XMLDB>

@@ -24,11 +24,11 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026112000;
+$plugin->version   = 2026112100;
 $plugin->requires  = 2024100700;
 $plugin->component = 'mod_airagassign';
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '1.1.7';
+$plugin->release   = '1.2.0';
 $plugin->dependencies = [
-    'mod_airagmaterial' => 2026071902,
+    'mod_airagmaterial' => 2026112100,
 ];

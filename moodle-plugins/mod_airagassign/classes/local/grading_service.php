@@ -74,6 +74,16 @@ class grading_service {
             ];
         }
 
+        // The manual reference file must be vectorized with its current content too.
+        $unreadyfiles = material_scope::unready_manualfiles((int)$assign->id, (int)$context->id);
+        if (!empty($unreadyfiles)) {
+            return [
+                'success' => false,
+                'error' => get_string('manualfile_not_ready', 'airagassign',
+                    material_scope::describe_unready_manualfiles($unreadyfiles)),
+            ];
+        }
+
         $sourcefilter = material_scope::linked_filenames((int)$assign->id, (int)$context->id);
         if (empty($sourcefilter) && $DB->record_exists('airagassign_materials', ['assignid' => $assign->id])) {
             return [
@@ -82,10 +92,13 @@ class grading_service {
             ];
         }
 
+        // Owner ids scope retrieval; source_filter keeps older backends (1.3.0) scoped too.
+        $scope = ['source_filter' => $sourcefilter,
+            'material_ids' => material_scope::owner_ids((int)$assign->id, (int)$context->id)];
         if ($assign->assignmode === 'quiz') {
-            return $this->grade_quiz($assign, $submission, $rubric, $sourcefilter);
+            return $this->grade_quiz($assign, $submission, $rubric, $scope);
         }
-        return $this->grade_essay($assign, $submission, $rubric, $sourcefilter);
+        return $this->grade_essay($assign, $submission, $rubric, $scope);
     }
 
     /**
@@ -133,10 +146,10 @@ class grading_service {
      * @param \stdClass $assign Assignment record
      * @param \stdClass $submission Submission record
      * @param array $rubric Rubric dictionary
-     * @param array $sourcefilter Source filenames for scoped retrieval
+     * @param array $scope Retrieval scope: source_filter and material_ids lists
      * @return array Result
      */
-    private function grade_quiz(\stdClass $assign, \stdClass $submission, array $rubric, array $sourcefilter): array {
+    private function grade_quiz(\stdClass $assign, \stdClass $submission, array $rubric, array $scope): array {
         global $DB;
 
         $questions = $DB->get_records('airagassign_questions', ['assignid' => $assign->id], 'sortorder ASC');
@@ -167,7 +180,7 @@ class grading_service {
             }
 
             $result = $this->call_api($this->payload($assign, $question->questiontext, $answer->answertext,
-                $rubric, $gradeperquestion, $sourcefilter));
+                $rubric, $gradeperquestion, $scope));
 
             if ($result['success']) {
                 $qscore    = (float)($result['data']['score']    ?? 0);
@@ -219,10 +232,10 @@ class grading_service {
      * @param \stdClass $assign Assignment record
      * @param \stdClass $submission Submission record
      * @param array $rubric Rubric dictionary
-     * @param array $sourcefilter Source filenames for scoped retrieval
+     * @param array $scope Retrieval scope: source_filter and material_ids lists
      * @return array Result
      */
-    private function grade_essay(\stdClass $assign, \stdClass $submission, array $rubric, array $sourcefilter): array {
+    private function grade_essay(\stdClass $assign, \stdClass $submission, array $rubric, array $scope): array {
         global $DB;
 
         $answer = $DB->get_record('airagassign_answers', ['submissionid' => $submission->id]);
@@ -231,7 +244,7 @@ class grading_service {
         }
 
         $result = $this->call_api($this->payload($assign, $assign->essayprompt, $answer->answertext,
-            $rubric, (float)$assign->maximumgrade, $sourcefilter));
+            $rubric, (float)$assign->maximumgrade, $scope));
         if (!$result['success']) {
             return $result;
         }
@@ -284,11 +297,11 @@ class grading_service {
      * @param string|null $essay Student answer
      * @param array $rubric Rubric dictionary
      * @param float $maximumgrade Maximum grade for this answer
-     * @param array $sourcefilter Source filenames for scoped retrieval
+     * @param array $scope Retrieval scope: source_filter and material_ids lists
      * @return array Payload
      */
     private function payload(\stdClass $assign, ?string $question, ?string $essay, array $rubric,
-            float $maximumgrade, array $sourcefilter): array {
+            float $maximumgrade, array $scope): array {
         $payload = [
             'course_id' => $assign->course,
             'question' => $question,
@@ -297,8 +310,11 @@ class grading_service {
             'maximum_grade' => $maximumgrade,
             'assignment_id' => $assign->id,
         ];
-        if (!empty($sourcefilter)) {
-            $payload['source_filter'] = array_values($sourcefilter);
+        // Empty lists are omitted: the backend rejects an explicit empty filter.
+        foreach (['source_filter', 'material_ids'] as $key) {
+            if (!empty($scope[$key])) {
+                $payload[$key] = array_values($scope[$key]);
+            }
         }
         return $payload;
     }
