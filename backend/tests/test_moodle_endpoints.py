@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import RLock
 from unittest.mock import call, patch
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 
 from src.api.moodle_models import MoodleAssignRequest
 from src.api.moodle_routes import (
@@ -128,6 +128,23 @@ class MoodleEndpointTest(unittest.TestCase):
             {"source": {"$in": ["week1.pdf", "week2.pptx"]}},
             spy.call_args.kwargs["metadata_filter"],
         )
+
+    def test_grading_rejects_explicit_filter_that_scopes_nothing(self):
+        for filters in ({"source_filter": []}, {"source_filter": ["  "]}, {"module_filter": [""]}):
+            with self.subTest(filters=filters):
+                with patch.object(self.fake_grader, "grade_essay") as spy:
+                    with self.assertRaises(HTTPException) as ctx:
+                        moodle_grade_assignment(
+                            MoodleAssignRequest(**{
+                                "course_id": 12,
+                                "question": "Question",
+                                "essay": "Student answer",
+                                "assignment_id": 45,
+                                **filters,
+                            })
+                        )
+                self.assertEqual(400, ctx.exception.status_code)
+                spy.assert_not_called()
 
     def test_material_upload_supports_all_plugin_formats(self):
         for extension in ("pdf", "pptx", "docx", "txt"):

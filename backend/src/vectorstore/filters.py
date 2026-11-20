@@ -160,3 +160,28 @@ def build_chroma_where_filter(
     if len(clauses) == 1:
         return clauses[0]
     return {"$and": clauses}
+
+
+class EmptyScopeFilterError(ValueError):
+    """Raised when an explicitly requested scope filter selects no criteria."""
+
+
+def build_explicit_scope_filter(
+    modules: Optional[Sequence[str]] = None,
+    sources: Optional[Sequence[str]] = None,
+    tags: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build a ``where`` filter for a scope the caller explicitly asked for.
+
+    ``build_chroma_where_filter`` returns ``None`` (no restriction) when every
+    criterion is empty or blank. That is right when no scope was requested, but
+    for an explicit scope it would silently widen retrieval to the whole
+    collection, so it fails closed here instead.
+    """
+    where = build_chroma_where_filter(modules=modules, sources=sources, tags=tags)
+    if where is None:
+        raise EmptyScopeFilterError(
+            "Scope filter has no usable modules, sources or tags; "
+            "omit it to search all materials."
+        )
+    return where
