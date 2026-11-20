@@ -108,6 +108,26 @@ class ChromaStoreCompatibilityTest(unittest.TestCase):
 
         self.assertEqual(0, store.get_count("204"))
 
+    def test_deleting_an_absent_source_is_not_a_warning(self):
+        # Every first upload of a file first removes its previous chunks; finding
+        # none is the normal path and must not raise WARNING-level noise.
+        from loguru import logger
+
+        records = []
+        sink = logger.add(lambda m: records.append(m.record), level="WARNING")
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                client = chromadb.PersistentClient(path=directory)
+                store = _make_store(client)
+                # Collection missing entirely (first upload into a new course).
+                self.assertFalse(store.delete_document_by_source("never-uploaded.pdf", "204"))
+                client.get_or_create_collection("course_204_baai_bge_m3")
+                # Collection present but the file was never uploaded.
+                self.assertFalse(store.delete_document_by_source("never-uploaded.pdf", "204"))
+        finally:
+            logger.remove(sink)
+        self.assertEqual([], [r["message"] for r in records])
+
     def test_reupload_deletes_existing_source_chunks(self):
         collection = _FakeCollection(ids=["chunk-1", "chunk-2"])
         store = _make_store(_FakeClient(collection))

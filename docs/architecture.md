@@ -52,7 +52,7 @@ When `API_AUTH_TOKEN` is set in `backend/.env`, all endpoints below except `GET 
 | `GET /health` | HAProxy, Docker, Admins | Readiness check (Chroma heartbeat + Redis ping) |
 | `GET /moodle/status` | `local_assign_ai_rag` | Check RAG service, LLM, and vectorstore readiness |
 | `GET /collections/{course_id}` | `local_assign_ai_rag`, Admins | Inspect document count for a course collection |
-| `DELETE /collections/{course_id}` | Admins | Delete an entire course collection |
+| `DELETE /collections/{course_id}` | Admins | Delete an entire course collection and its uploaded files |
 | `POST /course/materials/upload` | `mod_airagmaterial`, `mod_airagassign`, `local_assign_ai_rag` | Upload & vectorize `.pdf`, `.pptx`, `.docx`, `.txt` into course collection |
 | `DELETE /course/materials/file` | `mod_airagmaterial`, `mod_airagassign` | Remove vector chunks for a deleted/replaced file |
 | `POST /course/materials/clear` | `mod_airagmaterial`, `local_assign_ai_rag` | Clear all vectors for a course |
