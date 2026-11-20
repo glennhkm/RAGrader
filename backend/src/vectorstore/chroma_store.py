@@ -376,14 +376,25 @@ class VectorStore:
             logger.error(f"Error during similarity search with score: {e}")
             return []
     
-    def delete_document_by_source(self, source_name: str, course_id: Optional[str] = None) -> bool:
+    def delete_document_by_source(
+        self,
+        source_name: str,
+        course_id: Optional[str] = None,
+        material_id: Optional[str] = None,
+    ) -> bool:
         """
-        Delete all document chunks originating from a specific source/file.
-        
+        Delete document chunks originating from a specific source/file.
+
+        Ownership rules (the same filename can be uploaded by several materials):
+        - with ``material_id``: chunks of that source owned by it, plus unowned
+          (legacy, no ``material_id`` metadata) chunks of that source;
+        - without ``material_id``: only unowned chunks of that source.
+
         Args:
             source_name: The name of the file/source (e.g. 'syllabus.pdf')
             course_id: Optional course ID to select collection
-            
+            material_id: Optional owner id (e.g. 'airagmaterial:12')
+
         Returns:
             True if deletion was successful, False otherwise
         """
@@ -391,12 +402,20 @@ class VectorStore:
         logger.info(f"Attempting to delete document '{source_name}' from collection: {col_name}")
         try:
             collection = self.client.get_collection(name=col_name)
-            
-            # Query for documents with matching source metadata.
+
+            # Chroma cannot filter on a missing key, so fetch every chunk of the
+            # source and pick the deletable ids from their metadata.
             results = collection.get(where={"source": {"$eq": source_name}})
-            
-            if results and results.get('ids'):
-                ids = results['ids']
+            all_ids = (results or {}).get('ids') or []
+            metadatas = (results or {}).get('metadatas') or []
+            ids = []
+            for index, chunk_id in enumerate(all_ids):
+                metadata = (metadatas[index] if index < len(metadatas) else None) or {}
+                owner = metadata.get('material_id')
+                if not owner or (material_id is not None and owner == material_id):
+                    ids.append(chunk_id)
+
+            if ids:
                 logger.info(f"Deleting {len(ids)} chunks for file '{source_name}' in collection '{col_name}'")
                 collection.delete(ids=ids)
                 return True
@@ -404,7 +423,7 @@ class VectorStore:
                 # Normal on a first upload (replace-before-add) and on idempotent deletes.
                 logger.info(f"No chunks found for file '{source_name}' in collection '{col_name}'")
                 return False
-                
+
         except MISSING_COLLECTION_ERRORS:
             logger.info(f"Collection {col_name} does not exist; nothing to delete")
             return False

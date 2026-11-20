@@ -58,7 +58,7 @@ class _FakeGrader:
             "retrieved_documents": [],
         }
 
-    def ingest_course_materials(self, paths, course_id=None):
+    def ingest_course_materials(self, paths, course_id=None, material_id=None):
         return {
             "success": True,
             "message": "Processed",
@@ -74,7 +74,7 @@ class _FakeGrader:
     def clear_vector_store(self, course_id=None):
         return None
 
-    def delete_course_material_file(self, course_id, filename):
+    def delete_course_material_file(self, course_id, filename, material_id=None):
         return True
 
 
@@ -132,6 +132,61 @@ class MoodleEndpointTest(unittest.TestCase):
             {"source": {"$in": ["week1.pdf", "week2.pptx"]}},
             spy.call_args.kwargs["metadata_filter"],
         )
+
+    def _grade(self, **extra):
+        return moodle_grade_assignment(
+            MoodleAssignRequest(**{
+                "course_id": 12, "question": "Question", "essay": "Student answer",
+                "assignment_id": 45, **extra,
+            })
+        )
+
+    def test_grading_material_ids_are_anded_with_source_filter(self):
+        with patch.object(self.fake_grader, "grade_essay", wraps=self.fake_grader.grade_essay) as spy:
+            self._grade(source_filter=["week1.pdf"], material_ids=["airagmaterial:1", "airagassign:5"])
+        self.assertEqual(
+            {"$and": [
+                {"source": {"$eq": "week1.pdf"}},
+                {"material_id": {"$in": ["airagmaterial:1", "airagassign:5"]}},
+            ]},
+            spy.call_args.kwargs["metadata_filter"],
+        )
+
+    def test_grading_without_new_fields_keeps_filter_unchanged(self):
+        with patch.object(self.fake_grader, "grade_essay", wraps=self.fake_grader.grade_essay) as spy:
+            self._grade()
+            self.assertIsNone(spy.call_args.kwargs["metadata_filter"])
+            self._grade(source_filter=["a.pdf"], module_filter=["w1"])
+            self.assertEqual(
+                {"$and": [{"module": {"$eq": "w1"}}, {"source": {"$eq": "a.pdf"}}]},
+                spy.call_args.kwargs["metadata_filter"],
+            )
+
+    def test_grading_rejects_empty_or_invalid_material_ids(self):
+        for ids in ([], ["  "], ["../x"]):
+            with self.subTest(ids=ids):
+                with self.assertRaises(HTTPException) as ctx:
+                    self._grade(material_ids=ids)
+                self.assertEqual(400, ctx.exception.status_code)
+
+    def test_upload_and_delete_reject_invalid_material_id(self):
+        upload = UploadFile(filename="a.txt", file=BytesIO(b"x"))
+        with self.assertRaises(HTTPException) as ctx:
+            upload_course_material(file=upload, course_id=12, course_name="", material_id="../x")
+        self.assertEqual(400, ctx.exception.status_code)
+        with self.assertRaises(HTTPException) as ctx:
+            delete_course_material_file(course_id=12, filename="a.txt", material_id="../x")
+        self.assertEqual(400, ctx.exception.status_code)
+
+    def test_owned_upload_uses_material_subdirectory_and_forwards_id(self):
+        upload = UploadFile(filename="a.txt", file=BytesIO(b"x"))
+        with patch.object(self.fake_grader, "ingest_course_materials",
+                          wraps=self.fake_grader.ingest_course_materials) as spy:
+            upload_course_material(file=upload, course_id=12, course_name="",
+                                   material_id="airagmaterial:7")
+        path = spy.call_args.args[0][0]
+        self.assertEqual(Path(self.tempdir.name) / "uploads" / "course_12" / "airagmaterial_7" / "a.txt", path)
+        self.assertEqual("airagmaterial:7", spy.call_args.kwargs["material_id"])
 
     def test_grading_rejects_explicit_filter_that_scopes_nothing(self):
         for filters in ({"source_filter": []}, {"source_filter": ["  "]}, {"module_filter": [""]}):

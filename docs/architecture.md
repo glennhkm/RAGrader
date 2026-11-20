@@ -54,13 +54,15 @@ When `API_AUTH_TOKEN` is set in `backend/.env`, all endpoints below except `GET 
 | `GET /moodle/status` | `local_assign_ai_rag` | Check RAG service, LLM, and vectorstore readiness |
 | `GET /collections/{course_id}` | `local_assign_ai_rag`, Admins | Inspect document count for a course collection |
 | `DELETE /collections/{course_id}` | Admins | Delete an entire course collection and its uploaded files |
-| `POST /course/materials/upload` | `mod_airagmaterial`, `mod_airagassign`, `local_assign_ai_rag` | Upload & vectorize `.pdf`, `.pptx`, `.docx`, `.txt` into course collection |
-| `DELETE /course/materials/file` | `mod_airagmaterial`, `mod_airagassign` | Remove vector chunks for a deleted/replaced file |
+| `POST /course/materials/upload` | `mod_airagmaterial`, `mod_airagassign`, `local_assign_ai_rag` | Upload & vectorize `.pdf`, `.pptx`, `.docx`, `.txt` into course collection; optional form field `material_id` (`^[a-z_]+:[0-9]+$`, else HTTP 400) stamps every chunk with its owner and keeps the disk copy in `uploads/course_{id}/{slug(material_id)}/` |
+| `DELETE /course/materials/file` | `mod_airagmaterial`, `mod_airagassign` | Remove vector chunks for a deleted/replaced file; optional `material_id` removes that owner's chunks plus unowned legacy chunks of the file, without it only unowned chunks are removed |
 | `POST /course/materials/clear` | `mod_airagmaterial`, `local_assign_ai_rag` | Clear all vectors for a course |
 | `GET /course/materials/status/{course_id}` | Monitoring / Clients | Course material vectorization status |
-| `POST /assign/answer` | `mod_airagassign`, `local_assign_ai_rag` | Grade a student answer with `course_id`, `question`, `essay`, `rubric`, `maximum_grade`, `assignment_id`, plus optional `source_filter`, `module_filter` and `lang` (used as the prompt language **only when sent explicitly**); the response includes `language` |
+| `POST /assign/answer` | `mod_airagassign`, `local_assign_ai_rag` | Grade a student answer with `course_id`, `question`, `essay`, `rubric`, `maximum_grade`, `assignment_id`, plus optional `source_filter`, `module_filter`, `material_ids` (owner ids, AND-ed with the other filters) and `lang` (used as the prompt language **only when sent explicitly**); the response includes `language` |
 
 > **Scoped Retrieval in `mod_airagassign`:** When an assignment has linked vectorized `mod_airagmaterial` files or uploaded `manualfile` reference files, `mod_airagassign` automatically populates `source_filter` on `POST /assign/answer` requests (in both essay and quiz modes) so retrieval is restricted to those specific filenames. Grading fails closed: it is refused (and recorded as a retryable `grading_failed`) while **any** linked material is still pending, queued, processing or failed, so no student is graded against only part of the selected knowledge base.
+>
+> **Owner-scoped vectors (`material_id`):** the same filename may be uploaded by several materials, so chunks can carry a `material_id` metadata key (e.g. `airagmaterial:12`). Deleting or replacing a source only removes that owner's chunks plus legacy chunks without an owner; a delete without `material_id` never touches owned chunks. `material_ids` on `POST /assign/answer` restricts retrieval to those owners. Chroma cannot filter on a missing key, so unowned chunks are found by reading the source's chunks and checking their metadata. Not available on `/v1`.
 
 ### Generic Autograder API (`/v1`)
 
@@ -76,5 +78,5 @@ LMS-agnostic endpoints for namespace-isolated RAG autograding (`namespace` must 
 
 **Errors:** `400` invalid input, `401` missing/wrong bearer token, `409` embedding configuration does not match the collection (re-ingest or restore the previous embedding setup), `413` upload too large, `503` lock timeout or shared state unavailable.
 
-**Scope filters fail closed:** omitting `material_filter` (or sending `null`) searches every material in the namespace. A `material_filter` that is present but selects nothing (`{}`, empty lists, blank strings, `null` tag values) returns **HTTP 400** instead of silently widening retrieval to the whole namespace. The same rule applies to an explicitly sent but empty `source_filter` / `module_filter` on `POST /assign/answer`.
+**Scope filters fail closed:** omitting `material_filter` (or sending `null`) searches every material in the namespace. A `material_filter` that is present but selects nothing (`{}`, empty lists, blank strings, `null` tag values) returns **HTTP 400** instead of silently widening retrieval to the whole namespace. The same rule applies to an explicitly sent but empty `source_filter` / `module_filter` / `material_ids` on `POST /assign/answer`.
 

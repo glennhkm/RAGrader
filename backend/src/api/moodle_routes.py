@@ -6,7 +6,7 @@ Moodle's assignment grading system and the RAG pipeline.
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Path as PathParameter
-from typing import List
+from typing import List, Optional
 import shutil
 from loguru import logger
 
@@ -32,7 +32,32 @@ from .locking import LockAcquisitionError
 from .runtime import get_runtime
 from ..rag.prompts import normalize_language
 from ..vectorstore.embeddings import EmbeddingMismatchError
-from ..vectorstore.filters import EmptyScopeFilterError, build_explicit_scope_filter
+from ..vectorstore.filters import (
+    EmptyScopeFilterError,
+    _slugify,
+    build_explicit_scope_filter,
+    is_valid_material_id,
+)
+
+def _clean_material_id(material_id):
+    """Return a validated owner id, ``None`` when absent/blank, else HTTP 400."""
+    # Non-str covers an unresolved FastAPI default when a route is called directly.
+    if not isinstance(material_id, str) or not material_id.strip():
+        return None
+    material_id = material_id.strip()
+    if not is_valid_material_id(material_id):
+        raise HTTPException(
+            status_code=400,
+            detail="material_id must match ^[a-z_]+:[0-9]+$ (e.g. airagmaterial:12)",
+        )
+    return material_id
+
+
+def _material_upload_dir(course_id, material_id):
+    from ..utils import DATA_DIR
+    base = DATA_DIR / "uploads" / f"course_{course_id}"
+    return base / _slugify(material_id) if material_id else base
+
 
 # Router for Moodle endpoints
 router = APIRouter(prefix="", tags=["Moodle Integration"])
@@ -112,19 +137,34 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
         # Grade using RAG pipeline
         rubric = request.rubric if request.rubric else {"criteria": {}}
         metadata_filter = None
-        if request.source_filter is not None or request.module_filter is not None:
+        if request.material_ids is not None:
+            for owner in request.material_ids:
+                if owner.strip() and not is_valid_material_id(owner.strip()):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="material_ids entries must match ^[a-z_]+:[0-9]+$",
+                    )
+        if (
+            request.source_filter is not None
+            or request.module_filter is not None
+            or request.material_ids is not None
+        ):
             # The plugin only sends a filter for linked materials; an explicit
             # but empty filter must not widen grading to the whole course.
             try:
                 metadata_filter = build_explicit_scope_filter(
                     modules=request.module_filter,
                     sources=request.source_filter,
+                    material_ids=(
+                        [m.strip() for m in request.material_ids]
+                        if request.material_ids is not None else None
+                    ),
                 )
             except EmptyScopeFilterError as exc:
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "source_filter/module_filter must contain at least one non-empty value; "
+                        "source_filter/module_filter/material_ids must contain at least one non-empty value; "
                         "omit them to grade against all course materials."
                     ),
                 ) from exc
@@ -420,7 +460,8 @@ def moodle_server_status():
 def upload_course_material(
     file: UploadFile = File(...),
     course_id: int = Form(..., gt=0),
-    course_name: str = Form("")
+    course_name: str = Form(""),
+    material_id: Optional[str] = Form(None),
 ):
     """
     Upload a single course material file.
@@ -439,21 +480,24 @@ def upload_course_material(
     """
     try:
         grader = get_grader()
+        owner = _clean_material_id(material_id)
         
         filename = validate_material_filename(file.filename)
         logger.info(f"Course material upload for course {course_id}: {filename}")
         
         # Keep the file and its vectors consistent across every replica.
         with get_operation_lock(course_id, write=True):
-            from ..utils import DATA_DIR
-            upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
+            upload_dir = _material_upload_dir(course_id, owner)
             upload_dir.mkdir(parents=True, exist_ok=True)
 
             file_path = upload_dir / filename
             save_upload(file, file_path)
             logger.info(f"Saved file: {file_path}")
 
-            result = grader.ingest_course_materials([file_path], course_id=str(course_id))
+            ingest_kwargs = {"material_id": owner} if owner else {}
+            result = grader.ingest_course_materials(
+                [file_path], course_id=str(course_id), **ingest_kwargs
+            )
         
         if not result['success']:
             raise HTTPException(status_code=500, detail=result['message'])
@@ -519,21 +563,25 @@ def clear_course_materials(course_id: int = Form(..., gt=0)):
 @router.delete("/course/materials/file")
 def delete_course_material_file(
     course_id: int = Form(..., gt=0),
-    filename: str = Form(...)
+    filename: str = Form(...),
+    material_id: Optional[str] = Form(None),
 ):
     """
     Delete a single course material file and its vector chunks.
     """
     try:
         filename = safe_filename(filename)
+        owner = _clean_material_id(material_id)
         logger.info(f"Moodle delete request for file '{filename}' in course {course_id}")
         grader = get_grader()
         with get_operation_lock(course_id, write=True):
-            success = grader.delete_course_material_file(str(course_id), filename)
+            delete_kwargs = {"material_id": owner} if owner else {}
+            success = grader.delete_course_material_file(
+                str(course_id), filename, **delete_kwargs
+            )
 
             # Also clean up the saved file while writes are blocked.
-            from ..utils import DATA_DIR
-            file_path = DATA_DIR / "uploads" / f"course_{course_id}" / filename
+            file_path = _material_upload_dir(course_id, owner) / filename
             if file_path.exists():
                 file_path.unlink()
                 logger.info(f"Removed file from disk: {file_path}")
@@ -546,6 +594,8 @@ def delete_course_material_file(
         }
     except LockAcquisitionError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting course material file: {e}")
         raise HTTPException(status_code=500, detail=str(e))

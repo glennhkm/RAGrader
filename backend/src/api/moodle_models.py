@@ -42,6 +42,10 @@ class MoodleAssignRequest(BaseModel):
         default=None,
         description="Optional list of module/week tags to scope retrieval",
     )
+    material_ids: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of owner ids (e.g. 'airagmaterial:12') to scope retrieval",
+    )
 
 
 class MoodleCriterionScore(BaseModel):

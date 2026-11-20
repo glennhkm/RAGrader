@@ -15,6 +15,14 @@ def _slugify(value: str) -> str:
     return _COLLAPSE_UNDERSCORE_RE.sub("_", cleaned).strip("_-")
 
 
+MATERIAL_ID_RE = re.compile(r"^[a-z_]+:[0-9]+$")
+
+
+def is_valid_material_id(value: Any) -> bool:
+    """True for owner ids such as ``airagmaterial:12`` (``^[a-z_]+:[0-9]+$``)."""
+    return isinstance(value, str) and bool(MATERIAL_ID_RE.match(value))
+
+
 def _normalize_tag_key(key: str) -> str:
     clean_key = _slugify(str(key))
     if not clean_key:
@@ -125,6 +133,7 @@ def build_chroma_where_filter(
     modules: Optional[Sequence[str]] = None,
     sources: Optional[Sequence[str]] = None,
     tags: Optional[Mapping[str, Any]] = None,
+    material_ids: Optional[Sequence[str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Construct a Chroma ``where`` filter dict from optional scope criteria."""
     clauses: List[Dict[str, Any]] = []
@@ -136,6 +145,11 @@ def build_chroma_where_filter(
 
     if sources:
         clause = _build_field_clause("source", sources, preserve_scalars=False)
+        if clause:
+            clauses.append(clause)
+
+    if material_ids:
+        clause = _build_field_clause("material_id", material_ids, preserve_scalars=False)
         if clause:
             clauses.append(clause)
 
@@ -170,6 +184,7 @@ def build_explicit_scope_filter(
     modules: Optional[Sequence[str]] = None,
     sources: Optional[Sequence[str]] = None,
     tags: Optional[Mapping[str, Any]] = None,
+    material_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """Build a ``where`` filter for a scope the caller explicitly asked for.
 
@@ -178,10 +193,12 @@ def build_explicit_scope_filter(
     for an explicit scope it would silently widen retrieval to the whole
     collection, so it fails closed here instead.
     """
-    where = build_chroma_where_filter(modules=modules, sources=sources, tags=tags)
+    where = build_chroma_where_filter(
+        modules=modules, sources=sources, tags=tags, material_ids=material_ids
+    )
     if where is None:
         raise EmptyScopeFilterError(
-            "Scope filter has no usable modules, sources or tags; "
+            "Scope filter has no usable modules, sources, material ids or tags; "
             "omit it to search all materials."
         )
     return where
