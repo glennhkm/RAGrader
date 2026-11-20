@@ -622,7 +622,17 @@ def get_course_materials_status(course_id: int = PathParameter(..., gt=0)):
             upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
             uploaded_files = []
             if upload_dir.exists():
-                uploaded_files = [f.name for f in upload_dir.iterdir() if f.is_file()]
+                # Owned uploads live in per-material subdirectories; list those
+                # files too, de-duplicated by name.
+                uploaded_files = sorted({
+                    f.name
+                    for f in upload_dir.iterdir()
+                    if f.is_file()
+                } | {
+                    f.name
+                    for sub in upload_dir.iterdir() if sub.is_dir()
+                    for f in sub.iterdir() if f.is_file()
+                })
         
         return {
             "success": True,

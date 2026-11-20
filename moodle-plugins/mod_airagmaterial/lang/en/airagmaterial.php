@@ -89,3 +89,4 @@ $string['clearvectors_success'] = 'Vectors for this material were cleared. Other
 $string['clearvectors_failed'] = 'The RAG server could not remove vectors for: {$a}. Please try clearing again.';
 $string['clearvectors_retained'] = 'Vectors for {$a} were kept because another activity in this course uses a file with the same name.';
 $string['stalevectors_cleanup_failed'] = 'Could not remove vectors of files that were deleted from this material: {$a}.';
+$string['upgrade_revectorize_notice'] = '{$a} material(s) will be re-vectorized in the background after this upgrade so their vectors are owned by each material. AI grading waits until vectorization finishes (materials show as queued until then).';

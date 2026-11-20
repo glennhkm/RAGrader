@@ -23,11 +23,22 @@
  */
 
 function xmldb_airagmaterial_upgrade($oldversion) {
-    global $DB;
+    global $CFG;
 
     if ($oldversion < 2025010101) {
         // Capabilities are re-synced automatically on upgrade.
         upgrade_mod_savepoint(true, 2025010101, 'airagmaterial');
+    }
+
+    if ($oldversion < 2026112100) {
+        // Vectors are now owned per material (airagmaterial:{id}). Re-vectorize every
+        // material in the background; no HTTP call is made during the upgrade itself.
+        require_once($CFG->dirroot . '/mod/airagmaterial/lib.php');
+        $queued = airagmaterial_queue_owner_migration();
+        if ($queued > 0) {
+            \core\notification::info(get_string('upgrade_revectorize_notice', 'mod_airagmaterial', $queued));
+        }
+        upgrade_mod_savepoint(true, 2026112100, 'airagmaterial');
     }
 
     return true;

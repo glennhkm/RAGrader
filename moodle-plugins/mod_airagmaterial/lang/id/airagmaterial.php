@@ -89,3 +89,4 @@ $string['clearvectors_success'] = 'Vektor untuk materi ini telah dihapus. Materi
 $string['clearvectors_failed'] = 'Server RAG gagal menghapus vektor untuk: {$a}. Silakan coba hapus lagi.';
 $string['clearvectors_retained'] = 'Vektor untuk {$a} dipertahankan karena aktivitas lain di kursus ini memakai file dengan nama yang sama.';
 $string['stalevectors_cleanup_failed'] = 'Gagal menghapus vektor dari file yang sudah dihapus dari materi ini: {$a}.';
+$string['upgrade_revectorize_notice'] = '{$a} materi akan divektorisasi ulang di latar belakang setelah pembaruan ini agar vektornya dimiliki oleh masing-masing materi. Penilaian AI menunggu sampai vektorisasi selesai (materi berstatus antrean sampai saat itu).';
