@@ -279,11 +279,12 @@ class material_scope {
     /**
      * Mark every current manual file 'queued' and queue the background vectorization task.
      *
-     * Rows of files no longer in the file area are removed. Makes no HTTP call.
+     * Rows of files no longer in the file area are marked 'deleting' so the task
+     * removes their owner-scoped vectors. Makes no HTTP call.
      *
      * @param int $assignid Assignment instance ID
      * @param int $contextid Module context ID
-     * @return bool True when a task was queued (the assignment has manual files)
+     * @return bool True when a task was queued (there are files to upload or vectors to delete)
      */
     public static function queue_manualfile_vectorization(int $assignid, int $contextid): bool {
         global $DB;
@@ -309,25 +310,92 @@ class material_scope {
                 $DB->insert_record('airagassign_manualfiles', $record);
             }
         }
-        foreach (array_diff_key($rows, $names) as $row) {
-            $DB->delete_records('airagassign_manualfiles', ['id' => $row->id]);
+        $removed = array_diff_key($rows, $names);
+        foreach ($removed as $row) {
+            if ($row->status !== 'deleting') {
+                $DB->update_record('airagassign_manualfiles', (object)['id' => $row->id, 'status' => 'deleting',
+                    'timemodified' => time()]);
+            }
         }
-        if (empty($files)) {
+        if (empty($files) && empty($removed)) {
             return false;
         }
+        self::queue_task($assignid, true);
+        return true;
+    }
 
+    /**
+     * Queue the vectorization task of an assignment.
+     *
+     * @param int $assignid Assignment instance ID
+     * @param bool $checkforexisting Skip when an identical task exists (including a running one)
+     */
+    private static function queue_task(int $assignid, bool $checkforexisting): void {
         $task = new \mod_airagassign\task\vectorize_manualfile();
         $task->set_custom_data(['assignid' => $assignid]);
         $task->set_component('mod_airagassign');
-        \core\task\manager::queue_adhoc_task($task, true);
-        return true;
+        \core\task\manager::queue_adhoc_task($task, $checkforexisting);
+    }
+
+    /**
+     * Rows of removed manual files whose vectors could not be deleted yet.
+     *
+     * @param int $assignid Assignment instance ID
+     * @return \stdClass[] Rows with status 'deleting', keyed by filename
+     */
+    public static function pending_deletes(int $assignid): array {
+        return array_filter(self::manualfile_rows($assignid), fn($row) => $row->status === 'deleting');
+    }
+
+    /**
+     * Delete the owner-scoped vectors of manual files that are no longer in the file area.
+     *
+     * A row is removed only once its vectors are deleted; on failure it is kept
+     * as 'deleting' with the error so a later save, re-vectorize or task retries.
+     * Such rows are never treated as ready: readiness only considers stored files.
+     *
+     * @param int $assignid Assignment instance ID
+     * @param int $courseid Course ID
+     * @param int $contextid Module context ID
+     * @param string[] $extranames Further filenames that may have vectors (e.g. names before a save)
+     * @return array<string, string> filename => error, for deletes that failed
+     */
+    private static function purge_removed_manualfiles(int $assignid, int $courseid, int $contextid,
+            array $extranames = []): array {
+        global $DB;
+
+        $current = self::manual_file_hashes($contextid);
+        $rows = self::manualfile_rows($assignid);
+        $failed = [];
+        foreach (array_unique(array_merge($extranames, array_keys($rows))) as $name) {
+            $name = (string)$name;
+            if ($name === '' || isset($current[$name])) {
+                continue;
+            }
+            $error = self::delete_vectors($courseid, $name, $assignid);
+            if ($error === null) {
+                $DB->delete_records('airagassign_manualfiles', ['assignid' => $assignid, 'filename' => $name]);
+                continue;
+            }
+            $failed[$name] = $error;
+            $record = (object)['assignid' => $assignid, 'filename' => $name, 'status' => 'deleting',
+                'error_message' => $error, 'timemodified' => time()];
+            if (isset($rows[$name])) {
+                $record->id = $rows[$name]->id;
+                $DB->update_record('airagassign_manualfiles', $record);
+            } else {
+                $DB->insert_record('airagassign_manualfiles', $record);
+            }
+        }
+        return $failed;
     }
 
     /**
      * Reconcile manual file vectors after the teacher saved the assignment.
      *
-     * Vectors of removed files are deleted (owner-scoped) along with their
-     * rows, and vectorization is queued when any current file is unready.
+     * Vectors of removed files are deleted (owner-scoped); a failed delete is
+     * kept for retry and shown to the teacher. Vectorization is queued when any
+     * current file is unready or a delete is still pending.
      *
      * @param int $assignid Assignment instance ID
      * @param int $courseid Course ID
@@ -336,21 +404,15 @@ class material_scope {
      */
     public static function sync_manualfiles(int $assignid, int $courseid, int $contextid,
             array $previousnames = []): void {
-        global $DB;
-
-        $current = self::manual_file_hashes($contextid);
-        $known = array_merge($previousnames, array_keys(self::manualfile_rows($assignid)));
-        foreach (array_unique($known) as $name) {
-            $name = (string)$name;
-            if ($name === '' || isset($current[$name])) {
-                continue;
-            }
-            self::delete_manual_file_vectors($courseid, $name, $assignid);
-            $DB->delete_records('airagassign_manualfiles', ['assignid' => $assignid, 'filename' => $name]);
+        $failed = self::purge_removed_manualfiles($assignid, $courseid, $contextid, $previousnames);
+        if (!empty($failed)) {
+            \core\notification::warning(get_string('manualfile_delete_failed', 'airagassign',
+                s(implode(', ', array_keys($failed)))));
         }
-
         if (!empty(self::unready_manualfiles($assignid, $contextid))) {
             self::queue_manualfile_vectorization($assignid, $contextid);
+        } else if (!empty($failed)) {
+            self::queue_task($assignid, true);
         }
     }
 
@@ -385,32 +447,35 @@ class material_scope {
     /**
      * Upload the current manual reference files with the assignment's owner id and record the outcome.
      *
-     * Runs in the background task. Each row records the content hash of the
-     * file that was actually uploaded, so a file replaced after the task was
-     * queued is never marked as vectorized with stale content.
+     * Runs in the background task. A file's row is only marked 'completed' when
+     * it is still 'processing' and the stored file still has the uploaded content
+     * hash; when the teacher re-queued or replaced the file meanwhile, the row is
+     * left (or set) 'queued' and a fresh task is queued, because a save during the
+     * run cannot queue one itself (the running task counts as an existing task).
+     * Pending deletes of removed files are retried first.
      *
      * @param \stdClass $assign Assignment record (id, course)
      * @param int $contextid Module context ID
-     * @return array{completed: string[], failed: array<string, string>}
+     * @return array{completed: string[], failed: array<string, string>, requeued: bool}
      */
     public static function vectorize_manualfiles(\stdClass $assign, int $contextid): array {
         global $DB;
 
         $assignid = (int)$assign->id;
-        $files = self::manual_files($contextid);
-        $rows = self::manualfile_rows($assignid);
-        foreach (array_diff_key($rows, self::manual_file_hashes($contextid)) as $row) {
-            $DB->delete_records('airagassign_manualfiles', ['id' => $row->id]);
+        $outcome = ['completed' => [], 'failed' => [], 'requeued' => false];
+        foreach (self::purge_removed_manualfiles($assignid, (int)$assign->course, $contextid) as $name => $error) {
+            $outcome['failed'][$name] = $error;
         }
 
         $client = rag_client::for_component('mod_airagassign');
         $owner = self::manualfile_owner($assignid);
-        $outcome = ['completed' => [], 'failed' => []];
-        foreach ($files as $file) {
+        foreach (self::manual_files($contextid) as $file) {
             $name = $file->get_filename();
             $hash = $file->get_contenthash();
-            $row = $rows[$name] ?? (object)['assignid' => $assignid, 'filename' => $name];
+            $row = $DB->get_record('airagassign_manualfiles', ['assignid' => $assignid, 'filename' => $name]);
+            $row = $row ?: (object)['assignid' => $assignid, 'filename' => $name];
             $row->status = 'processing';
+            $row->contenthash = $hash;
             $row->timemodified = time();
             if (empty($row->id)) {
                 $row->id = $DB->insert_record('airagassign_manualfiles', $row);
@@ -418,8 +483,7 @@ class material_scope {
                 $DB->update_record('airagassign_manualfiles', $row);
             }
 
-            $tempdir = make_request_directory();
-            $tempfile = $tempdir . '/' . $name;
+            $tempfile = make_request_directory() . '/' . $name;
             $file->copy_content_to($tempfile);
             $result = $client->upload_material((int)$assign->course, $tempfile, $name, $owner);
             @unlink($tempfile);
@@ -430,22 +494,62 @@ class material_scope {
                 $result['error'] = $result['data']['message'] ?? $result['data']['detail'] ?? 'Server error';
             }
 
-            $row->contenthash = $hash;
-            $row->timemodified = time();
+            // Re-read: the teacher may have re-queued or replaced the file during the upload.
+            $current = $DB->get_record('airagassign_manualfiles', ['id' => $row->id]);
+            $storedhashes = self::manual_file_hashes($contextid);
+            if (!$current || $current->status !== 'processing' || ($storedhashes[$name] ?? null) !== $hash) {
+                if ($current && $current->status === 'processing') {
+                    $DB->update_record('airagassign_manualfiles', (object)['id' => $current->id,
+                        'status' => 'queued', 'timemodified' => time()]);
+                }
+                $outcome['requeued'] = true;
+                continue;
+            }
+
+            $update = (object)['id' => $row->id, 'timemodified' => time()];
             if ($result['success']) {
-                $row->status = 'completed';
-                $row->error_message = null;
+                $update->status = 'completed';
+                $update->error_message = null;
                 $outcome['completed'][] = $name;
             } else {
                 $error = trim(strip_tags(is_string($result['error'] ?? null)
                     ? $result['error'] : (string)json_encode($result['error'] ?? 'Unknown error')));
-                $row->status = 'failed';
-                $row->error_message = \core_text::substr($error === '' ? 'Unknown error' : $error, 0, 1000);
-                $outcome['failed'][$name] = $row->error_message;
+                $update->status = 'failed';
+                $update->error_message = \core_text::substr($error === '' ? 'Unknown error' : $error, 0, 1000);
+                $outcome['failed'][$name] = $update->error_message;
             }
-            $DB->update_record('airagassign_manualfiles', $row);
+            $DB->update_record('airagassign_manualfiles', $update);
+        }
+
+        // Files added or re-queued during this run need another run.
+        if ($DB->record_exists('airagassign_manualfiles', ['assignid' => $assignid, 'status' => 'queued'])) {
+            $outcome['requeued'] = true;
+        }
+        if ($outcome['requeued']) {
+            self::queue_task($assignid, false);
         }
         return $outcome;
+    }
+
+    /**
+     * Delete one file's vectors scoped to the assignment owner id.
+     *
+     * @param int $courseid Course ID
+     * @param string $filename Manual reference filename
+     * @param int $assignid Assignment instance ID
+     * @return string|null Null on success (HTTP 200), otherwise the error
+     */
+    private static function delete_vectors(int $courseid, string $filename, int $assignid): ?string {
+        // HTTP 200 means the server processed the delete, even when it found no vectors.
+        $result = rag_client::for_component('mod_airagassign', 30)
+            ->delete_file($courseid, $filename, self::manualfile_owner($assignid));
+        if ($result['status'] === 200) {
+            return null;
+        }
+        $error = 'HTTP ' . $result['status'] . ': ' . trim((string)($result['error'] ?? ''));
+        debugging("material_scope: failed to delete vectors for '$filename' (course $courseid). $error",
+            DEBUG_DEVELOPER);
+        return \core_text::substr($error, 0, 1000);
     }
 
     /**
@@ -457,22 +561,17 @@ class material_scope {
      * @return bool True if the server processed the delete (HTTP 200)
      */
     public static function delete_manual_file_vectors(int $courseid, string $filename, int $assignid): bool {
-        // HTTP 200 means the server processed the delete, even when it found no vectors.
-        $result = rag_client::for_component('mod_airagassign', 30)
-            ->delete_file($courseid, $filename, self::manualfile_owner($assignid));
-        if ($result['status'] !== 200) {
-            debugging(
-                "material_scope::delete_manual_file_vectors: failed to delete vectors for '$filename' " .
-                "(course $courseid). HTTP {$result['status']} — " . ($result['error'] ?? ''),
-                DEBUG_DEVELOPER
-            );
-            return false;
-        }
-        return true;
+        return self::delete_vectors($courseid, $filename, $assignid) === null;
     }
 
     /**
      * Delete every manual reference file vector and status row of an assignment.
+     *
+     * The assignment is being deleted, so a failed delete cannot be retried by
+     * a later save or task. Failures are written to the server error log
+     * (assignment id, course id, filename and HTTP error only) and shown to the
+     * user deleting the activity, so an administrator can clean up the
+     * "airagassign:{id}" owner on the RAG server.
      *
      * @param \stdClass $assign Assignment record (id, course)
      * @param int|null $contextid Module context ID, when the course module still exists
@@ -484,8 +583,18 @@ class material_scope {
         if ($contextid) {
             $names = array_merge($names, array_keys(self::manual_file_hashes($contextid)));
         }
+        $failed = [];
         foreach (array_unique($names) as $name) {
-            self::delete_manual_file_vectors((int)$assign->course, (string)$name, (int)$assign->id);
+            $error = self::delete_vectors((int)$assign->course, (string)$name, (int)$assign->id);
+            if ($error !== null) {
+                $failed[] = $name;
+                error_log("mod_airagassign: could not delete vectors of reference file '$name' " .
+                    "(owner " . self::manualfile_owner((int)$assign->id) . ", course {$assign->course}): $error");
+            }
+        }
+        if (!empty($failed)) {
+            \core\notification::warning(get_string('manualfile_delete_failed_final', 'airagassign', (object)[
+                'files' => s(implode(', ', $failed)), 'owner' => self::manualfile_owner((int)$assign->id)]));
         }
         $DB->delete_records('airagassign_manualfiles', ['assignid' => $assign->id]);
     }

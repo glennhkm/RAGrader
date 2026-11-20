@@ -59,14 +59,14 @@ final class manualfile_test extends \advanced_testcase {
     /**
      * Route every RAG client through a mocked Guzzle handler.
      *
-     * @param array $responses List of [status, body array].
+     * @param array $responses List of [status, body array] or Guzzle handler callables.
      */
     private function queue(array $responses): void {
         set_config('serverurl', 'http://rag.test', 'mod_airagassign');
         set_config('apikey', '', 'mod_airagassign');
         $this->history = [];
         $stack = HandlerStack::create(new MockHandler(array_map(
-            fn($r) => new Response($r[0], [], json_encode($r[1])), $responses)));
+            fn($r) => is_callable($r) ? $r : new Response($r[0], [], json_encode($r[1])), $responses)));
         $stack->push(Middleware::history($this->history));
         $http = new Client(['handler' => $stack]);
         $factory = $this->createMock(http_factory::class);
@@ -370,6 +370,120 @@ final class manualfile_test extends \advanced_testcase {
                 'material_id' => 'airagassign:' . $assign->id],
         ]], array_map(fn($r) => array_diff_key($r, ['body' => 1]), $this->requests()));
         $this->assertSame([], $this->rows((int)$assign->id));
+    }
+
+    /**
+     * A file replaced and re-saved while the task uploads is not marked completed, and a fresh task is queued.
+     *
+     * A save during the run cannot queue a task itself: Moodle treats the running
+     * task as an existing identical task. The test reproduces that by discarding
+     * the task the simulated save queued.
+     */
+    public function test_file_replaced_during_run_is_requeued(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [, $assign, $context] = $this->assignment();
+        $this->put_file($context->id, 'old answer key');
+        material_scope::queue_manualfile_vectorization((int)$assign->id, (int)$context->id);
+        $DB->delete_records('task_adhoc');
+        $newhash = null;
+        $this->queue([function () use ($assign, $context, &$newhash) {
+            global $DB;
+            $newhash = $this->put_file($context->id, 'new answer key')->get_contenthash();
+            material_scope::queue_manualfile_vectorization((int)$assign->id, (int)$context->id);
+            $DB->delete_records('task_adhoc');
+            return new Response(200, [], json_encode(['success' => true]));
+        }, [200, ['success' => true]]]);
+
+        $output = $this->run_task((int)$assign->id);
+
+        $row = $this->rows((int)$assign->id)['key.txt'];
+        $this->assertSame('queued', $row->status);
+        $this->assertSame($newhash, $row->contenthash);
+        $this->assertSame(1, $DB->count_records('task_adhoc', ['classname' => self::TASK]));
+        $this->assertStringContainsString('queued again', $output);
+        $this->assertCount(1, material_scope::unready_manualfiles((int)$assign->id, (int)$context->id));
+
+        // The fresh run uploads the new content and completes.
+        $DB->delete_records('task_adhoc');
+        $this->run_task((int)$assign->id);
+        $row = $this->rows((int)$assign->id)['key.txt'];
+        $this->assertSame('completed', $row->status);
+        $this->assertSame($newhash, $row->contenthash);
+        $this->assertStringContainsString('new answer key', $this->requests()[1]['body']);
+        $this->assertSame(0, $DB->count_records('task_adhoc', ['classname' => self::TASK]));
+        $this->assertSame([], material_scope::unready_manualfiles((int)$assign->id, (int)$context->id));
+    }
+
+    /**
+     * A failed owner-scoped delete keeps a 'deleting' row that is never ready, warns, and is retried by the task.
+     */
+    public function test_failed_delete_keeps_row_for_retry(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$course, $assign, $context] = $this->assignment();
+        $file = $this->put_file($context->id, 'answer key');
+        $DB->insert_record('airagassign_manualfiles', (object)['assignid' => $assign->id, 'filename' => 'key.txt',
+            'contenthash' => $file->get_contenthash(), 'status' => 'completed', 'timemodified' => time()]);
+        $DB->delete_records('task_adhoc');
+        \core\notification::fetch();
+        $this->queue([[500, ['detail' => 'backend down']], [200, ['success' => true]]]);
+
+        $data = $DB->get_record('airagassign', ['id' => $assign->id]);
+        $data->instance = $assign->id;
+        $data->coursemodule = $assign->cmid;
+        $data->manualfile = file_get_unused_draft_itemid();
+        $this->assertTrue(airagassign_update_instance($data));
+        $this->assertDebuggingCalled();
+
+        $row = $this->rows((int)$assign->id)['key.txt'];
+        $this->assertSame('deleting', $row->status);
+        $this->assertStringStartsWith('HTTP 500: ', $row->error_message);
+        $notifications = \core\notification::fetch();
+        $this->assertCount(1, $notifications);
+        $this->assertStringContainsString('key.txt', $notifications[0]->get_message());
+        $this->assertSame(1, $DB->count_records('task_adhoc', ['classname' => self::TASK]));
+        $this->assertSame(['key.txt'], array_keys(material_scope::pending_deletes((int)$assign->id)));
+        $this->assertSame([], material_scope::unready_manualfiles((int)$assign->id, (int)$context->id));
+        $this->assertSame([], material_scope::linked_filenames((int)$assign->id, (int)$context->id));
+        $this->assertSame([], material_scope::owner_ids((int)$assign->id, (int)$context->id));
+
+        $this->run_task((int)$assign->id);
+
+        $this->assertSame([], $this->rows((int)$assign->id));
+        $form = ['course_id' => (string)$course->id, 'filename' => 'key.txt',
+            'material_id' => 'airagassign:' . $assign->id];
+        $this->assertSame([['DELETE', $form], ['DELETE', $form]],
+            array_map(fn($r) => [$r['method'], $r['form']], $this->requests()));
+    }
+
+    /**
+     * When deleting the assignment, a failed vector delete is logged and shown since it cannot be retried.
+     */
+    public function test_delete_instance_failure_is_reported(): void {
+        $this->resetAfterTest();
+        [, $assign, $context] = $this->assignment();
+        $this->put_file($context->id, 'answer key');
+        material_scope::queue_manualfile_vectorization((int)$assign->id, (int)$context->id);
+        \core\notification::fetch();
+        $this->queue([[500, ['detail' => 'backend down']]]);
+        $log = make_request_directory() . '/error.log';
+        $oldlog = ini_set('error_log', $log);
+
+        try {
+            $this->assertTrue(airagassign_delete_instance((int)$assign->id));
+        } finally {
+            ini_set('error_log', $oldlog === false ? '' : $oldlog);
+        }
+
+        $this->assertDebuggingCalled();
+        $this->assertSame([], $this->rows((int)$assign->id));
+        $owner = 'airagassign:' . $assign->id;
+        $this->assertStringContainsString("reference file 'key.txt' (owner $owner", file_get_contents($log));
+        $notifications = \core\notification::fetch();
+        $this->assertCount(1, $notifications);
+        $this->assertStringContainsString($owner, $notifications[0]->get_message());
     }
 
     /**

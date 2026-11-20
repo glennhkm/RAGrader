@@ -166,7 +166,8 @@ if (!empty($linkedmats)) {
 
 // ---- Manual reference file status (teachers only) ----
 $manualfiles = \mod_airagassign\local\material_scope::manual_files($context->id);
-if ($cangrade && !empty($manualfiles)) {
+$pendingdeletes = \mod_airagassign\local\material_scope::pending_deletes($assign->id);
+if ($cangrade && (!empty($manualfiles) || !empty($pendingdeletes))) {
     $unreadyfiles = [];
     foreach (\mod_airagassign\local\material_scope::unready_manualfiles($assign->id, $context->id) as $uf) {
         $unreadyfiles[$uf->filename] = $uf;
@@ -184,6 +185,12 @@ if ($cangrade && !empty($manualfiles)) {
             $item .= html_writer::tag('div', s($uf->error_message), ['class' => 'small text-danger mt-1']);
         }
         echo html_writer::tag('li', $item, ['class' => 'list-group-item']);
+    }
+    foreach ($pendingdeletes as $pd) {
+        echo html_writer::tag('li', s($pd->filename) . html_writer::span(
+            \mod_airagassign\local\material_scope::manualfile_status_label('deleting'), 'badge airag-badge-error ms-2') .
+            html_writer::tag('div', s((string)$pd->error_message), ['class' => 'small text-danger mt-1']),
+            ['class' => 'list-group-item']);
     }
     echo html_writer::end_tag('ul');
     if (has_capability('mod/airagassign:manage', $context)) {

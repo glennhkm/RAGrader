@@ -63,6 +63,7 @@ class vectorize_manualfile extends \core\task\adhoc_task {
             mtrace("vectorize_manualfile task: assignment $assignid file '$filename' failed: $error");
         }
         mtrace('vectorize_manualfile task: assignment ' . $assignid . ': ' . count($outcome['completed']) .
-            ' file(s) vectorized, ' . count($outcome['failed']) . ' failed.');
+            ' file(s) vectorized, ' . count($outcome['failed']) . ' failed' .
+            ($outcome['requeued'] ? '; changed during the run, queued again.' : '.'));
     }
 }
