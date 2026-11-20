@@ -178,6 +178,21 @@ class MoodleEndpointTest(unittest.TestCase):
             success = response.get("success", True) if isinstance(response, dict) else getattr(response, "success", True)
             self.assertTrue(success)
 
+    def test_deleting_a_collection_also_removes_its_uploaded_files(self):
+        # DELETE /collections/{id} must not leave student/course files behind on
+        # disk (same retention behavior as POST /course/materials/clear).
+        course_dir = Path(self.tempdir.name) / "uploads" / "course_12"
+        other_dir = Path(self.tempdir.name) / "uploads" / "course_13"
+        for directory in (course_dir, other_dir):
+            directory.mkdir(parents=True)
+            (directory / "material.pdf").write_bytes(b"pdf")
+
+        response = clear_course_collection(12)
+
+        self.assertTrue(response["success"])
+        self.assertFalse(course_dir.exists())
+        self.assertTrue((other_dir / "material.pdf").exists())
+
     def test_router_exposes_every_plugin_operation(self):
         available = {
             (method, route.path)

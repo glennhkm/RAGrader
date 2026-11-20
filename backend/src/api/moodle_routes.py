@@ -333,7 +333,9 @@ def clear_course_collection(course_id: int = PathParameter(..., gt=0)):
     """
     Clear the collection for a specific course.
     
-    Clears only the Chroma collection belonging to the requested course.
+    Clears the Chroma collection and the uploaded files belonging to the
+    requested course, so no course material is retained on disk after the
+    collection is gone (same behavior as POST /course/materials/clear).
     
     Args:
         course_id: Moodle course ID
@@ -345,6 +347,12 @@ def clear_course_collection(course_id: int = PathParameter(..., gt=0)):
         grader = get_grader()
         with get_operation_lock(course_id, write=True):
             grader.clear_vector_store(str(course_id))
+
+            from ..utils import DATA_DIR
+            upload_dir = DATA_DIR / "uploads" / f"course_{course_id}"
+            if upload_dir.exists():
+                shutil.rmtree(upload_dir)
+                logger.info(f"Cleared upload directory: {upload_dir}")
         
         return {
             "success": True,
