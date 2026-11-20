@@ -79,3 +79,91 @@ jobs:
           test -f dist/local_assign_ai_rag.zip
           test -f dist/aiprovider_rag.zip
 
+
+  # Installs each plugin into a real Moodle and runs its PHPUnit suite plus the
+  # standard moodle-plugin-ci static checks. Coding-style and docblock checks are
+  # informational until the legacy code base is cleaned up.
+  moodle-plugin-ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    strategy:
+      fail-fast: false
+      matrix:
+        moodle: [MOODLE_405_STABLE, MOODLE_500_STABLE, MOODLE_503_STABLE]
+        plugin: [mod_airagmaterial, mod_airagassign, local_assign_ai_rag, aiprovider_rag]
+        # Entries matching an existing axis value add the PHP version to those legs.
+        include:
+          - { moodle: MOODLE_405_STABLE, php: "8.1" }
+          - { moodle: MOODLE_500_STABLE, php: "8.3" }
+          - { moodle: MOODLE_503_STABLE, php: "8.3" }
+    name: ${{ matrix.plugin }} (${{ matrix.moodle }}, PHP ${{ matrix.php }})
+    env:
+      MOODLE_BRANCH: ${{ matrix.moodle }}
+      DB: pgsql
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pgsql, zip, gd, xmlrpc, soap
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4.5
+          echo "$(pwd)/ci/bin" >> "$GITHUB_PATH"
+
+      # Dependencies are installed from a directory holding only that plugin.
+      - name: Prepare dependency plugin
+        run: |
+          mkdir -p "$RUNNER_TEMP/extra-plugins"
+          case "${{ matrix.plugin }}" in
+            mod_airagassign) dep=mod_airagmaterial ;;
+            local_assign_ai_rag) dep=aiprovider_rag ;;
+            *) dep="" ;;
+          esac
+          if [ -n "$dep" ]; then
+            cp -r "plugin/moodle-plugins/$dep" "$RUNNER_TEMP/extra-plugins/$dep"
+          fi
+          echo "EXTRA_PLUGINS_DIR=$RUNNER_TEMP/extra-plugins" >> "$GITHUB_ENV"
+
+      - name: Install Moodle and the plugin
+        run: moodle-plugin-ci install --plugin ./plugin/moodle-plugins/${{ matrix.plugin }} --db-host=127.0.0.1
+
+      - name: PHP lint
+        run: moodle-plugin-ci phplint
+
+      - name: Validate plugin
+        run: moodle-plugin-ci validate
+
+      - name: Check upgrade savepoints
+        run: moodle-plugin-ci savepoints
+
+      - name: PHPUnit
+        run: moodle-plugin-ci phpunit --fail-on-warning
+
+      - name: Coding style (informational)
+        continue-on-error: true
+        run: moodle-plugin-ci codechecker --max-warnings 0
+
+      - name: PHP docblocks (informational)
+        continue-on-error: true
+        run: moodle-plugin-ci phpdoc
