@@ -58,6 +58,10 @@ class provider implements
             'confidence' => 'privacy:metadata:airagassign_submissions:confidence',
             'timecreated' => 'privacy:metadata:airagassign_submissions:timecreated',
             'timegraded' => 'privacy:metadata:airagassign_submissions:timegraded',
+            'status' => 'privacy:metadata:airagassign_submissions:status',
+            'grading_error' => 'privacy:metadata:airagassign_submissions:grading_error',
+            'grading_requestid' => 'privacy:metadata:airagassign_submissions:grading_requestid',
+            'grading_started_at' => 'privacy:metadata:airagassign_submissions:grading_started_at',
         ], 'privacy:metadata:airagassign_submissions');
 
         $collection->add_database_table('airagassign_answers', [
@@ -67,6 +71,7 @@ class provider implements
             'ai_feedback' => 'privacy:metadata:airagassign_answers:ai_feedback',
             'feedback' => 'privacy:metadata:airagassign_answers:feedback',
             'ai_response' => 'privacy:metadata:airagassign_answers:ai_response',
+            'timecreated' => 'privacy:metadata:airagassign_answers:timecreated',
         ], 'privacy:metadata:airagassign_answers');
 
         $collection->add_external_location_link('rag_server', [
@@ -152,6 +157,7 @@ class provider implements
                     'ai_feedback' => $a->ai_feedback,
                     'feedback' => $a->feedback,
                     'ai_response' => $a->ai_response,
+                    'timecreated' => transform::datetime($a->timecreated),
                 ];
             }
             $bycontext[$s->contextid][] = (object)[
@@ -164,6 +170,9 @@ class provider implements
                 'graded_by' => $s->graded_by,
                 'teacher_note' => $s->teacher_note,
                 'confidence' => $s->confidence,
+                'grading_error' => $s->grading_error,
+                'grading_requestid' => $s->grading_requestid,
+                'grading_started_at' => $s->grading_started_at ? transform::datetime($s->grading_started_at) : null,
                 'timecreated' => transform::datetime($s->timecreated),
                 'timegraded' => $s->timegraded ? transform::datetime($s->timegraded) : null,
                 'answers' => $answers,
