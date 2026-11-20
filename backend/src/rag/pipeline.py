@@ -316,7 +316,8 @@ class RAGPipeline:
                 - language: str (language of the caption labels)
                 - error: str (if any)
         """
-        logger.info(f"Extracting answer from document: {file_path}")
+        # The answer path/filename can identify the student: never log it at INFO.
+        logger.info(f"Extracting answer from document (type={Path(file_path).suffix.lower() or 'unknown'})")
         
         try:
             # Initialize document loader with multimodal support if vision is enabled
@@ -424,7 +425,7 @@ class RAGPipeline:
         Returns:
             Grading results dictionary with additional extraction info
         """
-        logger.info(f"Grading essay from document: {document_path}")
+        logger.info(f"Grading essay from document (type={Path(document_path).suffix.lower() or 'unknown'})")
         
         # First extract the answer from the document
         extraction_result = self.extract_answer_from_document(

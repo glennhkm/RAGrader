@@ -136,10 +136,6 @@ class DocumentPreprocessor:
         
         documents = []
         
-        logger.info(f"\n{'='*70}")
-        logger.info(f"📄 CREATING IMAGE CAPTION DOCUMENTS FOR VECTORIZATION")
-        logger.info(f"{'='*70}")
-        
         for i, caption in enumerate(captions):
             # Create document from caption
             content = self._format_image_caption(caption)
@@ -159,25 +155,14 @@ class DocumentPreprocessor:
             )
             documents.append(doc)
             
-            # Log each document being created
-            logger.info(f"\n{'─'*70}")
-            logger.info(f"📷 Image Caption Document #{i+1}")
-            logger.info(f"{'─'*70}")
-            logger.info(f"Source: {caption.image.source_file}")
-            logger.info(f"Page/Slide: {caption.image.page_number}")
-            logger.info(f"Image Index: {caption.image.image_index}")
-            logger.info(f"Dimensions: {caption.image.width}x{caption.image.height}")
-            logger.info(f"Vision Model: {caption.model_used}")
-            logger.info(f"Confidence: {caption.confidence}")
-            logger.info(f"\n📝 CONTENT TO BE VECTORIZED:")
-            logger.info(f"{'─'*50}")
-            logger.info(f"{content}")
-            logger.info(f"{'─'*50}")
-            logger.info(f"Content Length: {len(content)} characters")
-        
-        logger.info(f"\n{'='*70}")
-        logger.info(f"✅ Created {len(documents)} image caption documents for vectorization")
-        logger.info(f"{'='*70}\n")
+            # Caption text may come from a student's answer document: DEBUG only.
+            logger.debug(
+                f"Image caption document #{i + 1} source={caption.image.source_file} "
+                f"page={caption.image.page_number} index={caption.image.image_index} "
+                f"model={caption.model_used} chars={len(content)}:\n{content}"
+            )
+
+        logger.info(f"Created {len(documents)} image caption document(s) for vectorization")
         
         return documents
     

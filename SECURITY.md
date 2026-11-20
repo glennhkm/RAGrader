@@ -20,3 +20,6 @@ If you discover a security vulnerability in this project, please **do not** open
 3. **Protect Credentials:**
    Never commit `.env` files or embed LLM provider keys (`GROQ_API_KEY`, `OPENROUTER_API_KEY`, `HUGGINGFACE_API_TOKEN`, `PINECONE_API_KEY`) in Moodle plugin settings or source code.
 
+
+4. **Keep `LOG_LEVEL=INFO` (or higher) in production:**
+   At `INFO` the service logs only operational metadata (sizes, counts, scores, timings) and never student identity, essay text, image caption text, or uploaded answer filenames. `LOG_LEVEL=DEBUG` additionally logs vision caption text and source filenames, which can contain student content from answer documents; enable it only temporarily on non-production data.
