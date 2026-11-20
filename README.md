@@ -103,6 +103,10 @@ This generates four archives in `dist/` with the exact root folder names Moodle 
 
 Then configure `Server URL` (and `API Key` if `API_AUTH_TOKEN` is set in `backend/.env`) in each plugin's Moodle admin settings. See [docs/moodle-setup.md](docs/moodle-setup.md) for full details.
 
+### Releases
+
+Tagged releases (`vX.Y.Z`) are published on the GitHub Releases page with the four plugin ZIPs and a `SHA256SUMS` file; download them instead of building locally. Release notes come from [CHANGELOG.md](CHANGELOG.md) (`make release-notes VERSION=1.0.0`). Components keep their own versions, listed in the changelog.
+
 ## Testing & Verification
 
 ```bash

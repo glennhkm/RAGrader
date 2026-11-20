@@ -19,6 +19,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Release notes are extractable from CHANGELOG.md
+        run: |
+          notes="$(scripts/release-notes.sh 1.0.0)"
+          echo "$notes" | grep -q mod_airagassign
+          echo "$notes" | grep -q 1.2.0
+          if scripts/release-notes.sh 9.9.9; then
+            echo "::error::release-notes.sh must fail for a missing version"
+            exit 1
+          fi
+
   backend-tests:
     runs-on: ubuntu-latest
     steps:
