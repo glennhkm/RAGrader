@@ -187,9 +187,10 @@ Provide a comprehensive, detailed description.""",
         
         for attempt in range(self.max_retries):
             try:
-                logger.info(f"🌐 API Call attempt {attempt + 1}/{self.max_retries}")
-                logger.info(f"   Model: {self.model_name}")
-                logger.info(f"   Base URL: {self.base_url}")
+                logger.debug(
+                    f"Vision API call attempt {attempt + 1}/{self.max_retries} "
+                    f"model={self.model_name} base_url={self.base_url}"
+                )
                 
                 # Use chat.completions.create (same as llm.py)
                 completion = self.client.chat.completions.create(
@@ -200,7 +201,6 @@ Provide a comprehensive, detailed description.""",
                 )
                 
                 caption = completion.choices[0].message.content.strip()
-                logger.info(f"✅ API call successful!")
                 
                 return caption
                 
@@ -212,7 +212,7 @@ Provide a comprehensive, detailed description.""",
                 
                 if attempt < self.max_retries - 1:
                     wait_time = self.retry_delay * (attempt + 1)
-                    logger.info(f"   Waiting {wait_time}s before retry...")
+                    logger.debug(f"Waiting {wait_time}s before the next vision API attempt")
                     time.sleep(wait_time)
         
         # All retries failed
@@ -230,40 +230,20 @@ Provide a comprehensive, detailed description.""",
         """
         start_time = time.time()
         
-        # Log image info before captioning
-        logger.info(f"{'='*60}")
-        logger.info(f"🖼️  PROCESSING IMAGE")
-        logger.info(f"{'='*60}")
-        logger.info(f"📄 Source: {image.source_file}")
-        logger.info(f"📑 Page/Slide: {image.page_number}")
-        logger.info(f"🔢 Image Index: {image.image_index}")
-        logger.info(f"📐 Dimensions: {image.width}x{image.height} pixels")
-        logger.info(f"🤖 Model: {self.model_name}")
-        logger.info(f"🌐 API: ({self.base_url})")
-        
+        # Images come from course materials *and* students' answer documents,
+        # so INFO carries only metadata. The source filename and caption text
+        # (possibly student content) are DEBUG-only, an explicit opt-in.
         try:
-            # Use the router-based API call
             caption_text = self._caption_image_via_router(image)
-            
-            # Log raw caption result
-            logger.info(f"{'─'*60}")
-            logger.info(f"📝 RAW CAPTION (from Vision AI):")
-            logger.info(f"{'─'*60}")
-            logger.info(f"{caption_text}")
-            logger.info(f"{'─'*60}")
-            
-            # Enhance caption with context
             enhanced_caption = self._enhance_caption(caption_text, image)
-            
             processing_time = time.time() - start_time
-            
-            # Log enhanced caption (will be vectorized)
-            logger.info(f"✨ ENHANCED CAPTION (to be vectorized):")
-            logger.info(f"{'─'*60}")
-            logger.info(f"{enhanced_caption}")
-            logger.info(f"{'─'*60}")
-            logger.info(f"⏱️  Processing time: {processing_time:.2f}s")
-            logger.info(f"{'='*60}\n")
+
+            logger.info(
+                f"Captioned image page={image.page_number} index={image.image_index} "
+                f"size={image.width}x{image.height} model={self.model_name} "
+                f"chars={len(enhanced_caption)} time={processing_time:.2f}s"
+            )
+            logger.debug(f"Image caption for {image.source_file}:\n{enhanced_caption}")
             
             return ImageCaption(
                 image=image,
@@ -274,7 +254,9 @@ Provide a comprehensive, detailed description.""",
             )
             
         except Exception as e:
-            logger.error(f"❌ Error captioning image: {e}")
+            logger.error(
+                f"Error captioning image page={image.page_number} index={image.image_index}: {e}"
+            )
             processing_time = time.time() - start_time
             
             # Return a basic caption on error
