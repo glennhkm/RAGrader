@@ -716,6 +716,57 @@ function airagassign_delete_file_vectors($courseid, $filename) {
 }
 
 /**
+ * Return the linked AI RAG Material activities that are not ready for grading.
+ *
+ * Grading scopes retrieval to the linked materials, so grading while one of
+ * them is still queued, processing, pending or failed would silently use a
+ * smaller knowledge base than the teacher selected, and students graded in the
+ * same batch could be judged against different evidence. Callers must refuse
+ * to grade while this list is non-empty. Per-file failures inside a
+ * 'completed' material are intentionally tolerated: they are shown to the
+ * teacher on the material page and only the vectorized files are used.
+ *
+ * @param int $assignid Assignment instance ID
+ * @return array List of objects with id, name and vectorize_status
+ */
+function airagassign_get_unready_linked_materials(int $assignid): array {
+    global $DB;
+
+    $sql = "SELECT am.id, am.name, am.vectorize_status
+              FROM {airagassign_materials} aam
+              JOIN {airagmaterial} am ON am.id = aam.materialid
+             WHERE aam.assignid = :assignid
+               AND (am.vectorize_status IS NULL OR am.vectorize_status <> :completed)
+          ORDER BY am.name ASC, am.id ASC";
+    return array_values($DB->get_records_sql($sql, ['assignid' => $assignid, 'completed' => 'completed']));
+}
+
+/**
+ * Describe unready linked materials as "Name (status)" for teacher-facing errors.
+ *
+ * The result is plain text: callers store it as the grading error, which is
+ * escaped with s() when displayed.
+ *
+ * @param array $materials Result of airagassign_get_unready_linked_materials()
+ * @param context $context Context used to format material names
+ * @return string Comma-separated description
+ */
+function airagassign_describe_unready_materials(array $materials, context $context): string {
+    $sm = get_string_manager();
+    $parts = [];
+    foreach ($materials as $material) {
+        $status = (string)($material->vectorize_status ?? '');
+        $status = $status === '' ? 'pending' : $status;
+        $label = $sm->string_exists('status_' . $status, 'airagmaterial')
+            ? get_string('status_' . $status, 'airagmaterial')
+            : $status;
+        $name = format_string($material->name, true, ['context' => $context, 'escape' => false]);
+        $parts[] = $name . ' (' . $label . ')';
+    }
+    return implode(', ', $parts);
+}
+
+/**
  * Collect linked airagmaterial filenames and manual reference filenames for scoped RAG retrieval.
  *
  * @param int $assignid Assignment instance ID
@@ -777,11 +828,22 @@ function airagassign_grade_submission($assign, $submission, $context) {
         ];
     }
 
+    // Fail closed: every linked material must be fully vectorized, otherwise
+    // retrieval would silently use only part of the selected knowledge base.
+    $unready = airagassign_get_unready_linked_materials((int)$assign->id);
+    if (!empty($unready)) {
+        return [
+            'success' => false,
+            'error' => get_string('linkedmaterials_not_ready', 'airagassign',
+                airagassign_describe_unready_materials($unready, $context)),
+        ];
+    }
+
     $sourcefilter = airagassign_get_linked_material_filenames((int)$assign->id, (int)$context->id);
     if (empty($sourcefilter) && $DB->record_exists('airagassign_materials', ['assignid' => $assign->id])) {
         return [
             'success' => false,
-            'error' => 'Linked course materials are not vectorized yet. Please wait for vectorization to complete before grading.',
+            'error' => get_string('linkedmaterials_no_vectorized_files', 'airagassign'),
         ];
     }
 

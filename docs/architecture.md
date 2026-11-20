@@ -39,7 +39,7 @@ When `API_AUTH_TOKEN` is set in `backend/.env`, all endpoints below except `GET 
 | `GET /course/materials/status/{course_id}` | Monitoring / Clients | Course material vectorization status |
 | `POST /assign/answer` | `mod_airagassign`, `local_assign_ai_rag` | Grade a student answer with `course_id`, `question`, `essay`, `rubric`, `maximum_grade`, `assignment_id`, plus optional `source_filter` and `module_filter` |
 
-> **Scoped Retrieval in `mod_airagassign`:** When an assignment has linked vectorized `mod_airagmaterial` files or uploaded `manualfile` reference files, `mod_airagassign` automatically populates `source_filter` on `POST /assign/answer` requests (in both essay and quiz modes) so retrieval is restricted to those specific filenames.
+> **Scoped Retrieval in `mod_airagassign`:** When an assignment has linked vectorized `mod_airagmaterial` files or uploaded `manualfile` reference files, `mod_airagassign` automatically populates `source_filter` on `POST /assign/answer` requests (in both essay and quiz modes) so retrieval is restricted to those specific filenames. Grading fails closed: it is refused (and recorded as a retryable `grading_failed`) while **any** linked material is still pending, queued, processing or failed, so no student is graded against only part of the selected knowledge base.
 
 ### Generic Autograder API (`/v1`)
 
