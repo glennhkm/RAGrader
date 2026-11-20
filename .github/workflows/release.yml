@@ -6,14 +6,19 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v1.0.0); must already exist"
+        description: "Release version tag (e.g. v1.0.0). Publishing requires the tag to exist; a dry run only uses it to pick the CHANGELOG section"
         required: true
         type: string
       dry_run:
-        description: "Build and verify only; do not publish a GitHub release"
+        description: "Build and verify only; never publish a GitHub release"
         required: true
         type: boolean
         default: true
+      ref:
+        description: "Dry run only: branch, tag or SHA to build (default: the branch the workflow is run from)"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -26,6 +31,8 @@ jobs:
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+      # Dry runs build the requested ref (or the dispatching branch); publishing always builds the tag.
+      BUILD_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && (inputs.ref || github.ref) || format('refs/tags/{0}', github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name) }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Validate tag format
@@ -34,18 +41,45 @@ jobs:
             echo "::error::Tag '$TAG' must match vMAJOR.MINOR.PATCH"
             exit 1
           fi
+          echo "Release $TAG from $BUILD_REF (dry run: $DRY_RUN)"
 
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ env.TAG }}
+          ref: ${{ env.BUILD_REF }}
           fetch-depth: 0
 
+      - name: Tag must exist
+        if: ${{ env.DRY_RUN != 'true' }}
+        run: |
+          if ! git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            echo "::error::Tag $TAG does not exist"
+            exit 1
+          fi
+
       - name: Tagged commit must be reachable from origin/main
+        if: ${{ env.DRY_RUN != 'true' }}
         run: |
           git fetch origin main
           if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "::error::$TAG ($(git rev-parse --short HEAD)) is not reachable from origin/main"
             exit 1
+          fi
+
+      - name: CHANGELOG section must be dated
+        run: |
+          version="${TAG#v}"
+          header="$(grep -m1 -F "## [$version]" CHANGELOG.md || true)"
+          if [[ -z "$header" ]]; then
+            echo "::error::CHANGELOG.md has no '## [$version]' section"
+            exit 1
+          fi
+          if grep -qi 'unreleased' <<< "$header"; then
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "::warning::CHANGELOG header '$header' still says Unreleased; publishing would be refused"
+            else
+              echo "::error::CHANGELOG header '$header' still says Unreleased; set the release date before tagging"
+              exit 1
+            fi
           fi
 
       - name: Extract release notes
@@ -61,7 +95,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ env.TAG }}
+          name: release-${{ env.TAG }}${{ env.DRY_RUN == 'true' && '-dry-run' || '' }}
           path: |
             dist/*.zip
             dist/SHA256SUMS
