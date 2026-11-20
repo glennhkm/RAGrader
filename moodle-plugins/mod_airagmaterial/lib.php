@@ -308,33 +308,14 @@ function airagmaterial_build_api_headers(array $headers = []): array {
  * @return bool True if the API call succeeded.
  */
 function airagmaterial_delete_file_vectors($courseid, $filename) {
-    $serverurl = get_config('mod_airagmaterial', 'serverurl');
-    if (empty($serverurl)) {
-        $serverurl = 'http://127.0.0.1:8000';
-    }
+    $result = \mod_airagmaterial\local\rag_client::for_component('mod_airagmaterial', 30)
+        ->delete_file((int)$courseid, (string)$filename);
 
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => rtrim($serverurl, '/') . '/course/materials/file',
-        CURLOPT_CUSTOMREQUEST  => 'DELETE',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_POSTFIELDS     => http_build_query([
-            'course_id' => (string)$courseid,
-            'filename'  => $filename,
-        ]),
-        CURLOPT_HTTPHEADER     => airagmaterial_build_api_headers(['Content-Type: application/x-www-form-urlencoded']),
-    ]);
-    $response  = curl_exec($ch);
-    $httpcode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlerror = curl_error($ch);
-    curl_close($ch);
-
-    if ($curlerror || $httpcode !== 200) {
+    if (!$result['success']) {
         // Log the error but let the Moodle deletion proceed regardless.
         debugging(
             "airagmaterial_delete_file_vectors: failed to delete vectors for '$filename' " .
-            "(course $courseid). HTTP $httpcode — $curlerror",
+            "(course $courseid). HTTP {$result['status']} — {$result['error']}",
             DEBUG_DEVELOPER
         );
         return false;
@@ -552,41 +533,17 @@ function airagmaterial_vectorize_files($material, $context) {
  * @return array Result array
  */
 function airagmaterial_send_file_to_rag($serverurl, $filepath, $filename, $courseid) {
-    $url = rtrim($serverurl, '/') . '/course/materials/upload';
+    $client = new \mod_airagmaterial\local\rag_client(
+        (string)$serverurl,
+        (string)get_config('mod_airagmaterial', 'apikey')
+    );
+    $result = $client->upload_material((int)$courseid, $filepath, $filename);
 
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 300,
-        CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_HTTPHEADER => airagmaterial_build_api_headers(['Accept: application/json']),
-        CURLOPT_POSTFIELDS => [
-            'file' => new CURLFile($filepath, '', $filename),
-            'course_id' => (string)$courseid,
-            'course_name' => '',
-        ],
-    ]);
-
-    $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlerror = curl_error($ch);
-    curl_close($ch);
-
-    if ($curlerror) {
-        return ['success' => false, 'error' => 'Connection error: ' . $curlerror];
+    if (!$result['success']) {
+        return ['success' => false, 'error' => $result['error']];
     }
 
-    if ($httpcode !== 200) {
-        return ['success' => false, 'error' => "HTTP $httpcode: " . substr($response, 0, 500)];
-    }
-
-    $data = json_decode($response, true);
-    if (!$data) {
-        return ['success' => false, 'error' => 'Invalid JSON response'];
-    }
-
+    $data = $result['data'];
     if (empty($data['success'])) {
         return ['success' => false, 'error' => $data['message'] ?? $data['detail'] ?? 'Server error'];
     }
