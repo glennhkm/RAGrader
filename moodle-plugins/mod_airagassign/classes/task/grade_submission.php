@@ -26,6 +26,8 @@
 
 namespace mod_airagassign\task;
 
+use mod_airagassign\local\grading_service;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -53,6 +55,7 @@ class grade_submission extends \core\task\adhoc_task {
         global $DB, $CFG;
 
         require_once($CFG->dirroot . '/mod/airagassign/lib.php');
+        $service = new grading_service();
 
         $data = $this->get_custom_data();
         $submissionid = (int)$data->submissionid;
@@ -71,13 +74,13 @@ class grade_submission extends \core\task\adhoc_task {
         $assign = $DB->get_record('airagassign', ['id' => $submission->assignid]);
         if (!$assign) {
             mtrace("grade_submission task: assignment {$submission->assignid} not found — skipping.");
-            airagassign_record_grading_failure($submissionid, 'Assignment record not found');
+            grading_service::record_failure((int)$submissionid, 'Assignment record not found');
             return;
         }
 
         $cm = get_coursemodule_from_instance('airagassign', $assign->id, $assign->course);
         if (!$cm) {
-            airagassign_record_grading_failure($submissionid, 'Course module record not found');
+            grading_service::record_failure((int)$submissionid, 'Course module record not found');
             mtrace("grade_submission task: course module for assignment {$assign->id} not found.");
             return;
         }
@@ -86,7 +89,7 @@ class grade_submission extends \core\task\adhoc_task {
         mtrace("Grading submission $submissionid (assign {$assign->id}, user {$submission->userid})...");
 
         try {
-            $result = airagassign_grade_submission($assign, $submission, $context);
+            $result = $service->grade_submission($assign, $submission, $context);
         } catch (\Throwable $e) {
             $result = ['success' => false, 'error' => $e->getMessage()];
         }
@@ -94,9 +97,9 @@ class grade_submission extends \core\task\adhoc_task {
         if ($result['success']) {
             mtrace("Grading completed for submission $submissionid — status is now 'ai_suggested'.");
         } else {
-            $errmsg = $result['error'] ?? 'Unknown error';
-            $requestid = $result['requestid'] ?? '';
-            airagassign_record_grading_failure($submissionid, $errmsg, $requestid);
+            $errmsg = (string)($result['error'] ?? 'Unknown error');
+            $requestid = (string)($result['requestid'] ?? '');
+            grading_service::record_failure((int)$submissionid, $errmsg, $requestid);
             mtrace("Grading FAILED for submission $submissionid: $errmsg" .
                 ($requestid !== '' ? " [request ID: $requestid]" : '') . '.');
         }

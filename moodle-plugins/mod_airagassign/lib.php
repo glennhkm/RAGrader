@@ -24,6 +24,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+use mod_airagassign\local\material_scope;
+use mod_airagassign\local\rubric_builder;
+
 /**
  * Returns the features supported by this module.
  *
@@ -50,17 +53,14 @@ function airagassign_supports($feature) {
 }
 
 /**
- * Add a new AI RAG Assignment instance.
+ * Decode the dynamic table fields serialised as JSON by the form's JavaScript.
  *
- * @param stdClass $data Form data
- * @param mod_airagassign_mod_form $mform The form
- * @return int The new instance id
+ * These are invisible to moodleform::get_data() but are passed via registered
+ * hidden fields serialised by JS on submit.
+ *
+ * @param stdClass $data Form data, updated in place
  */
-function airagassign_add_instance($data, $mform = null) {
-    global $DB;
-
-    // Decode dynamic table fields from JSON (these are invisible to moodleform::get_data()
-    // but are passed via registered hidden fields serialised by JS on submit).
+function airagassign_decode_dynamic_fields(stdClass $data): void {
     if (!empty($data->criteria_json)) {
         $decoded = json_decode($data->criteria_json, true);
         if (is_array($decoded)) {
@@ -75,79 +75,97 @@ function airagassign_add_instance($data, $mform = null) {
             $data->questions = $decoded;
         }
     }
+}
 
-    $data->timecreated = time();
-    $data->timemodified = time();
+/**
+ * Insert the questions (quiz mode), custom criteria and linked materials of an instance.
+ *
+ * @param stdClass $data Form data with id set
+ */
+function airagassign_save_children(stdClass $data): void {
+    global $DB;
 
-    // Insert main record.
-    $data->id = $DB->insert_record('airagassign', $data);
-
-    // Save questions (quiz mode).
     if ($data->assignmode === 'quiz' && !empty($data->questions)) {
         foreach ($data->questions as $i => $qtext) {
             $qtext = trim($qtext);
             if ($qtext === '') {
                 continue;
             }
-            $question = new stdClass();
-            $question->assignid = $data->id;
-            $question->questiontext = $qtext;
-            $question->sortorder = $i;
-            $question->timecreated = time();
-            $DB->insert_record('airagassign_questions', $question);
+            $DB->insert_record('airagassign_questions', (object)[
+                'assignid' => $data->id,
+                'questiontext' => $qtext,
+                'sortorder' => $i,
+                'timecreated' => time(),
+            ]);
         }
     }
 
-    // Save rubric criteria.
     if (($data->rubricmode ?? '') === 'custom' && !empty($data->criterionname)) {
         foreach ($data->criterionname as $i => $cname) {
             $cname = trim($cname);
             if ($cname === '') {
                 continue;
             }
-            $criterion = new stdClass();
-            $criterion->assignid = $data->id;
-            $criterion->name = $cname;
-            $criterion->description = $data->criteriondesc[$i] ?? '';
-            $criterion->maxscore = $data->criterionmaxscore[$i] ?? 100;
-            $criterion->sortorder = $i;
-            $DB->insert_record('airagassign_criteria', $criterion);
+            $DB->insert_record('airagassign_criteria', (object)[
+                'assignid' => $data->id,
+                'name' => $cname,
+                'description' => $data->criteriondesc[$i] ?? '',
+                'maxscore' => $data->criterionmaxscore[$i] ?? 100,
+                'sortorder' => $i,
+            ]);
         }
     }
 
-    // Save linked materials.
     if (!empty($data->materials)) {
         foreach ($data->materials as $materialid) {
-            $link = new stdClass();
-            $link->assignid = $data->id;
-            $link->materialid = $materialid;
-            $DB->insert_record('airagassign_materials', $link);
+            $DB->insert_record('airagassign_materials', (object)[
+                'assignid' => $data->id,
+                'materialid' => $materialid,
+            ]);
         }
     }
+}
+
+/**
+ * Save the manual reference file draft area.
+ *
+ * @param stdClass $data Form data with manualfile set
+ * @param context_module $context Module context
+ */
+function airagassign_save_manual_file(stdClass $data, context_module $context): void {
+    file_save_draft_area_files($data->manualfile, $context->id, 'mod_airagassign', 'manualfile', 0,
+        ['subdirs' => false, 'maxfiles' => 1]);
+}
+
+/**
+ * Add a new AI RAG Assignment instance.
+ *
+ * @param stdClass $data Form data
+ * @param mod_airagassign_mod_form $mform The form
+ * @return int The new instance id
+ */
+function airagassign_add_instance($data, $mform = null) {
+    global $DB;
+
+    airagassign_decode_dynamic_fields($data);
+    $data->timecreated = time();
+    $data->timemodified = time();
+    $data->id = $DB->insert_record('airagassign', $data);
+    airagassign_save_children($data);
 
     // Save manual file if uploaded.
     $context = context_module::instance($data->coursemodule);
     if (isset($data->manualfile)) {
-        file_save_draft_area_files(
-            $data->manualfile,
-            $context->id,
-            'mod_airagassign',
-            'manualfile',
-            0,
-            ['subdirs' => false, 'maxfiles' => 1]
-        );
-        if (!empty(airagassign_get_uploaded_files($context->id))) {
-            airagassign_notify_manual_file_vectorization(
-                airagassign_vectorize_manual_file($data->course, $context->id)
+        airagassign_save_manual_file($data, $context);
+        if (!empty(material_scope::manual_files($context->id))) {
+            material_scope::notify_manual_file_vectorization(
+                material_scope::vectorize_manual_files((int)$data->course, $context->id)
             );
         }
     }
 
-    // Update gradebook.
     airagassign_grade_item_update($data);
-
-    // Sync Moodle native rubric.
-    airagassign_sync_moodle_rubric($data);
+    rubric_builder::sync_moodle($data);
 
     return $data->id;
 }
@@ -162,93 +180,28 @@ function airagassign_add_instance($data, $mform = null) {
 function airagassign_update_instance($data, $mform = null) {
     global $DB;
 
-    // Decode dynamic table fields from JSON.
-    if (!empty($data->criteria_json)) {
-        $decoded = json_decode($data->criteria_json, true);
-        if (is_array($decoded)) {
-            $data->criterionname     = array_column($decoded, 'name');
-            $data->criteriondesc     = array_column($decoded, 'desc');
-            $data->criterionmaxscore = array_column($decoded, 'maxscore');
-        }
-    }
-    if (!empty($data->questions_json)) {
-        $decoded = json_decode($data->questions_json, true);
-        if (is_array($decoded)) {
-            $data->questions = $decoded;
-        }
-    }
-
+    airagassign_decode_dynamic_fields($data);
     $data->timemodified = time();
     $data->id = $data->instance;
-
     $DB->update_record('airagassign', $data);
 
-    // Re-save questions.
+    // Re-save questions, rubric criteria and linked materials.
     $DB->delete_records('airagassign_questions', ['assignid' => $data->id]);
-    if ($data->assignmode === 'quiz' && !empty($data->questions)) {
-        foreach ($data->questions as $i => $qtext) {
-            $qtext = trim($qtext);
-            if ($qtext === '') {
-                continue;
-            }
-            $question = new stdClass();
-            $question->assignid = $data->id;
-            $question->questiontext = $qtext;
-            $question->sortorder = $i;
-            $question->timecreated = time();
-            $DB->insert_record('airagassign_questions', $question);
-        }
-    }
-
-    // Re-save rubric criteria.
     $DB->delete_records('airagassign_criteria', ['assignid' => $data->id]);
-    if (($data->rubricmode ?? '') === 'custom' && !empty($data->criterionname)) {
-        foreach ($data->criterionname as $i => $cname) {
-            $cname = trim($cname);
-            if ($cname === '') {
-                continue;
-            }
-            $criterion = new stdClass();
-            $criterion->assignid = $data->id;
-            $criterion->name = $cname;
-            $criterion->description = $data->criteriondesc[$i] ?? '';
-            $criterion->maxscore = $data->criterionmaxscore[$i] ?? 100;
-            $criterion->sortorder = $i;
-            $DB->insert_record('airagassign_criteria', $criterion);
-        }
-    }
-
-    // Re-save linked materials.
     $DB->delete_records('airagassign_materials', ['assignid' => $data->id]);
-    if (!empty($data->materials)) {
-        foreach ($data->materials as $materialid) {
-            $link = new stdClass();
-            $link->assignid = $data->id;
-            $link->materialid = $materialid;
-            $DB->insert_record('airagassign_materials', $link);
-        }
-    }
+    airagassign_save_children($data);
 
     // Re-save manual file.
     $context = context_module::instance($data->coursemodule);
     if (isset($data->manualfile)) {
-        $oldhashes = airagassign_get_manual_file_hashes($context->id);
-
-        file_save_draft_area_files(
-            $data->manualfile,
-            $context->id,
-            'mod_airagassign',
-            'manualfile',
-            0,
-            ['subdirs' => false, 'maxfiles' => 1]
-        );
-
-        $newhashes = airagassign_get_manual_file_hashes($context->id);
+        $oldhashes = material_scope::manual_file_hashes($context->id);
+        airagassign_save_manual_file($data, $context);
+        $newhashes = material_scope::manual_file_hashes($context->id);
 
         // Removed files: delete their vectors (unless another activity in the
         // course still uses the same filename).
         foreach (array_diff_key($oldhashes, $newhashes) as $oldname => $unused) {
-            airagassign_delete_manual_file_vectors($data->course, $oldname, $context->id);
+            material_scope::delete_manual_file_vectors((int)$data->course, (string)$oldname, $context->id);
         }
 
         // New files, or an existing filename whose content was replaced, must be
@@ -261,17 +214,14 @@ function airagassign_update_instance($data, $mform = null) {
             }
         }
         if ($needsvectorize) {
-            airagassign_notify_manual_file_vectorization(
-                airagassign_vectorize_manual_file($data->course, $context->id)
+            material_scope::notify_manual_file_vectorization(
+                material_scope::vectorize_manual_files((int)$data->course, $context->id)
             );
         }
     }
 
-    // Update gradebook.
     airagassign_grade_item_update($data);
-
-    // Sync Moodle native rubric.
-    airagassign_sync_moodle_rubric($data);
+    rubric_builder::sync_moodle($data);
 
     return true;
 }
@@ -294,9 +244,8 @@ function airagassign_delete_instance($id) {
     $cm = get_coursemodule_from_instance('airagassign', $id);
     if ($cm) {
         $context = context_module::instance($cm->id);
-        $files = airagassign_get_uploaded_files($context->id);
-        foreach ($files as $file) {
-            airagassign_delete_manual_file_vectors($assign->course, $file->get_filename(), $context->id);
+        foreach (airagassign_get_uploaded_files($context->id) as $file) {
+            material_scope::delete_manual_file_vectors((int)$assign->course, $file->get_filename(), $context->id);
         }
     }
 
@@ -404,663 +353,13 @@ function airagassign_update_grades($assign, $userid = 0, $nullifnone = true) {
 }
 
 /**
- * Build the rubric dictionary from the criteria for API call.
- *
- * @param int $assignid Assignment ID
- * @return array Rubric dictionary
- */
-function airagassign_build_rubric($assignid) {
-    global $DB;
-
-    $assign = $DB->get_record('airagassign', ['id' => $assignid]);
-    if (!$assign) {
-        return [];
-    }
-
-    $rubricmode = $assign->rubricmode ?? 'custom';
-    if ($rubricmode === 'moodle') {
-        return airagassign_build_moodle_rubric($assign);
-    }
-
-    if ($rubricmode === 'simple') {
-        return [];
-    }
-
-    $criteria = $DB->get_records('airagassign_criteria', ['assignid' => $assignid], 'sortorder ASC');
-    $rubric = [];
-    foreach ($criteria as $c) {
-        $rubric[$c->name] = [
-            'description' => $c->description,
-            'max_score' => (float)$c->maxscore,
-        ];
-    }
-    return $rubric;
-}
-
-/**
- * Build the rubric dictionary from Moodle's native advanced grading rubric.
- *
- * @param stdClass $assign The assignment instance.
- * @return array Rubric dictionary
- */
-function airagassign_build_moodle_rubric($assign) {
-    global $CFG;
-    require_once($CFG->dirroot . '/grade/grading/lib.php');
-
-    $cm = get_coursemodule_from_instance('airagassign', $assign->id);
-    if (!$cm) {
-        return [];
-    }
-
-    $context = context_module::instance($cm->id);
-    $gradingmanager = get_grading_manager($context, 'mod_airagassign', 'submissions');
-    if (!$gradingmanager) {
-        return [];
-    }
-
-    $controller = $gradingmanager->get_active_controller();
-    if (!$controller || $controller->get_method() !== 'rubric') {
-        return [];
-    }
-
-    $definition = $controller->get_definition(true);
-    if (empty($definition) || empty($definition->rubric_criteria)) {
-        return [];
-    }
-
-    $rubric = [];
-    foreach ($definition->rubric_criteria as $criterionid => $criterion) {
-        $name = trim($criterion['description']);
-        if ($name === '') {
-            $name = "Criterion " . $criterionid;
-        }
-
-        $maxscore = 0.0;
-        $leveldescriptions = [];
-        if (!empty($criterion['levels'])) {
-            foreach ($criterion['levels'] as $level) {
-                $score = (float)$level['score'];
-                if ($score > $maxscore) {
-                    $maxscore = $score;
-                }
-                $leveldescriptions[] = sprintf("- %s (%s pts)", trim($level['definition']), $score);
-            }
-        }
-
-        $description = implode("\n", $leveldescriptions);
-
-        $rubric[$name] = [
-            'description' => $description,
-            'max_score' => $maxscore,
-        ];
-    }
-
-    return $rubric;
-}
-
-/**
  * Get the list of uploaded manual files for an assignment instance.
  *
  * @param int $contextid The context ID
  * @return array List of stored_file objects
  */
 function airagassign_get_uploaded_files($contextid) {
-    $fs = get_file_storage();
-    $files = $fs->get_area_files($contextid, 'mod_airagassign', 'manualfile', 0, 'filename', false);
-    return $files;
-}
-
-/**
- * Map manual reference filenames to their content hashes.
- *
- * @param int $contextid The module context ID
- * @return array<string, string> filename => contenthash
- */
-function airagassign_get_manual_file_hashes($contextid): array {
-    $hashes = [];
-    foreach (airagassign_get_uploaded_files($contextid) as $file) {
-        $hashes[$file->get_filename()] = $file->get_contenthash();
-    }
-    return $hashes;
-}
-
-/**
- * Tell the teacher when the manual reference file could not be vectorized.
- *
- * Grading stays fail-closed (retrieval is scoped to the file, so an
- * unvectorized file yields no evidence), but the teacher must know why.
- *
- * @param array $result Result of airagassign_vectorize_manual_file()
- */
-function airagassign_notify_manual_file_vectorization(array $result): void {
-    if (empty($result['success'])) {
-        \core\notification::warning(get_string('manualfile_vectorize_failed', 'airagassign',
-            s($result['error'] ?? 'Unknown error')));
-    }
-}
-
-/**
- * Delete a manual reference file's vectors unless another activity still uses them.
- *
- * The course collection identifies chunks by filename only, so a same-named
- * file in an AI RAG Material or another assignment shares those vectors.
- *
- * @param int $courseid Course ID
- * @param string $filename Manual reference filename
- * @param int $contextid Context of the assignment doing the cleanup
- * @return bool True if vectors were deleted or intentionally retained
- */
-function airagassign_delete_manual_file_vectors($courseid, $filename, $contextid): bool {
-    if (\mod_airagmaterial\local\vector_ownership::is_filename_in_use(
-            (int)$courseid, (string)$filename, 0, (int)$contextid)) {
-        return true;
-    }
-    return airagassign_delete_file_vectors($courseid, $filename);
-}
-
-/**
- * Vectorize the manual reference/answer key file on the RAG server.
- *
- * @param int $courseid Course ID
- * @param int $contextid Context ID
- * @return array Result status
- */
-function airagassign_vectorize_manual_file($courseid, $contextid) {
-    $serverurl = get_config('mod_airagassign', 'serverurl');
-    if (empty($serverurl)) {
-        $serverurl = 'http://127.0.0.1:8000';
-    }
-
-    $files = airagassign_get_uploaded_files($contextid);
-    if (empty($files)) {
-        return ['success' => false, 'error' => 'No files found to vectorize'];
-    }
-
-    $errors = [];
-    foreach ($files as $file) {
-        $filename = $file->get_filename();
-        
-        // Create a temp file for curl upload.
-        $tempdir = make_temp_directory('airagassign');
-        $tempfile = $tempdir . '/' . $filename;
-        $file->copy_content_to($tempfile);
-
-        // Send to RAG server.
-        $result = airagassign_send_file_to_rag($serverurl, $tempfile, $filename, $courseid);
-
-        // Clean up temp file.
-        @unlink($tempfile);
-
-        if (!$result['success']) {
-            $errors[] = $filename . ': ' . ($result['error'] ?? 'Unknown error');
-        }
-    }
-
-    if (!empty($errors)) {
-        return ['success' => false, 'error' => implode("\n", $errors)];
-    }
-    return ['success' => true];
-}
-
-/**
- * Build HTTP headers for RAG API requests, appending Bearer auth when configured.
- *
- * @param array $headers Base HTTP headers
- * @return array Complete HTTP headers
- */
-function airagassign_build_api_headers(array $headers = []): array {
-    $apikey = trim((string)get_config('mod_airagassign', 'apikey'));
-    if ($apikey !== '') {
-        $headers[] = 'Authorization: Bearer ' . $apikey;
-    }
-    return $headers;
-}
-
-/**
- * Send a manual file to the RAG server for vectorization.
- *
- * @param string $serverurl RAG server base URL
- * @param string $filepath Local file path
- * @param string $filename Original filename
- * @param int $courseid Course ID
- * @return array Result array
- */
-function airagassign_send_file_to_rag($serverurl, $filepath, $filename, $courseid) {
-    $url = rtrim($serverurl, '/') . '/course/materials/upload';
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 300,
-        CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_HTTPHEADER => airagassign_build_api_headers(['Accept: application/json']),
-        CURLOPT_POSTFIELDS => [
-            'file' => new CURLFile($filepath, '', $filename),
-            'course_id' => (string)$courseid,
-            'course_name' => '',
-        ],
-    ]);
-
-    $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlerror = curl_error($ch);
-    curl_close($ch);
-
-    if ($curlerror) {
-        return ['success' => false, 'error' => 'Connection error: ' . $curlerror];
-    }
-
-    if ($httpcode !== 200) {
-        return ['success' => false, 'error' => "HTTP $httpcode: " . substr($response, 0, 500)];
-    }
-
-    $data = json_decode($response, true);
-    if (!$data) {
-        return ['success' => false, 'error' => 'Invalid JSON response'];
-    }
-
-    if (empty($data['success'])) {
-        return ['success' => false, 'error' => $data['message'] ?? $data['detail'] ?? 'Server error'];
-    }
-
-    return [
-        'success' => true,
-        'chunks_created' => $data['chunk_count'] ?? $data['chunks_created'] ?? 0,
-        'documents_loaded' => $data['documents_loaded'] ?? 1,
-        'total_in_db' => $data['total_documents_in_db'] ?? 0,
-    ];
-}
-
-/**
- * Delete a file's vectors from the RAG server.
- *
- * @param int $courseid Course ID
- * @param string $filename File name
- * @return bool True on success
- */
-function airagassign_delete_file_vectors($courseid, $filename) {
-    $serverurl = get_config('mod_airagassign', 'serverurl');
-    if (empty($serverurl)) {
-        $serverurl = 'http://127.0.0.1:8000';
-    }
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => rtrim($serverurl, '/') . '/course/materials/file',
-        CURLOPT_CUSTOMREQUEST  => 'DELETE',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_POSTFIELDS     => http_build_query([
-            'course_id' => (string)$courseid,
-            'filename'  => $filename,
-        ]),
-        CURLOPT_HTTPHEADER     => airagassign_build_api_headers(['Content-Type: application/x-www-form-urlencoded']),
-    ]);
-    $response  = curl_exec($ch);
-    $httpcode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlerror = curl_error($ch);
-    curl_close($ch);
-
-    if ($curlerror || $httpcode !== 200) {
-        debugging(
-            "airagassign_delete_file_vectors: failed to delete vectors for '$filename' " .
-            "(course $courseid). HTTP $httpcode — $curlerror",
-            DEBUG_DEVELOPER
-        );
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Return the linked AI RAG Material activities that are not ready for grading.
- *
- * Grading scopes retrieval to the linked materials, so grading while one of
- * them is still queued, processing, pending or failed would silently use a
- * smaller knowledge base than the teacher selected, and students graded in the
- * same batch could be judged against different evidence. Callers must refuse
- * to grade while this list is non-empty. Per-file failures inside a
- * 'completed' material are intentionally tolerated: they are shown to the
- * teacher on the material page and only the vectorized files are used.
- *
- * @param int $assignid Assignment instance ID
- * @return array List of objects with id, name and vectorize_status
- */
-function airagassign_get_unready_linked_materials(int $assignid): array {
-    global $DB;
-
-    $sql = "SELECT am.id, am.name, am.vectorize_status
-              FROM {airagassign_materials} aam
-              JOIN {airagmaterial} am ON am.id = aam.materialid
-             WHERE aam.assignid = :assignid
-               AND (am.vectorize_status IS NULL OR am.vectorize_status <> :completed)
-          ORDER BY am.name ASC, am.id ASC";
-    return array_values($DB->get_records_sql($sql, ['assignid' => $assignid, 'completed' => 'completed']));
-}
-
-/**
- * Describe unready linked materials as "Name (status)" for teacher-facing errors.
- *
- * The result is plain text: callers store it as the grading error, which is
- * escaped with s() when displayed.
- *
- * @param array $materials Result of airagassign_get_unready_linked_materials()
- * @param context $context Context used to format material names
- * @return string Comma-separated description
- */
-function airagassign_describe_unready_materials(array $materials, context $context): string {
-    $sm = get_string_manager();
-    $parts = [];
-    foreach ($materials as $material) {
-        $status = (string)($material->vectorize_status ?? '');
-        $status = $status === '' ? 'pending' : $status;
-        $label = $sm->string_exists('status_' . $status, 'airagmaterial')
-            ? get_string('status_' . $status, 'airagmaterial')
-            : $status;
-        $name = format_string($material->name, true, ['context' => $context, 'escape' => false]);
-        $parts[] = $name . ' (' . $label . ')';
-    }
-    return implode(', ', $parts);
-}
-
-/**
- * Collect linked airagmaterial filenames and manual reference filenames for scoped RAG retrieval.
- *
- * @param int $assignid Assignment instance ID
- * @param int $contextid Module context ID
- * @return array List of unique material basenames
- */
-function airagassign_get_linked_material_filenames(int $assignid, int $contextid): array {
-    global $DB;
-
-    $filenames = [];
-    // {airagmaterial_files} tracks per-file vectorization via `vectorized` (0/1),
-    // while `vectorize_status` lives on {airagmaterial}.
-    $sql = "SELECT DISTINCT af.filename
-              FROM {airagassign_materials} aam
-              JOIN {airagmaterial} am ON am.id = aam.materialid
-              JOIN {airagmaterial_files} af ON af.materialid = am.id
-             WHERE aam.assignid = :assignid
-               AND am.vectorize_status = 'completed'
-               AND af.vectorized = 1";
-    $records = $DB->get_records_sql($sql, ['assignid' => $assignid]);
-    foreach ($records as $record) {
-        $name = basename(trim((string)($record->filename ?? '')));
-        if ($name !== '' && $name !== '.' && $name !== '..') {
-            $filenames[$name] = true;
-        }
-    }
-
-    foreach (airagassign_get_uploaded_files($contextid) as $file) {
-        $name = basename(trim((string)$file->get_filename()));
-        if ($name !== '' && $name !== '.' && $name !== '..') {
-            $filenames[$name] = true;
-        }
-    }
-
-    return array_keys($filenames);
-}
-
-/**
- * Grade a single submission using the RAG API.
- *
- * @param stdClass $assign The assignment record
- * @param stdClass $submission The submission record
- * @param context_module $context The module context
- * @return array Result with success status
- */
-function airagassign_grade_submission($assign, $submission, $context) {
-    global $DB;
-
-    $serverurl = get_config('mod_airagassign', 'serverurl');
-    if (empty($serverurl)) {
-        $serverurl = 'http://127.0.0.1:8000';
-    }
-
-    $rubric = airagassign_build_rubric($assign->id);
-    if (($assign->rubricmode ?? '') === 'moodle' && empty($rubric)) {
-        return [
-            'success' => false,
-            'error' => get_string('moodlerubric_not_configured', 'airagassign'),
-        ];
-    }
-
-    // Fail closed: every linked material must be fully vectorized, otherwise
-    // retrieval would silently use only part of the selected knowledge base.
-    $unready = airagassign_get_unready_linked_materials((int)$assign->id);
-    if (!empty($unready)) {
-        return [
-            'success' => false,
-            'error' => get_string('linkedmaterials_not_ready', 'airagassign',
-                airagassign_describe_unready_materials($unready, $context)),
-        ];
-    }
-
-    $sourcefilter = airagassign_get_linked_material_filenames((int)$assign->id, (int)$context->id);
-    if (empty($sourcefilter) && $DB->record_exists('airagassign_materials', ['assignid' => $assign->id])) {
-        return [
-            'success' => false,
-            'error' => get_string('linkedmaterials_no_vectorized_files', 'airagassign'),
-        ];
-    }
-
-    if ($assign->assignmode === 'quiz') {
-        return airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl, $sourcefilter);
-    } else {
-        return airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl, $sourcefilter);
-    }
-}
-
-/**
- * Persist an AI grading failure for teacher review and retry.
- *
- * @param int $submissionid Submission ID
- * @param string $error Error message
- * @param string $requestid API request ID, when available
- */
-function airagassign_record_grading_failure($submissionid, $error, $requestid = '') {
-    global $DB;
-
-    $cleanerror = trim(strip_tags((string)$error));
-    if ($cleanerror === '') {
-        $cleanerror = 'Unknown grading error';
-    }
-    $cleanerror = core_text::substr($cleanerror, 0, 4000);
-
-    $record = (object)[
-        'id' => (int)$submissionid,
-        'status' => 'grading_failed',
-        'grading_error' => $cleanerror,
-        'grading_requestid' => core_text::substr(trim((string)$requestid), 0, 64),
-        'grading_started_at' => 0,
-    ];
-    $DB->update_record('airagassign_submissions', $record);
-}
-
-/**
- * Grade a quiz-mode submission (per-question grading).
- *
- * @param stdClass $assign Assignment record
- * @param stdClass $submission Submission record
- * @param array $rubric Rubric dictionary
- * @param string $serverurl RAG server URL
- * @param array $sourcefilter Optional list of source filenames for scoped retrieval
- * @return array Result
- */
-function airagassign_grade_quiz_submission($assign, $submission, $rubric, $serverurl, array $sourcefilter = []) {
-    global $DB;
-
-    $questions = $DB->get_records('airagassign_questions', ['assignid' => $assign->id], 'sortorder ASC');
-    $answers = $DB->get_records('airagassign_answers', ['submissionid' => $submission->id]);
-
-    // Index answers by question ID.
-    $answermap = [];
-    foreach ($answers as $a) {
-        $answermap[$a->questionid] = $a;
-    }
-
-    $numquestions = count($questions);
-    if ($numquestions == 0) {
-        return ['success' => false, 'error' => 'No questions defined'];
-    }
-
-    $gradeperquestion = (float)$assign->maximumgrade / $numquestions;
-    $totalscore = 0;
-    $allfeedback = [];
-    $allerrors = [];
-    $confidences = [];
-    $failedrequestid = '';
-
-    foreach ($questions as $question) {
-        $answer = $answermap[$question->id] ?? null;
-        if (!$answer) {
-            continue;
-        }
-
-        // Call RAG API for this question.
-        $payload = [
-            'course_id' => $assign->course,
-            'question' => $question->questiontext,
-            'essay' => $answer->answertext,
-            'rubric' => $rubric,
-            'maximum_grade' => $gradeperquestion,
-            'assignment_id' => $assign->id,
-        ];
-        if (!empty($sourcefilter)) {
-            $payload['source_filter'] = array_values($sourcefilter);
-        }
-        $result = airagassign_call_rag_api($serverurl, $payload);
-
-        if ($result['success']) {
-            $qscore    = (float)($result['data']['score']    ?? 0);
-            $qfeedback = $result['data']['feedback'] ?? '';
-
-            // Store AI suggestion in separate columns — final score/feedback
-            // is only written when the teacher confirms via grade_review.php.
-            $answer->ai_score    = $qscore;
-            $answer->ai_feedback = $qfeedback;
-            $answer->ai_response = json_encode($result['data']);
-            $DB->update_record('airagassign_answers', $answer);
-
-            $totalscore += $qscore;
-            $allfeedback[] = "Q" . ($question->sortorder + 1) . ": " . $qfeedback;
-            $confidences[] = airagassign_normalize_confidence($result['data']['confidence'] ?? 0);
-        } else {
-            $allerrors[] = "Q" . ($question->sortorder + 1) . ": " . ($result['error'] ?? 'Unknown error');
-            $failedrequestid = $result['requestid'] ?? $failedrequestid;
-        }
-    }
-
-    if (!empty($allerrors)) {
-        return [
-            'success' => false,
-            'error' => implode('; ', $allerrors),
-            'requestid' => $failedrequestid,
-        ];
-    }
-
-    // Store AI suggestion — teacher must confirm via grade_review.php.
-    $submission->ai_grade    = round($totalscore, 2);
-    $submission->ai_feedback = implode("\n\n", $allfeedback);
-    // The submission is only as trustworthy as its least certain answer, so the
-    // minimum (not the mean) drives the HITL review signal in quiz mode.
-    $submission->confidence  = empty($confidences) ? null : min($confidences);
-    $submission->status      = 'ai_suggested';
-    $submission->grading_error = null;
-    $submission->grading_requestid = null;
-    $submission->grading_started_at = 0;
-    $submission->timegraded  = time();
-    $DB->update_record('airagassign_submissions', $submission);
-
-    return [
-        'success'  => true,
-        'ai_grade' => $submission->ai_grade,
-        'feedback' => $submission->ai_feedback,
-        'errors'   => $allerrors,
-    ];
-}
-
-/**
- * Grade an essay-mode submission (single grading).
- *
- * @param stdClass $assign Assignment record
- * @param stdClass $submission Submission record
- * @param array $rubric Rubric dictionary
- * @param string $serverurl RAG server URL
- * @param array $sourcefilter Optional list of source filenames for scoped retrieval
- * @return array Result
- */
-function airagassign_grade_essay_submission($assign, $submission, $rubric, $serverurl, array $sourcefilter = []) {
-    global $DB;
-
-    // Get the essay answer.
-    $answer = $DB->get_record('airagassign_answers', ['submissionid' => $submission->id]);
-    if (!$answer) {
-        return ['success' => false, 'error' => 'No essay answer found'];
-    }
-
-    $payload = [
-        'course_id' => $assign->course,
-        'question' => $assign->essayprompt,
-        'essay' => $answer->answertext,
-        'rubric' => $rubric,
-        'maximum_grade' => (float)$assign->maximumgrade,
-        'assignment_id' => $assign->id,
-    ];
-    if (!empty($sourcefilter)) {
-        $payload['source_filter'] = array_values($sourcefilter);
-    }
-    $result = airagassign_call_rag_api($serverurl, $payload);
-
-    if (!$result['success']) {
-        return $result;
-    }
-
-    $score      = (float)($result['data']['score']      ?? 0);
-    $feedback   = $result['data']['feedback']   ?? '';
-    $confidence = airagassign_normalize_confidence($result['data']['confidence'] ?? 0);
-
-    // Store AI suggestion in separate columns — score/feedback remain empty
-    // until the teacher confirms the grade in grade_review.php.
-    $answer->ai_score    = $score;
-    $answer->ai_feedback = $feedback;
-    $answer->ai_response = json_encode($result['data']);
-    $DB->update_record('airagassign_answers', $answer);
-
-    // Update submission with AI suggestion (NOT final grade).
-    $submission->ai_grade    = round($score, 2);
-    $submission->ai_feedback = $feedback;
-    $submission->ai_response = json_encode($result['data']);
-    $submission->confidence  = $confidence;
-    $submission->status      = 'ai_suggested';
-    $submission->grading_error = null;
-    $submission->grading_requestid = null;
-    $submission->grading_started_at = 0;
-    $submission->timegraded  = time();
-    $DB->update_record('airagassign_submissions', $submission);
-
-    return [
-        'success'  => true,
-        'ai_grade' => $submission->ai_grade,
-        'feedback' => $feedback,
-    ];
-}
-
-/**
- * Clamp an API confidence value into the 0..1 range stored in the database.
- *
- * @param mixed $value Raw confidence from the RAG response
- * @return float Confidence between 0 and 1
- */
-function airagassign_normalize_confidence($value): float {
-    $confidence = is_numeric($value) ? (float)$value : 0.0;
-    if (!is_finite($confidence)) {
-        return 0.0;
-    }
-    return max(0.0, min(1.0, $confidence));
+    return material_scope::manual_files((int)$contextid);
 }
 
 /**
@@ -1071,90 +370,6 @@ function airagassign_normalize_confidence($value): float {
  */
 function airagassign_has_confidence($submission): bool {
     return isset($submission->confidence) && is_numeric($submission->confidence);
-}
-
-/**
- * Call the RAG API for grading.
- *
- * @param string $serverurl RAG server URL
- * @param array $payload Request payload
- * @return array Result with success and data/error
- */
-function airagassign_call_rag_api($serverurl, $payload) {
-    $url = rtrim($serverurl, '/') . '/assign/answer';
-    $requestid = bin2hex(random_bytes(16));
-    $responseheaders = [];
-
-    // FastAPI expects rubric to be a JSON object. In simple grading mode there
-    // is no rubric, and PHP would encode an empty array as [] which triggers a
-    // 422 validation error before the request reaches the grading logic.
-    if (!isset($payload['rubric']) || (is_array($payload['rubric']) && empty($payload['rubric']))) {
-        $payload['rubric'] = new stdClass();
-    }
-
-    $jsonpayload = json_encode($payload);
-
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 120,
-        CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_HTTPHEADER => airagassign_build_api_headers([
-            'Content-Type: application/json',
-            'Accept: application/json',
-            'X-Request-ID: ' . $requestid,
-        ]),
-        CURLOPT_HEADERFUNCTION => function($curl, $header) use (&$responseheaders) {
-            $length = strlen($header);
-            $parts = explode(':', $header, 2);
-            if (count($parts) === 2) {
-                $responseheaders[strtolower(trim($parts[0]))] = trim($parts[1]);
-            }
-            return $length;
-        },
-        CURLOPT_POSTFIELDS => $jsonpayload,
-    ]);
-
-    $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlerror = curl_error($ch);
-    curl_close($ch);
-
-    if (!empty($responseheaders['x-request-id'])) {
-        $requestid = core_text::substr($responseheaders['x-request-id'], 0, 64);
-    }
-
-    if ($curlerror) {
-        return ['success' => false, 'error' => 'Connection error: ' . $curlerror, 'requestid' => $requestid];
-    }
-
-    if ($httpcode !== 200) {
-        $detail = '';
-        $decoded = json_decode($response, true);
-        if ($decoded && isset($decoded['detail'])) {
-            $detail = is_string($decoded['detail']) ? $decoded['detail'] : json_encode($decoded['detail']);
-        } else {
-            $detail = substr($response, 0, 500);
-        }
-        return ['success' => false, 'error' => "HTTP $httpcode: $detail", 'requestid' => $requestid];
-    }
-
-    $data = json_decode($response, true);
-    if (!$data) {
-        return ['success' => false, 'error' => 'Invalid JSON response from server', 'requestid' => $requestid];
-    }
-
-    if (isset($data['success']) && !$data['success']) {
-        return [
-            'success' => false,
-            'error' => $data['error'] ?? $data['message'] ?? 'Server returned failure',
-            'requestid' => $requestid,
-        ];
-    }
-
-    return ['success' => true, 'data' => $data, 'requestid' => $requestid];
 }
 
 /**
@@ -1210,46 +425,4 @@ function airagassign_pluginfile($course, $cm, $context, $filearea, $args, $force
     }
 
     send_stored_file($file, 0, 0, $forcedownload, $options);
-}
-
-/**
- * Synchronize the selected Moodle advanced grading method.
- *
- * This only enables/disables Moodle native Rubric for the grade item. It must
- * not create or overwrite rubric definitions, because those criteria should be
- * configured by the teacher through Moodle's Advanced grading UI.
- *
- * @param stdClass $data Form data or assignment instance data
- */
-function airagassign_sync_moodle_rubric($data) {
-    global $CFG;
-
-    $assignid = $data->id;
-    // Check rubricmode. If not 'moodle', do not sync or disable rubric method.
-    $rubricmode = $data->rubricmode ?? '';
-    
-    // Get course module and context.
-    $cm = get_coursemodule_from_instance('airagassign', $assignid, 0, false, IGNORE_MISSING);
-    if (!$cm) {
-        return;
-    }
-    $context = context_module::instance($cm->id);
-
-    require_once($CFG->dirroot . '/grade/grading/lib.php');
-    $gradingmanager = get_grading_manager($context, 'mod_airagassign', 'submissions');
-    
-    if ($rubricmode !== 'moodle') {
-        // If not Moodle Native Rubric, make sure native advanced grading is disabled (simple direct grading).
-        $activemethod = $gradingmanager->get_active_method();
-        if (!empty($activemethod)) {
-            $gradingmanager->set_active_method('');
-        }
-        return;
-    }
-
-    // Enable Moodle native Rubric for this grade item, then let the teacher
-    // define the actual rubric through Moodle's Advanced grading UI. Do not
-    // auto-create or overwrite criteria here; the API payload must reflect the
-    // rubric configured by the teacher, not a generated fallback.
-    $gradingmanager->set_active_method('rubric');
 }
