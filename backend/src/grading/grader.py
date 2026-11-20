@@ -364,8 +364,9 @@ class EssayGrader:
         Switch LLM provider and model.
         
         Args:
-            provider: LLM provider ("groq" or "huggingface")
-            model_name: Model name
+            provider: LLM provider ("provider_chain", "openai_compatible", "local",
+                "groq", "openrouter", or "huggingface")
+            model_name: Model name (any id the provider accepts)
         """
         self.rag_pipeline.switch_llm(provider, model_name)
         logger.info(f"LLM switched to {provider}/{model_name}")

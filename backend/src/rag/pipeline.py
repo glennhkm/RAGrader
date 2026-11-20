@@ -10,6 +10,7 @@ from ..utils.config import Settings, get_settings
 from .llm import LLMWrapper
 from .retriever import Retriever
 from .prompt_builder import PromptBuilder
+from .prompts import format_image_captions, resolve_language
 from ..ingestion.document_loader import DocumentLoader
 
 
@@ -206,8 +207,9 @@ class RAGPipeline:
         Switch LLM provider and model on the fly.
         
         Args:
-            provider: LLM provider ("groq" or "huggingface")
-            model_name: Model name
+            provider: LLM provider ("provider_chain", "openai_compatible", "local",
+                "groq", "openrouter", or "huggingface")
+            model_name: Model name (any id the provider accepts)
         """
         logger.info(f"Switching LLM to {provider}/{model_name}")
         
@@ -286,7 +288,8 @@ class RAGPipeline:
     def extract_answer_from_document(
         file_path: Path,
         enable_vision: bool = False,
-        include_image_captions: bool = True
+        include_image_captions: bool = True,
+        language: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Extract student answer from an uploaded document (PDF/DOCX/PPTX).
@@ -299,6 +302,9 @@ class RAGPipeline:
             file_path: Path to the uploaded document
             enable_vision: Whether to use vision model for image captioning
             include_image_captions: Whether to include image captions in the extracted text
+            language: Optional language override ("auto", "en", "id") for the labels of
+                the appended image-caption section; resolved like the grading prompt
+                (override -> PROMPT_LANGUAGE -> detection over the document text)
             
         Returns:
             Dictionary with:
@@ -307,6 +313,7 @@ class RAGPipeline:
                 - images_found: int (number of images found)
                 - image_captions: List[str] (captions if vision enabled)
                 - pages_processed: int
+                - language: str (language of the caption labels)
                 - error: str (if any)
         """
         logger.info(f"Extracting answer from document: {file_path}")
@@ -355,11 +362,12 @@ class RAGPipeline:
                     except Exception:
                         continue
                 
-                # Append image captions to the extracted text
-                if caption_texts:
-                    extracted_text += "\n\n--- Deskripsi Gambar dalam Dokumen ---\n"
-                    for i, caption in enumerate(caption_texts, 1):
-                        extracted_text += f"\n[Gambar {i}]: {caption}"
+            # Label the appended captions in the answer's own language so the
+            # essay sent to the grader does not mix languages.
+            resolved_language = resolve_language(
+                language, get_settings().prompt.language, extracted_text
+            )
+            extracted_text += format_image_captions(caption_texts, resolved_language)
             
             logger.info(f"Successfully extracted answer from document: "
                        f"{len(text_parts)} text sections, {len(images)} images")
@@ -370,6 +378,7 @@ class RAGPipeline:
                 'images_found': len(images),
                 'image_captions': caption_texts,
                 'pages_processed': len(pages_processed) if pages_processed else len(documents),
+                'language': resolved_language,
                 'error': None
             }
             
@@ -409,6 +418,8 @@ class RAGPipeline:
             include_image_captions: Whether to include image captions
             course_id: Optional course ID / namespace to retrieve from
             metadata_filter: Optional Chroma metadata filter dict
+            language: Optional language override ("auto", "en", "id") for the prompt
+                and the extracted caption labels
             
         Returns:
             Grading results dictionary with additional extraction info
@@ -419,7 +430,8 @@ class RAGPipeline:
         extraction_result = self.extract_answer_from_document(
             file_path=document_path,
             enable_vision=enable_vision,
-            include_image_captions=include_image_captions
+            include_image_captions=include_image_captions,
+            language=language,
         )
         
         if not extraction_result['success']:
