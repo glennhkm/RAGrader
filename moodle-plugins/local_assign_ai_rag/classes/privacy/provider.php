@@ -256,8 +256,10 @@ class provider implements
     }
 
     /**
-     * Delete all students' pending results in a context. Config, rubric and
-     * material rows hold no student data and are kept.
+     * Delete all students' pending results in a context and anonymise every
+     * teacher reference there (as erase_user() does). Config, rubric and
+     * material rows hold no student data and are kept, with their teacher
+     * fields set to 0.
      *
      * @param \context $context The context.
      */
@@ -265,7 +267,18 @@ class provider implements
         global $DB;
 
         if ($context instanceof \context_module) {
-            $DB->delete_records('local_assign_ai_rag_pending', ['assignmentid' => $context->instanceid]);
+            $cmid = $context->instanceid;
+            $DB->delete_records('local_assign_ai_rag_pending', ['assignmentid' => $cmid]);
+            foreach (['local_assign_ai_rag_config' => ['usermodified', 'graderid'],
+                    'local_assign_ai_rag_rubric' => ['usermodified']] as $table => $fields) {
+                foreach ($fields as $field) {
+                    $DB->set_field_select($table, $field, 0, "assignmentid = :cmid AND {$field} <> 0",
+                        ['cmid' => $cmid]);
+                }
+            }
+        } else if ($context instanceof \context_course) {
+            $DB->set_field_select('local_assign_ai_rag_materials', 'usermodified', 0,
+                'courseid = :courseid AND usermodified <> 0', ['courseid' => $context->instanceid]);
         }
     }
 

@@ -190,7 +190,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * Context deletion drops pending rows in that context only.
+     * Context deletion drops pending rows and anonymises teacher references in that context only.
      */
     public function test_delete_data_for_all_users_in_context(): void {
         global $DB;
@@ -200,12 +200,62 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
             'courseid' => $this->course->id, 'assignmentid' => $other->cmid, 'title' => 'x',
             'userid' => $this->student1->id, 'status' => 'pending',
         ]);
+        $DB->insert_record('local_assign_ai_rag_config', (object)[
+            'assignmentid' => $other->cmid, 'autograde' => 1, 'graderid' => $this->teacher->id,
+            'usermodified' => $this->teacher->id, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $DB->insert_record('local_assign_ai_rag_rubric', (object)[
+            'assignmentid' => $other->cmid, 'rubric_json' => '{}', 'usermodified' => $this->teacher->id,
+            'timecreated' => time(), 'timemodified' => time(),
+        ]);
         provider::delete_data_for_all_users_in_context(\context_module::instance($this->assign->cmid));
         $this->assertEquals(0, $DB->count_records('local_assign_ai_rag_pending', ['assignmentid' => $this->assign->cmid]));
         $this->assertEquals(1, $DB->count_records('local_assign_ai_rag_config', ['assignmentid' => $this->assign->cmid]));
         $this->assertEquals(1, $DB->count_records('local_assign_ai_rag_rubric', ['assignmentid' => $this->assign->cmid]));
         $this->assertEquals(1, $DB->count_records('local_assign_ai_rag_pending', ['assignmentid' => $other->cmid]));
         $this->assertEquals(1, $DB->count_records('local_assign_ai_rag_materials'));
+
+        // Teacher references in this module context are anonymised; the rows stay.
+        $config = $DB->get_record('local_assign_ai_rag_config', ['assignmentid' => $this->assign->cmid]);
+        $this->assertEquals(0, $config->usermodified);
+        $this->assertEquals(0, $config->graderid);
+        $this->assertEquals(1, $config->autograde);
+        $this->assertEquals(0, $DB->get_field('local_assign_ai_rag_rubric', 'usermodified',
+            ['assignmentid' => $this->assign->cmid]));
+        // Other contexts are untouched.
+        $otherconfig = $DB->get_record('local_assign_ai_rag_config', ['assignmentid' => $other->cmid]);
+        $this->assertEquals($this->teacher->id, $otherconfig->usermodified);
+        $this->assertEquals($this->teacher->id, $otherconfig->graderid);
+        $this->assertEquals($this->teacher->id, $DB->get_field('local_assign_ai_rag_rubric', 'usermodified',
+            ['assignmentid' => $other->cmid]));
+        $this->assertEquals($this->teacher->id, $DB->get_field('local_assign_ai_rag_materials', 'usermodified',
+            ['courseid' => $this->course->id]));
+    }
+
+    /**
+     * Course context deletion anonymises the course materials' teacher references only.
+     */
+    public function test_delete_data_for_all_users_in_course_context(): void {
+        global $DB;
+        $this->setup_data();
+        $othercourse = self::getDataGenerator()->create_course();
+        $DB->insert_record('local_assign_ai_rag_materials', (object)[
+            'courseid' => $othercourse->id, 'filename' => 'b.pdf', 'contenthash' => str_repeat('b', 40),
+            'filetype' => 'pdf', 'usermodified' => $this->teacher->id, 'timecreated' => time(),
+        ]);
+
+        provider::delete_data_for_all_users_in_context(\context_course::instance($this->course->id));
+
+        $this->assertEquals(0, $DB->get_field('local_assign_ai_rag_materials', 'usermodified',
+            ['courseid' => $this->course->id]));
+        $this->assertEquals('a.pdf', $DB->get_field('local_assign_ai_rag_materials', 'filename',
+            ['courseid' => $this->course->id]));
+        $this->assertEquals($this->teacher->id, $DB->get_field('local_assign_ai_rag_materials', 'usermodified',
+            ['courseid' => $othercourse->id]));
+        // Module-level rows are not touched by a course context deletion.
+        $this->assertEquals(2, $DB->count_records('local_assign_ai_rag_pending'));
+        $this->assertEquals($this->teacher->id, $DB->get_field('local_assign_ai_rag_config', 'graderid',
+            ['assignmentid' => $this->assign->cmid]));
     }
 
     /**

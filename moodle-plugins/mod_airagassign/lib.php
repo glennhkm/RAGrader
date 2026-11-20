@@ -395,6 +395,9 @@ function airagassign_pluginfile($course, $cm, $context, $filearea, $args, $force
         return false;
     }
 
+    // The manual reference file is the model answer key: graders only, never students.
+    require_capability('mod/airagassign:grade', $context);
+
     $itemid = array_shift($args);
     $filename = array_pop($args);
     $filepath = $args ? '/' . implode('/', $args) . '/' : '/';
