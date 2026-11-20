@@ -26,6 +26,8 @@
 
 namespace mod_airagassign\task;
 
+use mod_airagassign\local\grading_service;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -53,6 +55,7 @@ class grade_all_submissions extends \core\task\adhoc_task {
         global $DB, $CFG;
 
         require_once($CFG->dirroot . '/mod/airagassign/lib.php');
+        $service = new grading_service();
 
         $data = $this->get_custom_data();
         $assignid = (int)$data->assignid;
@@ -77,7 +80,7 @@ class grade_all_submissions extends \core\task\adhoc_task {
         $cm = get_coursemodule_from_instance('airagassign', $assign->id, $assign->course);
         if (!$cm) {
             foreach ($submissions as $sub) {
-                airagassign_record_grading_failure($sub->id, 'Course module record not found');
+                grading_service::record_failure((int)$sub->id, 'Course module record not found');
             }
             mtrace("grade_all_submissions task: course module for assignment $assignid not found.");
             return;
@@ -92,7 +95,7 @@ class grade_all_submissions extends \core\task\adhoc_task {
         foreach ($submissions as $sub) {
             mtrace("  Grading submission {$sub->id} (user {$sub->userid})...");
             try {
-                $result = airagassign_grade_submission($assign, $sub, $context);
+                $result = $service->grade_submission($assign, $sub, $context);
             } catch (\Throwable $e) {
                 $result = ['success' => false, 'error' => $e->getMessage()];
             }
@@ -100,9 +103,9 @@ class grade_all_submissions extends \core\task\adhoc_task {
                 $success++;
                 mtrace("  Done.");
             } else {
-                $errmsg = $result['error'] ?? 'Unknown error';
-                $requestid = $result['requestid'] ?? '';
-                airagassign_record_grading_failure($sub->id, $errmsg, $requestid);
+                $errmsg = (string)($result['error'] ?? 'Unknown error');
+                $requestid = (string)($result['requestid'] ?? '');
+                grading_service::record_failure((int)$sub->id, $errmsg, $requestid);
                 mtrace("  Failed: $errmsg" .
                     ($requestid !== '' ? " [request ID: $requestid]" : '') . '.');
             }
