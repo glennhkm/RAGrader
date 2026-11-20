@@ -29,7 +29,7 @@ from .request_utils import (
     validate_material_filename,
 )
 from .locking import LockAcquisitionError
-from ..vectorstore.filters import build_chroma_where_filter
+from ..vectorstore.filters import EmptyScopeFilterError, build_explicit_scope_filter
 
 # Router for Moodle endpoints
 router = APIRouter(prefix="", tags=["Moodle Integration"])
@@ -109,10 +109,23 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
         
         # Grade using RAG pipeline
         rubric = request.rubric if request.rubric else {"criteria": {}}
-        metadata_filter = build_chroma_where_filter(
-            modules=request.module_filter,
-            sources=request.source_filter,
-        )
+        metadata_filter = None
+        if request.source_filter is not None or request.module_filter is not None:
+            # The plugin only sends a filter for linked materials; an explicit
+            # but empty filter must not widen grading to the whole course.
+            try:
+                metadata_filter = build_explicit_scope_filter(
+                    modules=request.module_filter,
+                    sources=request.source_filter,
+                )
+            except EmptyScopeFilterError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "source_filter/module_filter must contain at least one non-empty value; "
+                        "omit them to grade against all course materials."
+                    ),
+                ) from exc
         with get_operation_lock(request.course_id):
             result = grader.grade_essay(
                 question=request.question,
