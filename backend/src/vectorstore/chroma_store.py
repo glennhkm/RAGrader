@@ -391,11 +391,12 @@ class VectorStore:
                 collection.delete(ids=ids)
                 return True
             else:
-                logger.warning(f"No chunks found for file '{source_name}' in collection '{col_name}'")
+                # Normal on a first upload (replace-before-add) and on idempotent deletes.
+                logger.info(f"No chunks found for file '{source_name}' in collection '{col_name}'")
                 return False
                 
         except MISSING_COLLECTION_ERRORS:
-            logger.warning(f"Collection {col_name} does not exist")
+            logger.info(f"Collection {col_name} does not exist; nothing to delete")
             return False
         except Exception as e:
             logger.error(f"Error deleting chunks for '{source_name}': {e}")
