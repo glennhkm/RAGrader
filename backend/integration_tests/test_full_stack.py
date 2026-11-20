@@ -15,7 +15,7 @@ Tests never print answer text beyond the fixtures defined below.
 
 import os
 import random
-import time
+import threading
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -40,6 +40,9 @@ def setUpModule() -> None:
     try:
         httpx.get(f"{BASE_URL}/health", timeout=5).raise_for_status()
     except Exception as exc:  # noqa: BLE001 - any failure means the stack is not up
+        if EXPECT_REPLICAS or os.environ.get("CI"):
+            # A dead stack in CI must fail the job, never skip every test.
+            raise RuntimeError(f"API not reachable at {BASE_URL} in CI: {type(exc).__name__}") from exc
         raise unittest.SkipTest(f"API not reachable at {BASE_URL}: {type(exc).__name__}")
 
 
@@ -194,31 +197,38 @@ class ConcurrencyTests(StackTestCase):
         for week in (1, 2):
             self.assertEqual(self.upload_v1(namespace, MATERIALS / f"week-{week}.txt", f"week-{week}").status_code, 200)
 
+        workers = 41
+        barrier = threading.Barrier(workers)
+
         def grade(_index: int) -> int:
             with httpx.Client(base_url=BASE_URL, headers=HEADERS, timeout=120) as client:
+                barrier.wait(timeout=60)
                 return client.post(
                     f"/v1/namespaces/{namespace}/grade",
                     json={"question": TLS_QUESTION, "essay": TLS_ANSWER, "maximum_grade": 100},
                 ).status_code
 
         def upload() -> int:
-            time.sleep(0.2)  # let some grades start first
+            path = MATERIALS / "week-3.txt"
             with httpx.Client(base_url=BASE_URL, headers=HEADERS, timeout=120) as client:
-                path = MATERIALS / "week-3.txt"
+                barrier.wait(timeout=60)
                 return client.post(
                     f"/v1/namespaces/{namespace}/materials",
                     files={"file": (path.name, path.read_bytes(), "text/plain")},
                     data={"module": "week-3"},
                 ).status_code
 
-        with ThreadPoolExecutor(max_workers=16) as pool:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             upload_future = pool.submit(upload)
             grade_futures = [pool.submit(grade, i) for i in range(40)]
-            statuses = [f.result() for f in grade_futures] + [upload_future.result()]
+            grade_statuses = [f.result() for f in grade_futures]
+            upload_status = upload_future.result()
 
+        statuses = grade_statuses + [upload_status]
         server_errors = [s for s in statuses if s >= 500]
         self.assertEqual(server_errors, [], f"{len(server_errors)}/{len(statuses)} responses were 5xx: {sorted(set(server_errors))}")
-        self.assertEqual(upload_future.result(), 200)
+        self.assertEqual(sorted(set(grade_statuses)), [200], f"grade statuses: {sorted(set(grade_statuses))}")
+        self.assertEqual(upload_status, 200)
 
 
 class BalancingTests(StackTestCase):
