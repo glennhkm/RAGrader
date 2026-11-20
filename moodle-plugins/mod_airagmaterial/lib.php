@@ -311,7 +311,8 @@ function airagmaterial_delete_file_vectors($courseid, $filename) {
     $result = \mod_airagmaterial\local\rag_client::for_component('mod_airagmaterial', 30)
         ->delete_file((int)$courseid, (string)$filename);
 
-    if (!$result['success']) {
+    // HTTP 200 means the backend handled the request, even when it found no vectors to delete.
+    if ($result['status'] !== 200) {
         // Log the error but let the Moodle deletion proceed regardless.
         debugging(
             "airagmaterial_delete_file_vectors: failed to delete vectors for '$filename' " .

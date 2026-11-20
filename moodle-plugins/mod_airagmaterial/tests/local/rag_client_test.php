@@ -211,6 +211,26 @@ final class rag_client_test extends \advanced_testcase {
         $this->assertCount(3, $this->history);
     }
 
+    public function test_delete_vectors_treats_http_200_as_success(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/mod/airagmaterial/lib.php');
+        $this->resetAfterTest();
+        $http = $this->mock_http([
+            new Response(200, [], json_encode(['success' => false, 'message' => 'No vectors found or failed to delete'])),
+            new Response(200, [], ''),
+            new Response(404, [], '{"detail": "nope"}'),
+        ]);
+        $factory = $this->createMock(http_factory::class);
+        $factory->method('create')->willReturn($http);
+        \core\di::set(http_factory::class, $factory);
+
+        $this->assertTrue(airagmaterial_delete_file_vectors(5, 'notes.txt'));
+        $this->assertTrue(airagmaterial_delete_file_vectors(5, 'notes.txt'));
+        $this->assertDebuggingNotCalled();
+        $this->assertFalse(airagmaterial_delete_file_vectors(5, 'notes.txt'));
+        $this->assertDebuggingCalled();
+    }
+
     public function test_default_factory_builds_a_client(): void {
         $this->assertInstanceOf(\GuzzleHttp\ClientInterface::class, (new http_factory())->create(5));
     }
