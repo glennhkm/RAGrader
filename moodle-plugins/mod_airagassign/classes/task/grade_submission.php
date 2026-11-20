@@ -86,7 +86,7 @@ class grade_submission extends \core\task\adhoc_task {
         }
         $context = \context_module::instance($cm->id);
 
-        mtrace("Grading submission $submissionid (assign {$assign->id}, user {$submission->userid})...");
+        mtrace("Grading submission $submissionid (assign {$assign->id})...");
 
         try {
             $result = $service->grade_submission($assign, $submission, $context);

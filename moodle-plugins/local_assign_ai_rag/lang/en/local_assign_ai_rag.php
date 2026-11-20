@@ -25,7 +25,25 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'RAG Assignment AI Grading';
-$string['privacy:metadata'] = 'The RAG Assignment AI plugin stores pending AI grades temporarily.';
+$string['privacy:metadata'] = 'The RAG Assignment AI plugin stores pending AI grading results for students and records which teacher configured or changed the grading setup.';
+$string['privacy:metadata:pending'] = 'Pending AI grading results awaiting teacher approval.';
+$string['privacy:metadata:pending:userid'] = 'The ID of the student the result belongs to.';
+$string['privacy:metadata:pending:message'] = 'The AI feedback message.';
+$string['privacy:metadata:pending:grade'] = 'The suggested or final grade.';
+$string['privacy:metadata:pending:rubric_response'] = 'The AI rubric response.';
+$string['privacy:metadata:pending:citations'] = 'Citations from course materials.';
+$string['privacy:metadata:pending:confidence'] = 'The AI confidence score.';
+$string['privacy:metadata:pending:retrieved_docs'] = 'Course material chunks retrieved for grading.';
+$string['privacy:metadata:usermodified'] = 'The ID of the user who last modified the record.';
+$string['privacy:metadata:config'] = 'Per-assignment AI grading configuration.';
+$string['privacy:metadata:config:graderid'] = 'The ID of the user who applies approved grades automatically.';
+$string['privacy:metadata:rubric'] = 'Custom grading rubric per assignment.';
+$string['privacy:metadata:materials'] = 'Tracking of course materials uploaded for RAG.';
+$string['privacy:metadata:rag_server'] = 'Answers are sent to the configured RAG server for AI grading. No user identity is sent.';
+$string['privacy:metadata:rag_server:question'] = 'The question or essay prompt.';
+$string['privacy:metadata:rag_server:answertext'] = 'The text of the answer to be graded.';
+$string['privacy:metadata:rag_server:rubric'] = 'The grading rubric.';
+$string['privacy:path:pending'] = 'AI grading results';
 
 // Settings page.
 $string['settings'] = 'RAG Assignment AI Settings';

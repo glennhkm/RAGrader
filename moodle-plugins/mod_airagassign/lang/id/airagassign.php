@@ -155,7 +155,30 @@ $string['apikey_desc'] = 'Token bearer opsional yang sesuai dengan API_AUTH_TOKE
 $string['servererror'] = 'Tidak dapat terhubung ke server RAG. Silakan periksa URL server di pengaturan plugin.';
 
 // Privacy.
-$string['privacy:metadata'] = 'Plugin Tugas AI RAG menyimpan pengiriman siswa dan nilai yang dihasilkan AI.';
+$string['privacy:metadata'] = 'Plugin Tugas AI RAG menyimpan pengiriman siswa, jawaban, serta nilai dan umpan balik hasil AI maupun yang dikonfirmasi guru.';
+$string['privacy:metadata:airagassign_submissions'] = 'Pengiriman siswa pada Tugas AI RAG beserta data penilaiannya.';
+$string['privacy:metadata:airagassign_submissions:userid'] = 'ID siswa yang mengirim.';
+$string['privacy:metadata:airagassign_submissions:grade'] = 'Nilai akhir.';
+$string['privacy:metadata:airagassign_submissions:ai_grade'] = 'Nilai yang disarankan AI.';
+$string['privacy:metadata:airagassign_submissions:ai_feedback'] = 'Umpan balik yang disarankan AI.';
+$string['privacy:metadata:airagassign_submissions:feedback'] = 'Umpan balik akhir.';
+$string['privacy:metadata:airagassign_submissions:ai_response'] = 'Respons penilaian AI lengkap.';
+$string['privacy:metadata:airagassign_submissions:graded_by'] = 'Siapa yang mengonfirmasi nilai (label seperti teacher atau ai_confirmed, bukan ID pengguna).';
+$string['privacy:metadata:airagassign_submissions:teacher_note'] = 'Catatan internal guru.';
+$string['privacy:metadata:airagassign_submissions:confidence'] = 'Skor keyakinan AI.';
+$string['privacy:metadata:airagassign_submissions:timecreated'] = 'Waktu pengiriman.';
+$string['privacy:metadata:airagassign_submissions:timegraded'] = 'Waktu penilaian.';
+$string['privacy:metadata:airagassign_answers'] = 'Jawaban individual dari sebuah pengiriman.';
+$string['privacy:metadata:airagassign_answers:answertext'] = 'Teks jawaban.';
+$string['privacy:metadata:airagassign_answers:score'] = 'Skor akhir jawaban.';
+$string['privacy:metadata:airagassign_answers:ai_score'] = 'Skor yang disarankan AI.';
+$string['privacy:metadata:airagassign_answers:ai_feedback'] = 'Umpan balik yang disarankan AI.';
+$string['privacy:metadata:airagassign_answers:feedback'] = 'Umpan balik akhir untuk jawaban.';
+$string['privacy:metadata:airagassign_answers:ai_response'] = 'Respons AI lengkap untuk jawaban.';
+$string['privacy:metadata:rag_server'] = 'Jawaban dikirim ke server RAG yang dikonfigurasi untuk penilaian AI. Identitas pengguna tidak dikirim.';
+$string['privacy:metadata:rag_server:question'] = 'Pertanyaan atau perintah esai.';
+$string['privacy:metadata:rag_server:answertext'] = 'Teks jawaban yang akan dinilai.';
+$string['privacy:metadata:rag_server:rubric'] = 'Rubrik penilaian.';
 
 // Misc.
 $string['search:activity'] = 'Tugas AI RAG';

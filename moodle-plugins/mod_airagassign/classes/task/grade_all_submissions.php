@@ -93,7 +93,7 @@ class grade_all_submissions extends \core\task\adhoc_task {
         mtrace("Bulk grading $total submission(s) for assignment $assignid...");
 
         foreach ($submissions as $sub) {
-            mtrace("  Grading submission {$sub->id} (user {$sub->userid})...");
+            mtrace("  Grading submission {$sub->id}...");
             try {
                 $result = $service->grade_submission($assign, $sub, $context);
             } catch (\Throwable $e) {

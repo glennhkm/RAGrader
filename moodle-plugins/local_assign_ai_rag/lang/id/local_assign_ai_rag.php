@@ -25,7 +25,25 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Penilaian Tugas AI dengan RAG';
-$string['privacy:metadata'] = 'Plugin RAG Assignment AI menyimpan nilai AI yang tertunda sementara.';
+$string['privacy:metadata'] = 'Plugin RAG Assignment AI menyimpan hasil penilaian AI yang tertunda untuk siswa dan mencatat guru yang mengonfigurasi atau mengubah pengaturan penilaian.';
+$string['privacy:metadata:pending'] = 'Hasil penilaian AI yang menunggu persetujuan guru.';
+$string['privacy:metadata:pending:userid'] = 'ID siswa pemilik hasil.';
+$string['privacy:metadata:pending:message'] = 'Pesan umpan balik AI.';
+$string['privacy:metadata:pending:grade'] = 'Nilai yang disarankan atau akhir.';
+$string['privacy:metadata:pending:rubric_response'] = 'Respons rubrik AI.';
+$string['privacy:metadata:pending:citations'] = 'Kutipan dari materi kuliah.';
+$string['privacy:metadata:pending:confidence'] = 'Skor keyakinan AI.';
+$string['privacy:metadata:pending:retrieved_docs'] = 'Potongan materi yang diambil untuk penilaian.';
+$string['privacy:metadata:usermodified'] = 'ID pengguna yang terakhir mengubah catatan.';
+$string['privacy:metadata:config'] = 'Konfigurasi penilaian AI per tugas.';
+$string['privacy:metadata:config:graderid'] = 'ID pengguna yang menerapkan nilai yang disetujui secara otomatis.';
+$string['privacy:metadata:rubric'] = 'Rubrik penilaian khusus per tugas.';
+$string['privacy:metadata:materials'] = 'Pencatatan materi kuliah yang diunggah untuk RAG.';
+$string['privacy:metadata:rag_server'] = 'Jawaban dikirim ke server RAG yang dikonfigurasi untuk penilaian AI. Identitas pengguna tidak dikirim.';
+$string['privacy:metadata:rag_server:question'] = 'Pertanyaan atau perintah esai.';
+$string['privacy:metadata:rag_server:answertext'] = 'Teks jawaban yang akan dinilai.';
+$string['privacy:metadata:rag_server:rubric'] = 'Rubrik penilaian.';
+$string['privacy:path:pending'] = 'Hasil penilaian AI';
 
 // Settings page.
 $string['settings'] = 'Pengaturan RAG Assignment AI';
