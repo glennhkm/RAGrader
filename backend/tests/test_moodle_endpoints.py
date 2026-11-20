@@ -252,6 +252,20 @@ class MoodleEndpointTest(unittest.TestCase):
         self.assertFalse(course_dir.exists())
         self.assertTrue((other_dir / "material.pdf").exists())
 
+    def test_status_lists_owned_uploads_in_material_subdirectories(self):
+        course_dir = Path(self.tempdir.name) / "uploads" / "course_12"
+        (course_dir / "airagmaterial_3").mkdir(parents=True)
+        (course_dir / "airagmaterial_4").mkdir()
+        (course_dir / "legacy.pdf").write_bytes(b"x")
+        (course_dir / "airagmaterial_3" / "notes.txt").write_bytes(b"x")
+        (course_dir / "airagmaterial_4" / "notes.txt").write_bytes(b"x")
+        (course_dir / "airagmaterial_4" / "zeta.txt").write_bytes(b"x")
+
+        status = get_course_materials_status(12)
+
+        self.assertEqual(["legacy.pdf", "notes.txt", "zeta.txt"], status["uploaded_files"])
+        self.assertEqual(3, status["files_count"])
+
     def test_status_reports_reranker_fallback(self):
         status = moodle_server_status()
         self.assertTrue(status.ready)

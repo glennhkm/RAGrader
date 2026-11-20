@@ -248,12 +248,21 @@ function airagmaterial_get_tracked_filenames(int $materialid): array {
 }
 
 /**
+ * Return the vector owner id of a material, as sent to the RAG backend.
+ *
+ * @param int $materialid AI RAG Material instance ID.
+ * @return string Owner id, e.g. "airagmaterial:12".
+ */
+function airagmaterial_material_owner(int $materialid): string {
+    return 'airagmaterial:' . $materialid;
+}
+
+/**
  * Delete the RAG vectors of the given files belonging to one material.
  *
- * Only vectors for this material's files are touched; the rest of the course
- * collection (other materials, assignment reference files) is left intact.
- * Files whose name is still used by another activity in the same course are
- * retained, because the backend identifies chunks by filename only.
+ * Deletes are scoped to this material's owner id, so chunks of other
+ * materials or assignment reference files with the same filename are never
+ * touched. The 'retained' key is kept for callers but is always empty.
  *
  * @param stdClass $material The airagmaterial record.
  * @param string[] $filenames Filenames to remove from the vector store.
@@ -261,18 +270,14 @@ function airagmaterial_get_tracked_filenames(int $materialid): array {
  */
 function airagmaterial_delete_material_vectors(stdClass $material, array $filenames): array {
     $result = ['deleted' => [], 'retained' => [], 'failed' => []];
+    $owner = airagmaterial_material_owner((int)$material->id);
 
     foreach (array_unique($filenames) as $filename) {
         $filename = (string)$filename;
         if ($filename === '') {
             continue;
         }
-        if (\mod_airagmaterial\local\vector_ownership::is_filename_in_use(
-                (int)$material->course, $filename, (int)$material->id)) {
-            $result['retained'][] = $filename;
-            continue;
-        }
-        if (airagmaterial_delete_file_vectors($material->course, $filename)) {
+        if (airagmaterial_delete_file_vectors($material->course, $filename, $owner)) {
             $result['deleted'][] = $filename;
         } else {
             $result['failed'][] = $filename;
@@ -280,6 +285,34 @@ function airagmaterial_delete_material_vectors(stdClass $material, array $filena
     }
 
     return $result;
+}
+
+/**
+ * Queue re-vectorization of every material that has files (used by the 1.2.0 upgrade).
+ *
+ * Vectors uploaded before owner scoping carry no owner id, so each material is
+ * re-vectorized in the background. Makes no HTTP call.
+ *
+ * @return int Number of materials queued.
+ */
+function airagmaterial_queue_owner_migration(): int {
+    global $DB;
+
+    $count = 0;
+    $fs = get_file_storage();
+    foreach ($DB->get_records('airagmaterial') as $material) {
+        $cm = get_coursemodule_from_instance('airagmaterial', $material->id, $material->course, false, IGNORE_MISSING);
+        if (!$cm) {
+            continue;
+        }
+        $context = context_module::instance($cm->id, IGNORE_MISSING);
+        if (!$context || $fs->is_area_empty($context->id, 'mod_airagmaterial', 'materials', 0, false)) {
+            continue;
+        }
+        airagmaterial_queue_vectorize_task($material, (int)$context->id);
+        $count++;
+    }
+    return $count;
 }
 
 /**
@@ -305,11 +338,12 @@ function airagmaterial_build_api_headers(array $headers = []): array {
  *
  * @param int    $courseid  Moodle course ID.
  * @param string $filename  Basename of the file to remove.
+ * @param string|null $owner Owner id (airagmaterial:{id}); null deletes by filename only.
  * @return bool True if the API call succeeded.
  */
-function airagmaterial_delete_file_vectors($courseid, $filename) {
+function airagmaterial_delete_file_vectors($courseid, $filename, ?string $owner = null) {
     $result = \mod_airagmaterial\local\rag_client::for_component('mod_airagmaterial', 30)
-        ->delete_file((int)$courseid, (string)$filename);
+        ->delete_file((int)$courseid, (string)$filename, $owner);
 
     // HTTP 200 means the backend handled the request, even when it found no vectors to delete.
     if ($result['status'] !== 200) {
@@ -487,7 +521,8 @@ function airagmaterial_vectorize_files($material, $context) {
         $file->copy_content_to($tempfile);
 
         // Send to RAG server.
-        $result = airagmaterial_send_file_to_rag($serverurl, $tempfile, $filename, $material->course);
+        $result = airagmaterial_send_file_to_rag($serverurl, $tempfile, $filename, $material->course,
+            airagmaterial_material_owner((int)$material->id));
 
         // Clean up temp file.
         @unlink($tempfile);
@@ -531,14 +566,15 @@ function airagmaterial_vectorize_files($material, $context) {
  * @param string $filepath Local file path
  * @param string $filename Original filename
  * @param int $courseid Course ID
+ * @param string|null $owner Owner id (airagmaterial:{id}) or null for an unowned upload
  * @return array Result array
  */
-function airagmaterial_send_file_to_rag($serverurl, $filepath, $filename, $courseid) {
+function airagmaterial_send_file_to_rag($serverurl, $filepath, $filename, $courseid, ?string $owner = null) {
     $client = new \mod_airagmaterial\local\rag_client(
         (string)$serverurl,
         (string)get_config('mod_airagmaterial', 'apikey')
     );
-    $result = $client->upload_material((int)$courseid, $filepath, $filename);
+    $result = $client->upload_material((int)$courseid, $filepath, $filename, $owner);
 
     if (!$result['success']) {
         return ['success' => false, 'error' => $result['error']];
