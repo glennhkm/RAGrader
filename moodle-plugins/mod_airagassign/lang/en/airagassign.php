@@ -156,7 +156,30 @@ $string['apikey_desc'] = 'Optional bearer token matching API_AUTH_TOKEN on the R
 $string['servererror'] = 'Could not connect to the RAG server. Please check the server URL in plugin settings.';
 
 // Privacy.
-$string['privacy:metadata'] = 'The AI RAG Assignment plugin stores student submissions and AI-generated grades.';
+$string['privacy:metadata'] = 'The AI RAG Assignment plugin stores student submissions, answers and AI-generated and teacher-confirmed grades and feedback.';
+$string['privacy:metadata:airagassign_submissions'] = 'A student submission to an AI RAG Assignment, with its grading data.';
+$string['privacy:metadata:airagassign_submissions:userid'] = 'The ID of the student who made the submission.';
+$string['privacy:metadata:airagassign_submissions:grade'] = 'The final grade.';
+$string['privacy:metadata:airagassign_submissions:ai_grade'] = 'The grade suggested by the AI.';
+$string['privacy:metadata:airagassign_submissions:ai_feedback'] = 'The feedback suggested by the AI.';
+$string['privacy:metadata:airagassign_submissions:feedback'] = 'The final feedback.';
+$string['privacy:metadata:airagassign_submissions:ai_response'] = 'The full AI grading response.';
+$string['privacy:metadata:airagassign_submissions:graded_by'] = 'Who confirmed the grade (a label such as teacher or ai_confirmed, not a user ID).';
+$string['privacy:metadata:airagassign_submissions:teacher_note'] = 'The internal teacher note.';
+$string['privacy:metadata:airagassign_submissions:confidence'] = 'The AI confidence score.';
+$string['privacy:metadata:airagassign_submissions:timecreated'] = 'The time the submission was made.';
+$string['privacy:metadata:airagassign_submissions:timegraded'] = 'The time the submission was graded.';
+$string['privacy:metadata:airagassign_answers'] = 'The individual answers of a submission.';
+$string['privacy:metadata:airagassign_answers:answertext'] = 'The text of the answer.';
+$string['privacy:metadata:airagassign_answers:score'] = 'The final score of the answer.';
+$string['privacy:metadata:airagassign_answers:ai_score'] = 'The score suggested by the AI.';
+$string['privacy:metadata:airagassign_answers:ai_feedback'] = 'The feedback suggested by the AI.';
+$string['privacy:metadata:airagassign_answers:feedback'] = 'The final feedback on the answer.';
+$string['privacy:metadata:airagassign_answers:ai_response'] = 'The full AI response for the answer.';
+$string['privacy:metadata:rag_server'] = 'Answers are sent to the configured RAG server for AI grading. No user identity is sent.';
+$string['privacy:metadata:rag_server:question'] = 'The question or essay prompt.';
+$string['privacy:metadata:rag_server:answertext'] = 'The text of the answer to be graded.';
+$string['privacy:metadata:rag_server:rubric'] = 'The grading rubric.';
 
 // Misc.
 $string['search:activity'] = 'AI RAG Assignment';
