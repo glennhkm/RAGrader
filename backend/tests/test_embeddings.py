@@ -15,7 +15,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from src.api.runtime import AppRuntime
-from src.utils.config import load_settings
+from src.utils.config import LOCAL_FASTEMBED_EMBEDDING_MODEL, load_settings
 from src.vectorstore import embeddings as embeddings_module
 from src.vectorstore.chroma_store import VectorStore
 from src.vectorstore.embeddings import (
@@ -156,6 +156,45 @@ class LocalEmbeddingsTest(unittest.TestCase):
             emb = LocalEmbeddings(model="BAAI/bge-m3", backend="sentence_transformers")
             self.assertEqual([[1.0, 0.0], [1.0, 0.0]], emb.embed_documents(["x", "y"]))
             self.assertEqual([], emb.embed_documents([]))
+
+    def test_unsupported_fastembed_model_error_names_alternatives(self):
+        class _RejectingTextEmbedding:
+            def __init__(self, model_name, **kwargs):
+                raise ValueError(f"Model {model_name} is not supported in TextEmbedding")
+
+        fake_module = ModuleType("fastembed")
+        fake_module.TextEmbedding = _RejectingTextEmbedding
+        with patch.dict(sys.modules, {"fastembed": fake_module}):
+            with self.assertRaises(ValueError) as ctx:
+                LocalEmbeddings(model="BAAI/bge-m3", backend="fastembed")
+        message = str(ctx.exception)
+        self.assertIn("EMBEDDING_MODEL", message)
+        self.assertIn("sentence_transformers", message)
+        self.assertIn(LOCAL_FASTEMBED_EMBEDDING_MODEL, message)
+
+    def test_fastembed_on_mps_warns_and_runs_on_cpu(self):
+        from loguru import logger
+
+        created = []
+
+        class _TextEmbedding:
+            def __init__(self, model_name, **kwargs):
+                created.append(kwargs)
+
+            def embed(self, texts, batch_size):
+                return [[1.0] for _ in texts]
+
+        fake_module = ModuleType("fastembed")
+        fake_module.TextEmbedding = _TextEmbedding
+        records = []
+        sink = logger.add(lambda m: records.append(m.record), level="WARNING")
+        try:
+            with patch.dict(sys.modules, {"fastembed": fake_module}):
+                LocalEmbeddings(model="mps-test-model", backend="fastembed", device="mps")
+        finally:
+            logger.remove(sink)
+        self.assertEqual([{}], created)
+        self.assertTrue(any("mps" in r["message"].lower() for r in records))
 
     def test_missing_optional_package_has_actionable_error(self):
         with patch.dict(sys.modules, {"fastembed": None}):

@@ -389,6 +389,7 @@ def moodle_server_status():
         with get_operation_lock():
             vs_info = grader.rag_pipeline.get_vectorstore_info()
             llm_info = grader.rag_pipeline.get_llm_info()
+            retrieval = grader.rag_pipeline.get_retriever_config()
         
         return MoodleStatusResponse(
             status="healthy",
@@ -396,6 +397,7 @@ def moodle_server_status():
             vectorstore=vs_info,
             llm_info=llm_info,
             embedding_model=grader.rag_pipeline.current_embedding_model,
+            retrieval=retrieval,
             ready=True
         )
         

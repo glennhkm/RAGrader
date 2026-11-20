@@ -4,7 +4,9 @@ document_processing:
   separators: ["\n\n", "\n", ". ", " ", ""]
 
 embeddings:
-  model_name: "${EMBEDDING_MODEL:BAAI/bge-m3}"
+  # Empty default: src/utils/config.py picks the provider-aware default
+  # (BAAI/bge-m3 for huggingface/openai_compatible, a fastembed model for local).
+  model_name: "${EMBEDDING_MODEL:}"
   device: "${EMBEDDING_DEVICE:cloud}"
 
 vectorstore:
@@ -23,7 +25,8 @@ retrieval:
   rerank_top_k: "${RERANK_TOP_K:3}"
   # none | bm25 | local_cross_encoder | http_rerank | llm_rerank | pinecone ("bge" = pinecone)
   reranker_type: "${RERANKER_TYPE:bge}"
-  reranker_model: "${RERANKER_MODEL:bge-reranker-v2-m3}"
+  # Empty default: per-type default in src/utils/config.py (pinecone keeps bge-reranker-v2-m3).
+  reranker_model: "${RERANKER_MODEL:}"
 
 llm:
   provider: "${LLM_PROVIDER:provider_chain}"

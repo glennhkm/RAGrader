@@ -177,6 +177,47 @@ class LocalCrossEncoderTest(unittest.TestCase):
         self.assertEqual("sentence_transformers", rr.backend)
         self.assertEqual("cuda", rr.get_model_info()["device"])
 
+    def test_unsupported_fastembed_model_falls_back_to_sentence_transformers(self):
+        class _RejectingCrossEncoder:
+            def __init__(self, model_name, **kwargs):
+                raise ValueError(f"Model {model_name} is not supported in TextCrossEncoder")
+
+        class _CrossEncoder:
+            def __init__(self, model, device):
+                self.model = model
+
+            def predict(self, pairs):
+                return [1.0 for _ in pairs]
+
+        cross = ModuleType("fastembed.rerank.cross_encoder")
+        cross.TextCrossEncoder = _RejectingCrossEncoder
+        st = ModuleType("sentence_transformers")
+        st.CrossEncoder = _CrossEncoder
+        with patch.dict(sys.modules, {"fastembed": ModuleType("fastembed"),
+                                      "fastembed.rerank": ModuleType("fastembed.rerank"),
+                                      "fastembed.rerank.cross_encoder": cross,
+                                      "sentence_transformers": st}):
+            rr = LocalCrossEncoderReranker(model="org/custom-reranker")
+        self.assertEqual("sentence_transformers", rr.backend)
+
+    def test_model_rejected_everywhere_raises_value_error_naming_each_backend(self):
+        class _RejectingCrossEncoder:
+            def __init__(self, model_name, **kwargs):
+                raise ValueError("not supported")
+
+        cross = ModuleType("fastembed.rerank.cross_encoder")
+        cross.TextCrossEncoder = _RejectingCrossEncoder
+        with patch.dict(sys.modules, {"fastembed": ModuleType("fastembed"),
+                                      "fastembed.rerank": ModuleType("fastembed.rerank"),
+                                      "fastembed.rerank.cross_encoder": cross,
+                                      "sentence_transformers": None}):
+            with self.assertRaises(ValueError) as ctx:
+                LocalCrossEncoderReranker(model="bge-reranker-v2-m3")
+        message = str(ctx.exception)
+        self.assertIn("fastembed", message)
+        self.assertIn("sentence_transformers", message)
+        self.assertIn("RERANKER_MODEL", message)
+
     def test_missing_backends_have_actionable_error(self):
         with patch.dict(sys.modules, {"fastembed": None, "fastembed.rerank": None,
                                       "fastembed.rerank.cross_encoder": None,
@@ -244,6 +285,26 @@ class FactoryAndRetrieverTest(unittest.TestCase):
                               reranker_type="http_rerank", settings=settings)
         self.assertEqual("bm25", retriever.reranker_type)
         self.assertIsInstance(retriever._reranker, BM25Reranker)
+
+    def test_reranker_fallback_is_logged_as_error_and_reported_in_status(self):
+        from loguru import logger
+
+        records = []
+        sink = logger.add(lambda m: records.append(m.record), level="ERROR")
+        try:
+            retriever = Retriever(vectorstore=MagicMock(), enable_reranking=True,
+                                  reranker_type="http_rerank", settings=load_settings(env={}).reranker)
+        finally:
+            logger.remove(sink)
+        self.assertTrue(any("http_rerank" in r["message"] for r in records))
+        config = retriever.get_config()
+        self.assertTrue(config["reranker_fallback"])
+        self.assertEqual("http_rerank", config["requested_reranker_type"])
+        self.assertIn("RERANKER_BASE_URL", config["reranker_error"])
+
+        healthy = Retriever(vectorstore=MagicMock(), enable_reranking=True, reranker_type="bm25")
+        self.assertFalse(healthy.get_config()["reranker_fallback"])
+        self.assertIsNone(healthy.get_config()["reranker_error"])
 
     def test_retriever_type_none_with_reranking_enabled_does_not_over_fetch(self):
         vs = MagicMock()

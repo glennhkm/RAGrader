@@ -39,6 +39,10 @@ class _FakePipeline:
     def get_llm_info(self):
         return {"provider": "test", "model": "test-model"}
 
+    def get_retriever_config(self):
+        return {"reranker_type": "bm25", "requested_reranker_type": "local_cross_encoder",
+                "reranker_fallback": True, "reranker_error": "model not supported"}
+
 
 class _FakeGrader:
     rag_pipeline = _FakePipeline()
@@ -192,6 +196,12 @@ class MoodleEndpointTest(unittest.TestCase):
         self.assertTrue(response["success"])
         self.assertFalse(course_dir.exists())
         self.assertTrue((other_dir / "material.pdf").exists())
+
+    def test_status_reports_reranker_fallback(self):
+        status = moodle_server_status()
+        self.assertTrue(status.ready)
+        self.assertTrue(status.retrieval["reranker_fallback"])
+        self.assertEqual("local_cross_encoder", status.retrieval["requested_reranker_type"])
 
     def test_router_exposes_every_plugin_operation(self):
         available = {

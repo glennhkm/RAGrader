@@ -67,6 +67,8 @@ class SystemStatus(BaseModel):
     chunking_config: Dict[str, Any]
     llm_model: str
     embedding_model: str
+    # Includes reranker_fallback / reranker_error when the configured reranker failed to start.
+    retriever_config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class HealthResponse(BaseModel):

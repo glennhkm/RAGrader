@@ -124,7 +124,18 @@ EMBEDDING_BASE_URL=http://ollama:11434/v1  # TEI: http://tei:8080/v1, OpenAI: ht
 EMBEDDING_MODEL=bge-m3
 ```
 
-`EMBEDDING_PROVIDER=local` embeds in-process with fastembed (`INSTALL_LOCAL_EXTRAS=true`) or `EMBEDDING_LOCAL_BACKEND=sentence_transformers`; `EMBEDDING_DEVICE=cuda` uses a GPU.
+`EMBEDDING_PROVIDER=local` embeds in-process with no server and no key (build with `INSTALL_LOCAL_EXTRAS=true`, or `pip install -r requirements-local.txt`):
+
+```dotenv
+EMBEDDING_PROVIDER=local
+EMBEDDING_LOCAL_BACKEND=fastembed          # default; ONNX, no PyTorch
+# EMBEDDING_MODEL unset -> sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+#   (multilingual incl. Indonesian, 384-dim, ~220 MB download on first use)
+# Other fastembed models: intfloat/multilingual-e5-large, BAAI/bge-small-en-v1.5, ...
+EMBEDDING_DEVICE=cpu                       # cuda for a GPU
+```
+
+fastembed only loads models from its own catalog (`fastembed.TextEmbedding.list_supported_models()`); it has no dense `BAAI/bge-m3`. For any other Hugging Face model, including `BAAI/bge-m3`, set `EMBEDDING_LOCAL_BACKEND=sentence_transformers` (enable `sentence-transformers` in `requirements-local.txt`; it also runs on `EMBEDDING_DEVICE=mps`, which fastembed does not support and runs on CPU instead). Unsupported models fail at startup with a message naming the alternatives.
 
 > **Changing embeddings on an existing deployment:** collections remember the embedding provider, model and dimension. Requests against a course built with a different setup return **HTTP 409**. Re-vectorize the materials (in Moodle: *Re-vectorize* on each AI RAG Material) after switching, or switch back.
 
@@ -140,7 +151,18 @@ RETRIEVAL_TOP_K=10                         # candidates fetched before reranking
 RERANK_TOP_K=4                             # passages passed to the LLM
 ```
 
-If a reranker cannot start, the API falls back to BM25; if a rerank call fails, the original vector order is used.
+Fully local neural reranking (`INSTALL_LOCAL_EXTRAS=true`):
+
+```dotenv
+ENABLE_RERANKING=true
+RERANKER_TYPE=local_cross_encoder
+# RERANKER_MODEL unset -> BAAI/bge-reranker-v2-m3 (fastembed; multilingual)
+# Smaller: jinaai/jina-reranker-v2-base-multilingual, Xenova/ms-marco-MiniLM-L-6-v2 (English)
+```
+
+The default `RERANKER_MODEL` depends on `RERANKER_TYPE` (`pinecone` keeps the Pinecone name `bge-reranker-v2-m3`; `local_cross_encoder` / `http_rerank` use `BAAI/bge-reranker-v2-m3`; `llm_rerank` needs an explicit chat model). If fastembed rejects the model, sentence-transformers is tried next.
+
+If the configured reranker cannot start, grading keeps working with BM25, but the failure is logged as an **ERROR** and reported by `GET /moodle/status` / `GET /status` (`reranker_fallback: true`, `requested_reranker_type`, `reranker_error`). If a single rerank call fails, the original vector order is used.
 
 ### Prompt language and vision
 
