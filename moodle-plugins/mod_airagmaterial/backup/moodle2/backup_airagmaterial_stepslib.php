@@ -29,8 +29,8 @@ defined('MOODLE_INTERNAL') || die();
  * Defines the backup structure step for one airagmaterial activity instance.
  *
  * Backs up the main airagmaterial record and its associated file-tracking rows
- * (airagmaterial_files).  The actual uploaded files are backed up automatically
- * by Moodle's file API because they live in the 'materials' filearea.
+ * (airagmaterial_files).  The uploaded files in the 'intro' and 'materials'
+ * file areas are included through annotate_files().
  */
 class backup_airagmaterial_activity_structure_step extends backup_activity_structure_step {
 
@@ -66,6 +66,10 @@ class backup_airagmaterial_activity_structure_step extends backup_activity_struc
         // ── Wire to DB tables ─────────────────────────────────────────────────
         $airagmaterial->set_source_table('airagmaterial', ['id' => backup::VAR_ACTIVITYID]);
         $file->set_source_table('airagmaterial_files', ['materialid' => backup::VAR_PARENTID]);
+
+        // ── File areas (restored by after_execute() in the restore step) ─────
+        $airagmaterial->annotate_files('mod_airagmaterial', 'intro', null);
+        $airagmaterial->annotate_files('mod_airagmaterial', 'materials', null);
 
         // ── Return wrapped root element ───────────────────────────────────────
         return $this->prepare_activity_structure($airagmaterial);
