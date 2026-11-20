@@ -8,7 +8,7 @@ listed in the table below.
 
 ## [Unreleased]
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-20
 
 First public release. It summarizes three development cycles.
 
@@ -56,3 +56,4 @@ First public release. It summarizes three development cycles.
 - The AI RAG Material and AI RAG Assignment activity modules now call the RAG server through Moodle's HTTP client, which honours `$CFG->proxyhost`. If a proxy is configured, add the RAG server host to `$CFG->proxybypass`.
 
 [Unreleased]: https://github.com/glennhkm/RAGrader/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/glennhkm/RAGrader/releases/tag/v1.0.0
