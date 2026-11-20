@@ -59,7 +59,7 @@ When `API_AUTH_TOKEN` is set in `backend/.env`, all endpoints below except `GET 
 | `GET /course/materials/status/{course_id}` | Monitoring / Clients | Course material vectorization status |
 | `POST /assign/answer` | `mod_airagassign`, `local_assign_ai_rag` | Grade a student answer with `course_id`, `question`, `essay`, `rubric`, `maximum_grade`, `assignment_id`, plus optional `source_filter`, `module_filter` and `lang` (used as the prompt language **only when sent explicitly**); the response includes `language` |
 
-> **Scoped Retrieval in `mod_airagassign`:** When an assignment has linked vectorized `mod_airagmaterial` files or uploaded `manualfile` reference files, `mod_airagassign` automatically populates `source_filter` on `POST /assign/answer` requests (in both essay and quiz modes) so retrieval is restricted to those specific filenames.
+> **Scoped Retrieval in `mod_airagassign`:** When an assignment has linked vectorized `mod_airagmaterial` files or uploaded `manualfile` reference files, `mod_airagassign` automatically populates `source_filter` on `POST /assign/answer` requests (in both essay and quiz modes) so retrieval is restricted to those specific filenames. Grading fails closed: it is refused (and recorded as a retryable `grading_failed`) while **any** linked material is still pending, queued, processing or failed, so no student is graded against only part of the selected knowledge base.
 
 ### Generic Autograder API (`/v1`)
 
@@ -74,4 +74,6 @@ LMS-agnostic endpoints for namespace-isolated RAG autograding (`namespace` must 
 | `POST /v1/namespaces/{namespace}/grade` | JSON: `question`, `essay`, optional `rubric`, `maximum_grade` (default `100.0`), optional `material_filter` (`modules`, `sources`, `tags`), optional `language` (`auto`, `en`, `id`) | Grade a student answer against namespace materials, optionally scoped by `material_filter`; the response includes the `language` used |
 
 **Errors:** `400` invalid input, `401` missing/wrong bearer token, `409` embedding configuration does not match the collection (re-ingest or restore the previous embedding setup), `413` upload too large, `503` lock timeout or shared state unavailable.
+
+**Scope filters fail closed:** omitting `material_filter` (or sending `null`) searches every material in the namespace. A `material_filter` that is present but selects nothing (`{}`, empty lists, blank strings, `null` tag values) returns **HTTP 400** instead of silently widening retrieval to the whole namespace. The same rule applies to an explicitly sent but empty `source_filter` / `module_filter` on `POST /assign/answer`.
 
