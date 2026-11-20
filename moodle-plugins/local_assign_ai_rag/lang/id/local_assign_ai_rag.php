@@ -44,6 +44,14 @@ $string['privacy:metadata:rag_server:question'] = 'Pertanyaan atau perintah esai
 $string['privacy:metadata:rag_server:answertext'] = 'Teks jawaban yang akan dinilai.';
 $string['privacy:metadata:rag_server:rubric'] = 'Rubrik penilaian.';
 $string['privacy:path:pending'] = 'Hasil penilaian AI';
+$string['privacy:metadata:pending:courseid'] = 'ID kursus.';
+$string['privacy:metadata:pending:title'] = 'Judul hasil.';
+$string['privacy:metadata:pending:status'] = 'Status persetujuan.';
+$string['privacy:metadata:materials:filename'] = 'Nama berkas materi yang diunggah.';
+$string['privacy:metadata:timecreated'] = 'Waktu catatan dibuat.';
+$string['privacy:metadata:timemodified'] = 'Waktu catatan terakhir diubah.';
+$string['privacy:path:teacher'] = 'Konfigurasi penilaian AI';
+$string['privacy:path:materials'] = 'Materi kursus yang diunggah';
 
 // Settings page.
 $string['settings'] = 'Pengaturan RAG Assignment AI';

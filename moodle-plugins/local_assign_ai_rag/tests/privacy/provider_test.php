@@ -104,6 +104,15 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
                 'local_assign_ai_rag_materials', 'rag_server'] as $expected) {
             $this->assertContains($expected, $names);
         }
+        $declared = [];
+        foreach ($items as $item) {
+            if (method_exists($item, 'get_privacy_fields')) {
+                $declared[$item->get_name()] = array_keys($item->get_privacy_fields());
+            }
+        }
+        foreach (['courseid', 'title', 'status', 'timecreated', 'timemodified'] as $field) {
+            $this->assertContains($field, $declared['local_assign_ai_rag_pending']);
+        }
     }
 
     /**
@@ -131,6 +140,23 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $json = json_encode($data);
         $this->assertStringContainsString('Pending feedback 1', $json);
         $this->assertStringNotContainsString('Pending feedback 2', $json);
+    }
+
+    /**
+     * A teacher's config, rubric and material records are exported.
+     */
+    public function test_export_teacher_data(): void {
+        $this->setup_data();
+        $modctx = \context_module::instance($this->assign->cmid);
+        $coursectx = \context_course::instance($this->course->id);
+        $this->export_context_data_for_user($this->teacher->id, $modctx, 'local_assign_ai_rag');
+        $this->export_context_data_for_user($this->teacher->id, $coursectx, 'local_assign_ai_rag');
+        $cfg = writer::with_context($modctx)->get_data([get_string('privacy:path:teacher', 'local_assign_ai_rag')]);
+        $this->assertCount(1, $cfg->config);
+        $this->assertCount(1, $cfg->rubric);
+        $this->assertEquals(1, $cfg->config[0]->is_auto_grader);
+        $mat = writer::with_context($coursectx)->get_data([get_string('privacy:path:materials', 'local_assign_ai_rag')]);
+        $this->assertSame('a.pdf', $mat->materials[0]->filename);
     }
 
     /**

@@ -44,6 +44,14 @@ $string['privacy:metadata:rag_server:question'] = 'The question or essay prompt.
 $string['privacy:metadata:rag_server:answertext'] = 'The text of the answer to be graded.';
 $string['privacy:metadata:rag_server:rubric'] = 'The grading rubric.';
 $string['privacy:path:pending'] = 'AI grading results';
+$string['privacy:metadata:pending:courseid'] = 'The ID of the course.';
+$string['privacy:metadata:pending:title'] = 'The title of the result.';
+$string['privacy:metadata:pending:status'] = 'The approval status.';
+$string['privacy:metadata:materials:filename'] = 'The name of the uploaded material file.';
+$string['privacy:metadata:timecreated'] = 'The time the record was created.';
+$string['privacy:metadata:timemodified'] = 'The time the record was last modified.';
+$string['privacy:path:teacher'] = 'AI grading configuration';
+$string['privacy:path:materials'] = 'Uploaded course materials';
 
 // Settings page.
 $string['settings'] = 'RAG Assignment AI Settings';

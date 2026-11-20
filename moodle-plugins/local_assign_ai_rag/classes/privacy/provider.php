@@ -47,6 +47,9 @@ class provider implements
     public static function get_metadata(collection $collection): collection {
         $collection->add_database_table('local_assign_ai_rag_pending', [
             'userid' => 'privacy:metadata:pending:userid',
+            'courseid' => 'privacy:metadata:pending:courseid',
+            'title' => 'privacy:metadata:pending:title',
+            'status' => 'privacy:metadata:pending:status',
             'message' => 'privacy:metadata:pending:message',
             'grade' => 'privacy:metadata:pending:grade',
             'rubric_response' => 'privacy:metadata:pending:rubric_response',
@@ -54,19 +57,27 @@ class provider implements
             'confidence' => 'privacy:metadata:pending:confidence',
             'retrieved_docs' => 'privacy:metadata:pending:retrieved_docs',
             'usermodified' => 'privacy:metadata:usermodified',
+            'timecreated' => 'privacy:metadata:timecreated',
+            'timemodified' => 'privacy:metadata:timemodified',
         ], 'privacy:metadata:pending');
 
         $collection->add_database_table('local_assign_ai_rag_config', [
             'graderid' => 'privacy:metadata:config:graderid',
             'usermodified' => 'privacy:metadata:usermodified',
+            'timecreated' => 'privacy:metadata:timecreated',
+            'timemodified' => 'privacy:metadata:timemodified',
         ], 'privacy:metadata:config');
 
         $collection->add_database_table('local_assign_ai_rag_rubric', [
             'usermodified' => 'privacy:metadata:usermodified',
+            'timecreated' => 'privacy:metadata:timecreated',
+            'timemodified' => 'privacy:metadata:timemodified',
         ], 'privacy:metadata:rubric');
 
         $collection->add_database_table('local_assign_ai_rag_materials', [
+            'filename' => 'privacy:metadata:materials:filename',
             'usermodified' => 'privacy:metadata:usermodified',
+            'timecreated' => 'privacy:metadata:timecreated',
         ], 'privacy:metadata:materials');
 
         $collection->add_external_location_link('rag_server', [
@@ -153,16 +164,44 @@ class provider implements
         }
         $userid = $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
-            if (!$context instanceof \context_module) {
-                continue;
+            if ($context instanceof \context_module) {
+                self::export_module_context($context, $userid);
+            } else if ($context instanceof \context_course) {
+                $rows = $DB->get_records('local_assign_ai_rag_materials', [
+                    'courseid' => $context->instanceid,
+                    'usermodified' => $userid,
+                ], 'id');
+                if ($rows) {
+                    $records = [];
+                    foreach ($rows as $row) {
+                        $records[] = (object)[
+                            'filename' => $row->filename,
+                            'timecreated' => transform::datetime((int)$row->timecreated),
+                        ];
+                    }
+                    writer::with_context($context)->export_data(
+                        [get_string('privacy:path:materials', 'local_assign_ai_rag')],
+                        (object)['materials' => $records]
+                    );
+                }
             }
-            $rows = $DB->get_records('local_assign_ai_rag_pending', [
-                'assignmentid' => $context->instanceid,
-                'userid' => $userid,
-            ], 'id');
-            if (!$rows) {
-                continue;
-            }
+        }
+    }
+
+    /**
+     * Export the user's pending results and teacher-owned records of one module context.
+     *
+     * @param \context_module $context The module context.
+     * @param int $userid The user id.
+     */
+    private static function export_module_context(\context_module $context, int $userid): void {
+        global $DB;
+
+        $rows = $DB->get_records('local_assign_ai_rag_pending', [
+            'assignmentid' => $context->instanceid,
+            'userid' => $userid,
+        ], 'id');
+        if ($rows) {
             $records = [];
             foreach ($rows as $row) {
                 $records[] = (object)[
@@ -181,6 +220,37 @@ class provider implements
             writer::with_context($context)->export_data(
                 [get_string('privacy:path:pending', 'local_assign_ai_rag')],
                 (object)['pending' => $records]
+            );
+        }
+
+        $config = [];
+        foreach ($DB->get_records_select(
+            'local_assign_ai_rag_config',
+            'assignmentid = :cmid AND (usermodified = :u1 OR graderid = :u2)',
+            ['cmid' => $context->instanceid, 'u1' => $userid, 'u2' => $userid]
+        ) as $row) {
+            $config[] = (object)[
+                'autograde' => $row->autograde,
+                'modified_by_you' => (int)((int)$row->usermodified === $userid),
+                'is_auto_grader' => (int)((int)$row->graderid === $userid),
+                'timecreated' => transform::datetime((int)$row->timecreated),
+                'timemodified' => transform::datetime((int)$row->timemodified),
+            ];
+        }
+        $rubric = [];
+        foreach ($DB->get_records('local_assign_ai_rag_rubric', [
+            'assignmentid' => $context->instanceid,
+            'usermodified' => $userid,
+        ]) as $row) {
+            $rubric[] = (object)[
+                'timecreated' => transform::datetime((int)$row->timecreated),
+                'timemodified' => transform::datetime((int)$row->timemodified),
+            ];
+        }
+        if ($config || $rubric) {
+            writer::with_context($context)->export_data(
+                [get_string('privacy:path:teacher', 'local_assign_ai_rag')],
+                (object)['config' => $config, 'rubric' => $rubric]
             );
         }
     }

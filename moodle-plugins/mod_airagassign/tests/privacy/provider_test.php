@@ -60,6 +60,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->s2 = $modgen->create_submission($this->assign, $this->user2->id, 'Answer of user two');
         $DB->set_field('airagassign_submissions', 'graded_by', 'teacher', ['id' => $this->s1->id]);
         $DB->set_field('airagassign_submissions', 'feedback', 'Good work', ['id' => $this->s1->id]);
+        $DB->set_field('airagassign_submissions', 'grading_error', 'Timeout from RAG', ['id' => $this->s1->id]);
+        $DB->set_field('airagassign_submissions', 'grading_requestid', 'req-abc-123', ['id' => $this->s1->id]);
     }
 
     /**
@@ -72,6 +74,16 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertContains('airagassign_submissions', $names);
         $this->assertContains('airagassign_answers', $names);
         $this->assertContains('rag_server', $names);
+        $declared = [];
+        foreach ($items as $item) {
+            if (method_exists($item, 'get_privacy_fields')) {
+                $declared[$item->get_name()] = array_keys($item->get_privacy_fields());
+            }
+        }
+        foreach (['status', 'grading_error', 'grading_requestid', 'grading_started_at'] as $field) {
+            $this->assertContains($field, $declared['airagassign_submissions']);
+        }
+        $this->assertContains('timecreated', $declared['airagassign_answers']);
         foreach ($items as $item) {
             if ($item->get_name() === 'rag_server') {
                 $fields = $item->get_privacy_fields();
@@ -108,6 +120,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $json = json_encode($data);
         $this->assertStringContainsString('Answer of user one', $json);
         $this->assertStringContainsString('Good work', $json);
+        $this->assertStringContainsString('Timeout from RAG', $json);
+        $this->assertStringContainsString('req-abc-123', $json);
         $this->assertStringNotContainsString('Answer of user two', $json);
     }
 
