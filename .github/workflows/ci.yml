@@ -90,7 +90,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -146,19 +146,29 @@ jobs:
           echo "EXTRA_PLUGINS_DIR=$RUNNER_TEMP/extra-plugins" >> "$GITHUB_ENV"
 
       - name: Install Moodle and the plugin
-        run: moodle-plugin-ci install --plugin ./plugin/moodle-plugins/${{ matrix.plugin }} --db-host=127.0.0.1
+        run: |
+          set -o pipefail
+          moodle-plugin-ci install --plugin ./plugin/moodle-plugins/${{ matrix.plugin }} --db-host=127.0.0.1 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
 
       - name: PHP lint
-        run: moodle-plugin-ci phplint
+        run: |
+          set -o pipefail
+          moodle-plugin-ci phplint 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
 
       - name: Validate plugin
-        run: moodle-plugin-ci validate
+        run: |
+          set -o pipefail
+          moodle-plugin-ci validate 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
 
       - name: Check upgrade savepoints
-        run: moodle-plugin-ci savepoints
+        run: |
+          set -o pipefail
+          moodle-plugin-ci savepoints 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
 
       - name: PHPUnit
-        run: moodle-plugin-ci phpunit --fail-on-warning
+        run: |
+          set -o pipefail
+          moodle-plugin-ci phpunit --fail-on-warning 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
 
       - name: Coding style (informational)
         continue-on-error: true
@@ -167,3 +177,9 @@ jobs:
       - name: PHP docblocks (informational)
         continue-on-error: true
         run: moodle-plugin-ci phpdoc
+
+      # Job logs need a sign-in; annotations are public, so surface the log tail.
+      - name: Annotate failure
+        if: failure()
+        run: |
+          tail -n 80 "$RUNNER_TEMP/ci.log" 2>/dev/null | python3 -c "import sys,urllib.parse as u; print('::error title=moodle-plugin-ci failure (${{ matrix.plugin }} ${{ matrix.moodle }})::' + sys.stdin.read().replace('%','%25').replace('\r','%0D').replace('\n','%0A'))"
