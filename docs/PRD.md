@@ -38,22 +38,22 @@ A classic real-world workflow illustrates the product's core value:
 3. **Lack of Auditability & Teacher Control:** Fully autonomous black-box grading is unacceptable in formal education; teachers need evidence citations and a Human-in-the-Loop confirmation step.
 4. **High Infrastructure & Privacy Barriers:** Academic and training institutions often require course-level data isolation, concurrency safety during exam deadlines, and the option to self-host models locally.
 
-### 2.2 Current Codebase Baseline (Post-Cycle 1 Snapshot, backend `1.2.0`)
+### 2.2 Current Codebase Baseline (Post-Cycle 2 Snapshot, backend `1.3.0`)
 The repository already consolidates the latest verified production components:
-- **Production Backend (`backend/`):** FastAPI service (`src/api/app.py`, `src/api/moodle_routes.py`, generic `src/api/v1_routes.py`), HAProxy load balancer (`deploy/haproxy.cfg`), multi-replica Docker Compose (`docker-compose.yml`), ChromaDB HTTP server with per-`course_id` collection isolation (`src/vectorstore/chroma_store.py`), Redis distributed read/write locking (`src/api/locking.py`), multi-format ingestion (`.pdf`, `.pptx`, `.docx`, `.txt` in `src/ingestion/document_loader.py`) with `module`/`tag_*` chunk metadata and Chroma `where` scope filtering (`src/vectorstore/filters.py`), Groq/OpenRouter fallback (`src/rag/llm.py`), optional BGE/BM25 reranking (`src/rag/reranker.py`), and optional `API_AUTH_TOKEN` Bearer auth (`src/api/auth.py`).
+- **Production Backend (`backend/`):** FastAPI service (`src/api/app.py`, `src/api/moodle_routes.py`, generic `src/api/v1_routes.py`), HAProxy load balancer (`deploy/haproxy.cfg`), multi-replica Docker Compose (`docker-compose.yml`), ChromaDB HTTP server with per-`course_id` collection isolation (`src/vectorstore/chroma_store.py`), Redis distributed read/write locking (`src/api/locking.py`), multi-format ingestion (`.pdf`, `.pptx`, `.docx`, `.txt` in `src/ingestion/document_loader.py`) with `module`/`tag_*` chunk metadata and Chroma `where` scope filtering (`src/vectorstore/filters.py`), a provider-agnostic AI layer (any OpenAI-compatible endpoint, Groq/OpenRouter/`custom_N` fallback chains, or in-process local models for the LLM, embeddings and reranker, plus optional vision captioning), a central typed settings layer (`src/utils/config.py`) with a side-effect-free `create_app()`/lifespan, a language-aware grading prompt (`PROMPT_LANGUAGE=auto|en|id`), a `/v1` CLI with CSV batch grading (`src/cli.py`), and optional `API_AUTH_TOKEN` Bearer auth (`src/api/auth.py`).
 - **Moodle Plugins (`moodle-plugins/`):**
   - `mod_airagmaterial` (`2026071902` / `1.1.2`) — course material upload with asynchronous Moodle adhoc task vectorization, per-material vector cleanup (clear, file removal, module deletion) guarded against shared filenames (`classes/local/vector_ownership.php`).
-  - `mod_airagassign` (`2026071906` / `1.1.6`) — essay & multi-question quiz assignment, Moodle native or simple rubrics, queued single/bulk AI grading, failure recovery, scoped retrieval via linked-material `source_filter`, quiz-mode confidence, and HITL teacher review (`grade_review.php`).
+  - `mod_airagassign` (`2026112000` / `1.1.7`) — essay & multi-question quiz assignment, Moodle native or simple rubrics, queued single/bulk AI grading, failure recovery, scoped retrieval via linked-material `source_filter` (grading refused while any linked material is not fully vectorized), quiz-mode confidence, and HITL teacher review (`grade_review.php`).
   - `local_assign_ai_rag` (`2026071902` / `1.1.2`) & `aiprovider_rag` (`2026071901` / `1.1.1`) — integration path for Moodle's standard `mod_assign` and Core AI subsystem (Moodle 4.5+ / 5.x).
 
 ### 2.3 Key Gaps Between Current Baseline and Open-Source Generalization
-> **Status after Cycle 1:** gaps 1, 2 and 4 are resolved (generic `/v1/` namespace API, metadata-scoped retrieval wired from `mod_airagassign`, dead packages removed). Gaps 3, 5 and 6 remain and are covered by Cycles 2 and 3.
+> **Status after Cycle 2:** gaps 1, 2 and 4 were resolved in Cycle 1 (generic `/v1/` namespace API, metadata-scoped retrieval wired from `mod_airagassign`, dead packages removed); gaps 3 and 5 were resolved in Cycle 2 (model/platform freedom for every AI stage, language-aware prompt, quickstart kit and CLI). Gap 6 remains and is covered by Cycle 3.
 
 1. ~~**Moodle-Coupled Generic Endpoints:**~~ *(resolved in Cycle 1)* Generic endpoints in `app.py` (`/upload`, `/grade`) only accept `.pdf` into a single global `course:default` collection and require a non-empty rubric, whereas multi-format + collection isolation + per-file deletion live only in Moodle-specific routes (`/course/materials/*`, `/assign/answer` with `course_id: int`).
 2. ~~**Missing Metadata Scope Filtering:**~~ *(resolved in Cycle 1)* `VectorStore.similarity_search()` accepts a `filter` argument, but `Retriever`, `RAGPipeline`, the API, and `mod_airagassign` (which already stores linked materials in `airagassign_materials`) do not yet filter retrieval by module/week/source filenames. Thus, a Week 4 quiz cannot yet restrict retrieval strictly to Week 1–3 files when Weeks 5–12 files exist in the same course.
-3. **Indonesian-Only Grading Prompt & Cloud Provider Lock-In:** `PromptBuilder` (`src/rag/prompt_builder.py`) is hardcoded in Indonesian; `EmbeddingGenerator` (`src/vectorstore/embeddings.py`) strictly requires cloud `HUGGINGFACE_API_TOKEN` with no OpenAI-compatible or local fallback; `LLMWrapper` (`src/rag/llm.py`) lacks generic `OPENAI_BASE_URL` (Ollama / vLLM / LM Studio / custom OpenAI-compatible) support; `BGEReranker` (`src/rag/reranker.py`) only supports cloud Pinecone when enabled; and `VisionCaptioner` hardcodes HuggingFace Router.
+3. ~~**Indonesian-Only Grading Prompt & Cloud Provider Lock-In:**~~ *(resolved in Cycle 2)* `PromptBuilder` (`src/rag/prompt_builder.py`) is hardcoded in Indonesian; `EmbeddingGenerator` (`src/vectorstore/embeddings.py`) strictly requires cloud `HUGGINGFACE_API_TOKEN` with no OpenAI-compatible or local fallback; `LLMWrapper` (`src/rag/llm.py`) lacks generic `OPENAI_BASE_URL` (Ollama / vLLM / LM Studio / custom OpenAI-compatible) support; `BGEReranker` (`src/rag/reranker.py`) only supports cloud Pinecone when enabled; and `VisionCaptioner` hardcodes HuggingFace Router.
 4. ~~**Unused Python Packages in `requirements.txt`:**~~ *(resolved in Cycle 1)* `nltk`, `tiktoken`, `pandas`, and `numpy` are listed in `backend/requirements.txt` despite zero imports across `backend/src/`, `run_api.py`, and `tests/` (leftover from research scripts), and `langchain-groq` is redundant with the unified `openai` client used by `provider_chain`.
-5. **No Standalone Batch/CLI Runner or Dev Quickstart:** Non-Moodle users cannot test the Week 1–3 → Week 4 flow via a single command or CSV/JSON batch without writing custom HTTP scripts.
+5. ~~**No Standalone Batch/CLI Runner or Dev Quickstart:**~~ *(resolved in Cycle 2)* Non-Moodle users cannot test the Week 1–3 → Week 4 flow via a single command or CSV/JSON batch without writing custom HTTP scripts.
 6. **Moodle Directory Readiness Gaps:** `classes/privacy/provider.php` exists only in `aiprovider_rag`, not yet in `mod_airagassign`, `mod_airagmaterial`, or `local_assign_ai_rag`; automated GitHub Releases for `.zip` assets are not yet configured.
 
 ---
@@ -190,8 +190,8 @@ sequenceDiagram
 
 | Integration Pattern | How External Systems Connect | Best For |
 | :--- | :--- | :--- |
-| **1. Direct REST API (`/v1/`)** | Call `/v1/namespaces/{ns}/materials` on teacher upload; call `/v1/namespaces/{ns}/grade` or `/grade/batch` on quiz submission with `Authorization: Bearer <token>`. | Custom LMS, Next.js/React/Django portals, Canvas/Google Classroom middleware. |
-| **2. CLI / Batch CSV Runner** | Run `python -m src.cli ingest` on a folder (`--namespace cs101 --tag module=week-1`) and `python -m src.cli grade-csv` on exported student answers (`--filter module=week-1,week-2,week-3`). | Teachers using Google Forms, Microsoft Forms, spreadsheets, or offline grading. |
+| **1. Direct REST API (`/v1/`)** | Call `/v1/namespaces/{ns}/materials` on teacher upload; call `/v1/namespaces/{ns}/grade` per submission (a `/grade/batch` endpoint is deferred; batch through the CLI or parallel requests) with `Authorization: Bearer <token>`. | Custom LMS, Next.js/React/Django portals, Canvas/Google Classroom middleware. |
+| **2. CLI / Batch CSV Runner** | Run `python -m src.cli ingest` on a folder (`--namespace cs101 --module week-1`, optional `--tag key=value`) and `python -m src.cli grade-csv` on exported student answers (`--module week-1 --module week-2 --module week-3`, optional `--source` / `--tag`). Only `requirements-cli.txt` is needed on the client machine. | Teachers using Google Forms, Microsoft Forms, spreadsheets, or offline grading. |
 | **3. Python Library (`src.grading.EssayGrader`)** | Import `EssayGrader` directly inside Python evaluation notebooks or research pipelines. | Researchers running reproducible benchmarks. |
 
 ---
@@ -227,7 +227,7 @@ sequenceDiagram
    - Remove truly unused packages (`nltk`, `tiktoken`, `pandas`, `numpy`, `pydantic-settings`, and redundant `langchain-groq` once legacy single-provider init is unified) from `backend/requirements.txt`, and isolate optional heavy local/cloud extras into `requirements-local.txt` / `requirements-optional.txt`.
    - *Acceptance Criteria:* Core `requirements.txt` contains zero unimported/unused packages (retaining only documented indirect runtime dependencies such as `pypdf`, `huggingface-hub`, `python-multipart`, and pinned `posthog`); `python -m unittest discover -s tests` and Docker image build pass cleanly.
 7. **10-Minute Quickstart, CLI Batch Grader, & Sample "Week 1–3 → Week 4 Quiz" Kit:**
-   - Provide `backend/docker-compose.dev.yml` (single-container quickstart), `examples/week1_to_week4_quiz/` (sample materials, rubric, answers, demo script), and `POST /v1/namespaces/{namespace}/grade/batch` or CLI CSV script (`scripts/grade_csv.py`).
+   - Provide `backend/docker-compose.dev.yml` (single-container quickstart), `examples/week1_to_week4_quiz/` (sample materials, rubric, answers, demo script), and a CLI CSV batch grader (`python -m src.cli grade-csv`, delivered in Cycle 2). A `POST /v1/namespaces/{namespace}/grade/batch` endpoint is deferred (not scheduled in Cycles 1–3).
    - *Acceptance Criteria:* A new contributor can follow `README.md` to ingest the sample Week 1–3 files and grade Week 4 answers in under 10 minutes.
 
 #### Could-Have (P2 — Moodle Ecosystem Polish, Reliability & Hardening)
@@ -247,7 +247,7 @@ To avoid scope creep and maintain reliability:
 - **No Heavy Multimodal Vision/OCR Enabled by Default:** Keep `ENABLE_IMAGE_EXTRACTION=false` and `ENABLE_VISION_CAPTIONING=false` by default so deployments stay fast and CPU-friendly.
 
 ### 6.3 Non-Functional Requirements
-- **Security:** Optional constant-time `API_AUTH_TOKEN` Bearer authentication on all non-health routes (`/` and `/health` stay open for load balancer probes); path-traversal-safe upload filenames (`safe_filename`); bounded upload sizes (`MAX_UPLOAD_SIZE_MB`); zero student PII or essays logged to stdout/files.
+- **Security:** Optional constant-time `API_AUTH_TOKEN` Bearer authentication on all non-health routes (`/` and `/health` stay open for load balancer probes); path-traversal-safe upload filenames (`safe_filename`); bounded upload sizes (`MAX_UPLOAD_SIZE_MB`); zero student PII, essays, answer-document filenames or image-caption text logged at `INFO` or above (`DEBUG` is an explicit opt-in and documented as unsafe for production); Chroma client telemetry disabled by default (`ANONYMIZED_TELEMETRY=false`) and unit tests run with network access blocked (`tests/run_offline.py`).
 - **Concurrency & Horizontal Scaling:** Stateless API replicas behind HAProxy (`leastconn`), shared Chroma HTTP server, and Redis read/write locks per namespace/course so parallel grading does not collide with material uploads/deletes.
 - **Observability:** Correlation `X-Request-ID` propagation from Moodle/clients through FastAPI logs and `X-API-Instance` replica headers.
 - **Resilience:** Provider fallback chain (`groq` ↔ `openrouter`) with bounded request/total timeouts (`LLM_REQUEST_TIMEOUT`, `LLM_TOTAL_TIMEOUT`), plus recoverable failed states in Moodle (`grading_failed` + retry).
@@ -269,14 +269,14 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
 | :--- | :--- | :--- | :--- |
 | **`openai_compatible`** | `LLM_PROVIDER=openai_compatible`, `LLM_BASE_URL`, `LLM_API_KEY` (optional for local), `LLM_MODEL` | OpenAI, Ollama (`/v1`), vLLM, LM Studio, llama.cpp server, LiteLLM, Together, Fireworks, DeepSeek, Groq, OpenRouter | Uses `openai.OpenAI(base_url=...)` against `/v1/chat/completions` |
 | **`provider_chain`** | `LLM_PROVIDER=provider_chain`, `LLM_PROVIDER_ORDER` (presets + custom `custom_1..N` endpoints) | Multi-key / multi-vendor fallback (e.g. `groq,openrouter` or `local_vllm,openrouter`) | Bounded per-request timeout + total deadline |
-| **`local` (In-Process)** | `LLM_PROVIDER=local`, `LLM_MODEL` (GGUF path or HF repo), optional `requirements-local.txt` | Air-gapped Python worker via `llama-cpp-python` or local `transformers` | For single-process offline use without running Ollama/vLLM daemon |
+| **`local` (In-Process)** | `LLM_PROVIDER=local`, `LLM_LOCAL_MODEL_PATH` (GGUF file), `LLM_LOCAL_N_CTX`, `LLM_LOCAL_N_GPU_LAYERS`, `llama-cpp-python` from `requirements-local.txt` | Air-gapped Python worker via `llama-cpp-python` (GGUF only; an in-process `transformers` backend is not implemented) | For single-process offline use without running Ollama/vLLM daemon |
 | **Legacy Presets** | `groq`, `openrouter`, `huggingface` | Preserved for backward compatibility | Routed cleanly through unified OpenAI-compatible client |
 
 #### B. Text Embeddings (`src/vectorstore/embeddings.py`)
 | Mode | Env Configuration | Supported Platforms / Runtimes | Notes |
 | :--- | :--- | :--- | :--- |
 | **`openai_compatible`** | `EMBEDDING_PROVIDER=openai_compatible`, `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY` (optional), `EMBEDDING_MODEL` | OpenAI (`text-embedding-3-*`), Ollama (`/v1/embeddings` e.g. `bge-m3`, `nomic-embed-text`), vLLM, LiteLLM, HF TEI, Infinity, Jina, SiliconFlow | Calls standard `/v1/embeddings`; removes mandatory `HUGGINGFACE_API_TOKEN` SPOF |
-| **`local` (In-Process)** | `EMBEDDING_PROVIDER=local`, `EMBEDDING_MODEL`, `EMBEDDING_DEVICE=cpu|cuda` | `fastembed` (lightweight ONNX, no PyTorch required) or `sentence-transformers` (optional extra) | Zero external network calls; caches model weights locally |
+| **`local` (In-Process)** | `EMBEDDING_PROVIDER=local`, `EMBEDDING_LOCAL_BACKEND=fastembed|sentence_transformers`, `EMBEDDING_MODEL` (default for fastembed: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`), `EMBEDDING_DEVICE=cpu|cuda|mps` | `fastembed` (lightweight ONNX, no PyTorch; its own model catalog, no MPS) or `sentence-transformers` (optional extra; any HF model incl. `BAAI/bge-m3`) | No inference network calls; weights are downloaded once and cached |
 | **`huggingface`** | `EMBEDDING_PROVIDER=huggingface`, `HUGGINGFACE_API_TOKEN`, `EMBEDDING_MODEL` | HuggingFace Inference API (`HuggingFaceEndpointEmbeddings`) | Preserved as non-breaking default/legacy option |
 
 *Collection Safety Rule:* Chroma collections continue encoding the sanitized model identifier (`{namespace}_{sanitized_model}`)—and provider metadata—so switching embedding models or dimensions never corrupts existing vector collections.
@@ -286,7 +286,7 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
 | :--- | :--- | :--- | :--- |
 | **`none` / disabled** | `ENABLE_RERANKING=false` | Vector similarity top-K only | Fastest default; zero extra API or model |
 | **`bm25` (Local Lexical)** | `RERANKER_TYPE=bm25` | `rank-bm25` (`BM25Okapi`) | Zero-network, zero-GPU lexical fallback |
-| **`local_cross_encoder`** | `RERANKER_TYPE=local_cross_encoder`, `RERANKER_MODEL` (e.g. `BAAI/bge-reranker-v2-m3`), `RERANKER_DEVICE=cpu|cuda` | In-process `fastembed` (`TextCrossEncoder`) or `sentence-transformers` (`CrossEncoder`) | 100% local neural reranking without Pinecone |
+| **`local_cross_encoder`** | `RERANKER_TYPE=local_cross_encoder`, `RERANKER_MODEL` (default `BAAI/bge-reranker-v2-m3`), `RERANKER_DEVICE=cpu|cuda|mps` | In-process `fastembed` (`TextCrossEncoder`), falling back to `sentence-transformers` (`CrossEncoder`) when fastembed lacks the package or the model | 100% local neural reranking without Pinecone |
 | **`http_rerank` (Standard `/rerank` API)** | `RERANKER_TYPE=http_rerank`, `RERANKER_BASE_URL`, `RERANKER_API_KEY` (optional), `RERANKER_MODEL` | vLLM `/v1/rerank`, HF TEI `/rerank`, Infinity, Jina AI, Cohere, SiliconFlow | Standard JSON `{"model", "query", "documents", "top_n"}` HTTP contract |
 | **`llm_rerank` (OpenAI-Compatible Fallback)** | `RERANKER_TYPE=llm_rerank`, `RERANKER_BASE_URL`, `RERANKER_API_KEY`, `RERANKER_MODEL` | Any OpenAI-compatible `/v1/chat/completions` provider (Ollama, OpenAI, Groq, OpenRouter) | Scores/ranks retrieved passages via structured JSON when platform lacks `/rerank` |
 | **`pinecone`** | `RERANKER_TYPE=pinecone`, `PINECONE_API_KEY`, `RERANKER_MODEL` | Pinecone Inference API | Preserved for backward compatibility |
@@ -304,6 +304,7 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
    - `backend/requirements.txt`: Lean core runtime only (FastAPI/Uvicorn/Gunicorn, Pydantic, Redis, `chromadb==0.6.3`, `openai`, document parsers `PyMuPDF`/`python-pptx`/`python-docx`/`Pillow`, `rank-bm25`, `langchain-core`/`langchain-community`/`langchain-text-splitters`, `langchain-huggingface`), plus documented indirect runtime pins (`pypdf` for `PyPDFLoader`, `huggingface-hub` for `langchain-huggingface`, `python-multipart` for FastAPI form/file uploads, and `posthog<6.0` for `chromadb==0.6.3`).
    - `backend/requirements-local.txt`: Optional in-process local runtime packages (`fastembed` / `sentence-transformers` / optional `llama-cpp-python`) for air-gapped deployments without Ollama/vLLM.
    - `backend/requirements-optional.txt`: Optional cloud SDKs such as `pinecone`.
+   - `backend/requirements-cli.txt`: Minimal client-only set for `python -m src.cli` (`httpx`, `python-dotenv`, `PyYAML`, `loguru`), pinned identically to `requirements.txt`.
 3. **Current External Infrastructure Dependencies (Unchanged Core Stack):**
    - Docker base images: `python:3.10-slim`, `redis:7.4.9-alpine`, `haproxy:3.0.25-alpine`, ChromaDB `0.6.3` (`ANONYMIZED_TELEMETRY=false`).
    - Moodle plugins: PHP `8.1+` with native `curl` & `json` extensions; zero external JS/CSS/font CDNs.
@@ -312,7 +313,7 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
 
 ## 8. Phased Delivery Roadmap (3 Focused Cycles)
 
-> **Status:** Cycle 1 delivered (merged to `main`). Cycle 2 delivered on `feat/cycle2-model-freedom-config` — see [`docs/superpowers/plans/2026-11-19-cycle2-model-freedom-config.md`](superpowers/plans/2026-11-19-cycle2-model-freedom-config.md). Cycle 3 is next.
+> **Status:** Cycle 1 and Cycle 2 are delivered on feature branches: Cycle 1 on `feat/cycle1-core-generalization` (merged into the Cycle 2 line at `102ceb8`), Cycle 2 on `feat/cycle2-model-freedom-config` — see [`docs/superpowers/plans/2026-11-19-cycle2-model-freedom-config.md`](superpowers/plans/2026-11-19-cycle2-model-freedom-config.md) — plus the post-review hardening on `fix/cycle1-scope-hardening` and `fix/cycle2-review-followups`. **Not yet on `main`:** `main` still holds the pre-baseline history (`e52235e`), which shares no ancestor with these branches, so integrating them into `main` is a separate, pending decision. Cycle 3 is next.
 
 | Cycle | Theme | Deliverables | Done Criteria |
 | :--- | :--- | :--- | :--- |
