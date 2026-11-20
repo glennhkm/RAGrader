@@ -112,8 +112,8 @@ final class rubric_builder_test extends \advanced_testcase {
     /**
      * Syncing enables Moodle rubric for 'moodle' mode and disables it otherwise.
      *
-     * During add_instance the course module is not linked to the instance yet, so the
-     * sync is a no-op on creation; it takes effect from the first update onwards.
+     * Creating a 'moodle'-mode assignment already activates the rubric, although the
+     * course module is not linked to the instance yet during add_instance.
      */
     public function test_sync_moodle(): void {
         global $CFG;
@@ -125,6 +125,9 @@ final class rubric_builder_test extends \advanced_testcase {
             'rubricmode' => 'moodle',
         ]);
         $context = \context_module::instance($assign->cmid);
+        $this->assertSame('rubric', get_grading_manager($context, 'mod_airagassign', 'submissions')->get_active_method());
+
+        rubric_builder::sync_moodle((object)['id' => $assign->id, 'rubricmode' => 'custom']);
         $this->assertNull(get_grading_manager($context, 'mod_airagassign', 'submissions')->get_active_method());
 
         rubric_builder::sync_moodle((object)['id' => $assign->id, 'rubricmode' => 'moodle']);

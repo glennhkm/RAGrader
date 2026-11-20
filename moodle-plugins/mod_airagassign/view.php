@@ -164,6 +164,40 @@ if (!empty($linkedmats)) {
     echo html_writer::end_tag('ul');
 }
 
+// ---- Manual reference file status (teachers only) ----
+$manualfiles = \mod_airagassign\local\material_scope::manual_files($context->id);
+if ($cangrade && !empty($manualfiles)) {
+    $unreadyfiles = [];
+    foreach (\mod_airagassign\local\material_scope::unready_manualfiles($assign->id, $context->id) as $uf) {
+        $unreadyfiles[$uf->filename] = $uf;
+    }
+    $badgeclasses = ['completed' => 'airag-badge-success', 'failed' => 'airag-badge-error'];
+    echo $OUTPUT->heading(get_string('manualfile_status', 'airagassign'), 4);
+    echo html_writer::start_tag('ul', ['class' => 'list-group mb-3']);
+    foreach ($manualfiles as $mf) {
+        $uf = $unreadyfiles[$mf->get_filename()] ?? null;
+        $mfstatus = $uf ? $uf->status : 'completed';
+        $item = s($mf->get_filename()) . html_writer::span(
+            \mod_airagassign\local\material_scope::manualfile_status_label($mfstatus),
+            'badge ' . ($badgeclasses[$mfstatus] ?? 'airag-badge-primary') . ' ms-2');
+        if ($uf && $uf->error_message !== '') {
+            $item .= html_writer::tag('div', s($uf->error_message), ['class' => 'small text-danger mt-1']);
+        }
+        echo html_writer::tag('li', $item, ['class' => 'list-group-item']);
+    }
+    echo html_writer::end_tag('ul');
+    if (has_capability('mod/airagassign:manage', $context)) {
+        echo html_writer::start_tag('form', ['method' => 'post', 'class' => 'mb-3',
+            'action' => (new moodle_url('/mod/airagassign/grade.php'))->out(false)]);
+        foreach (['id' => $cm->id, 'action' => 'revectorize', 'sesskey' => sesskey()] as $name => $value) {
+            echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => $name, 'value' => $value]);
+        }
+        echo html_writer::tag('button', get_string('manualfile_revectorize', 'airagassign'),
+            ['type' => 'submit', 'class' => 'btn btn-secondary btn-sm']);
+        echo html_writer::end_tag('form');
+    }
+}
+
 // ---- Rubric display ----
 $criteria = [];
 if (($assign->rubricmode ?? '') === 'custom') {

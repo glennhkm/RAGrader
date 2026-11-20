@@ -62,10 +62,21 @@ $assign = $DB->get_record('airagassign', ['id' => $cm->instance], '*', MUST_EXIS
 
 require_login($course, true, $cm);
 $context = context_module::instance($cm->id);
-require_capability('mod/airagassign:grade', $context);
 require_sesskey();
-
 $returnurl = new moodle_url('/mod/airagassign/view.php', ['id' => $cm->id]);
+
+if ($action === 'revectorize') {
+    // ── Re-queue manual reference file vectorization ──────────────────────────
+    require_capability('mod/airagassign:manage', $context);
+    $queued = \mod_airagassign\local\material_scope::queue_manualfile_vectorization(
+        (int)$assign->id, (int)$context->id);
+    redirect($returnurl,
+        get_string($queued ? 'manualfile_revectorize_queued' : 'manualfile_revectorize_none', 'airagassign'),
+        null,
+        $queued ? \core\output\notification::NOTIFY_INFO : \core\output\notification::NOTIFY_WARNING);
+}
+
+require_capability('mod/airagassign:grade', $context);
 
 if ($action === 'gradeall') {
     // ── Queue bulk-grading background task ────────────────────────────────────

@@ -57,7 +57,8 @@ class restore_airagassign_activity_structure_step extends restore_activity_struc
                 '/activity/airagassign/submissions/submission/answers/answer');
         }
 
-        return $paths;
+        // Adds the common <activity> path, which maps the old context for file restore.
+        return $this->prepare_activity_structure($paths);
     }
 
     // ── Processors ────────────────────────────────────────────────────────────
@@ -192,10 +193,15 @@ class restore_airagassign_activity_structure_step extends restore_activity_struc
     }
 
     /**
-     * After restore, update related intro files.
+     * After restore, update related intro files and queue manual file vectorization.
+     *
+     * The restored assignment owns its vectors under a new id (airagassign:{newid}),
+     * so its manual reference files are re-vectorized in the background.
      */
     protected function after_execute() {
         $this->add_related_files('mod_airagassign', 'intro', null);
         $this->add_related_files('mod_airagassign', 'manualfile', null);
+        \mod_airagassign\local\material_scope::queue_manualfile_vectorization(
+            (int)$this->task->get_activityid(), (int)$this->task->get_contextid());
     }
 }

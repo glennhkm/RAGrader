@@ -59,4 +59,21 @@ final class lib_test extends \advanced_testcase {
         $this->assertEquals([$m2->id], $DB->get_fieldset_select('airagassign_materials', 'materialid',
             'assignid = ?', [$assign->id]));
     }
+
+    /**
+     * A freshly added 'moodle'-mode assignment activates Moodle's rubric without a second save.
+     */
+    public function test_add_instance_activates_moodle_rubric(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/grade/grading/lib.php');
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+
+        $assign = $this->getDataGenerator()->create_module('airagassign', [
+            'course' => $course->id, 'rubricmode' => 'moodle',
+        ]);
+
+        $manager = get_grading_manager(\context_module::instance($assign->cmid), 'mod_airagassign', 'submissions');
+        $this->assertSame('rubric', $manager->get_active_method());
+    }
 }

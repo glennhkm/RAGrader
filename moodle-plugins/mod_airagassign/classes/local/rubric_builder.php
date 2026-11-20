@@ -133,11 +133,17 @@ class rubric_builder {
     public static function sync_moodle(\stdClass $data): void {
         global $CFG;
 
-        $cm = get_coursemodule_from_instance('airagassign', $data->id, 0, false, IGNORE_MISSING);
-        if (!$cm) {
+        // During add_instance the course module is not linked to the instance yet
+        // (course_modules.instance is still 0), so prefer the form's coursemodule id.
+        if (!empty($data->coursemodule)) {
+            $context = \context_module::instance((int)$data->coursemodule, IGNORE_MISSING);
+        } else {
+            $cm = get_coursemodule_from_instance('airagassign', $data->id, 0, false, IGNORE_MISSING);
+            $context = $cm ? \context_module::instance($cm->id, IGNORE_MISSING) : false;
+        }
+        if (!$context) {
             return;
         }
-        $context = \context_module::instance($cm->id);
 
         require_once($CFG->dirroot . '/grade/grading/lib.php');
         $gradingmanager = get_grading_manager($context, 'mod_airagassign', 'submissions');

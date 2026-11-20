@@ -153,15 +153,11 @@ function airagassign_add_instance($data, $mform = null) {
     $data->id = $DB->insert_record('airagassign', $data);
     airagassign_save_children($data);
 
-    // Save manual file if uploaded.
+    // Save the manual file; vectorization runs in a background task.
     $context = context_module::instance($data->coursemodule);
     if (isset($data->manualfile)) {
         airagassign_save_manual_file($data, $context);
-        if (!empty(material_scope::manual_files($context->id))) {
-            material_scope::notify_manual_file_vectorization(
-                material_scope::vectorize_manual_files((int)$data->course, $context->id)
-            );
-        }
+        material_scope::sync_manualfiles((int)$data->id, (int)$data->course, (int)$context->id);
     }
 
     airagassign_grade_item_update($data);
@@ -191,33 +187,13 @@ function airagassign_update_instance($data, $mform = null) {
     $DB->delete_records('airagassign_materials', ['assignid' => $data->id]);
     airagassign_save_children($data);
 
-    // Re-save manual file.
+    // Re-save the manual file: removed files lose their (owner-scoped) vectors,
+    // new or replaced files are re-vectorized in a background task.
     $context = context_module::instance($data->coursemodule);
     if (isset($data->manualfile)) {
-        $oldhashes = material_scope::manual_file_hashes($context->id);
+        $oldnames = array_keys(material_scope::manual_file_hashes($context->id));
         airagassign_save_manual_file($data, $context);
-        $newhashes = material_scope::manual_file_hashes($context->id);
-
-        // Removed files: delete their vectors (unless another activity in the
-        // course still uses the same filename).
-        foreach (array_diff_key($oldhashes, $newhashes) as $oldname => $unused) {
-            material_scope::delete_manual_file_vectors((int)$data->course, (string)$oldname, $context->id);
-        }
-
-        // New files, or an existing filename whose content was replaced, must be
-        // (re-)vectorized; comparing names alone would keep stale vectors.
-        $needsvectorize = false;
-        foreach ($newhashes as $newname => $hash) {
-            if (!isset($oldhashes[$newname]) || $oldhashes[$newname] !== $hash) {
-                $needsvectorize = true;
-                break;
-            }
-        }
-        if ($needsvectorize) {
-            material_scope::notify_manual_file_vectorization(
-                material_scope::vectorize_manual_files((int)$data->course, $context->id)
-            );
-        }
+        material_scope::sync_manualfiles((int)$data->id, (int)$data->course, (int)$context->id, $oldnames);
     }
 
     airagassign_grade_item_update($data);
@@ -240,14 +216,10 @@ function airagassign_delete_instance($id) {
         return false;
     }
 
-    // Clean up manual files and their vector store records first.
-    $cm = get_coursemodule_from_instance('airagassign', $id);
-    if ($cm) {
-        $context = context_module::instance($cm->id);
-        foreach (airagassign_get_uploaded_files($context->id) as $file) {
-            material_scope::delete_manual_file_vectors((int)$assign->course, $file->get_filename(), $context->id);
-        }
-    }
+    // Remove the manual files' vectors (owner airagassign:{id}) and status rows first.
+    $cm = get_coursemodule_from_instance('airagassign', $id, 0, false, IGNORE_MISSING);
+    $context = $cm ? context_module::instance($cm->id, IGNORE_MISSING) : false;
+    material_scope::delete_all_manualfiles($assign, $context ? (int)$context->id : null);
 
     // Delete answers for all submissions.
     $submissions = $DB->get_records('airagassign_submissions', ['assignid' => $id], '', 'id');
@@ -360,6 +332,16 @@ function airagassign_update_grades($assign, $userid = 0, $nullifnone = true) {
  */
 function airagassign_get_uploaded_files($contextid) {
     return material_scope::manual_files((int)$contextid);
+}
+
+/**
+ * Return the vector owner id of an assignment's manual reference files.
+ *
+ * @param int $assignid Assignment instance ID
+ * @return string Owner id, e.g. "airagassign:7"
+ */
+function airagassign_manualfile_owner(int $assignid): string {
+    return material_scope::manualfile_owner($assignid);
 }
 
 /**

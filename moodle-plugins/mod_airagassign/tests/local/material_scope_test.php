@@ -95,27 +95,17 @@ final class material_scope_test extends \advanced_testcase {
     }
 
     /**
-     * Vectorize through the code under test.
-     *
-     * @param int $courseid Course.
-     * @param int $contextid Context.
-     * @return array
-     */
-    private function vectorize(int $courseid, int $contextid): array {
-        return material_scope::vectorize_manual_files($courseid, $contextid);
-    }
-
-    /**
      * Delete through the code under test.
      *
      * @param int $courseid Course.
      * @param string $filename File.
-     * @param int $contextid Context.
+     * @param int $assignid Assignment.
      * @return bool
      */
-    private function delete(int $courseid, string $filename, int $contextid): bool {
-        return material_scope::delete_manual_file_vectors($courseid, $filename, $contextid);
+    private function delete(int $courseid, string $filename, int $assignid): bool {
+        return material_scope::delete_manual_file_vectors($courseid, $filename, $assignid);
     }
+
     /**
      * Load lib.php.
      */
@@ -187,100 +177,58 @@ final class material_scope_test extends \advanced_testcase {
     }
 
     /**
-     * Manual reference files join the scope and are reported by name => contenthash.
+     * Manual reference files join the scope only once their current content is vectorized.
      */
     public function test_manual_file_in_scope(): void {
+        global $DB;
         $this->resetAfterTest();
-        [$assign, $context] = $this->setup_scope();
+        [$assign, $context, $week1] = $this->setup_scope();
         $file = get_file_storage()->create_file_from_string([
             'contextid' => $context->id, 'component' => 'mod_airagassign', 'filearea' => 'manualfile',
             'itemid' => 0, 'filepath' => '/', 'filename' => 'key.txt',
         ], 'answer key');
-
-        $this->assertSame(['w1.pdf', 'key.txt'],
-            material_scope::linked_filenames((int)$assign->id, $context->id));
         $this->assertSame(['key.txt' => $file->get_contenthash()], material_scope::manual_file_hashes($context->id));
-    }
-    /**
-     * Create an assignment with a manual reference file.
-     *
-     * @return array [course, context]
-     */
-    private function assign_with_manual_file(): array {
-        $course = $this->getDataGenerator()->create_course();
-        $assign = $this->getDataGenerator()->create_module('airagassign', ['course' => $course->id]);
-        $context = \context_module::instance($assign->cmid);
-        get_file_storage()->create_file_from_string([
-            'contextid' => $context->id, 'component' => 'mod_airagassign', 'filearea' => 'manualfile',
-            'itemid' => 0, 'filepath' => '/', 'filename' => 'key.txt',
-        ], 'answer key');
-        return [$course, $context];
+        $this->assertSame(['w1.pdf'], material_scope::linked_filenames((int)$assign->id, $context->id));
+        $this->assertSame(['airagmaterial:' . $week1->id], material_scope::owner_ids((int)$assign->id, $context->id));
+
+        $DB->insert_record('airagassign_manualfiles', (object)['assignid' => $assign->id, 'filename' => 'key.txt',
+            'contenthash' => $file->get_contenthash(), 'status' => 'completed', 'timemodified' => time()]);
+
+        $this->assertSame(['w1.pdf', 'key.txt'], material_scope::linked_filenames((int)$assign->id, $context->id));
+        $this->assertSame(['airagmaterial:' . $week1->id, 'airagassign:' . $assign->id],
+            material_scope::owner_ids((int)$assign->id, $context->id));
     }
 
     /**
-     * Manual files are uploaded to the course collection without an owner id.
+     * Unready manual files are described with their status label and error.
      */
-    public function test_vectorize_manual_files(): void {
+    public function test_describe_unready_manualfiles(): void {
         $this->resetAfterTest();
-        [$course, $context] = $this->assign_with_manual_file();
-        $this->queue([[200, ['success' => true, 'chunk_count' => 3]]]);
-
-        $this->assertTrue($this->vectorize($course->id, $context->id)['success']);
-        $this->assertSame([300], $this->timeouts);
-        $this->assertSame([[
-            'method' => 'POST',
-            'path' => '/course/materials/upload',
-            'form' => ['course_id' => (string)$course->id, 'course_name' => '', 'file' => 'key.txt'],
-        ]], $this->requests());
+        $files = [
+            (object)['filename' => 'a.pdf', 'status' => 'queued', 'error_message' => ''],
+            (object)['filename' => 'b.pdf', 'status' => 'failed', 'error_message' => 'HTTP 500: boom'],
+        ];
+        $this->assertSame('a.pdf (Queued for vectorization), b.pdf (Failed: HTTP 500: boom)',
+            material_scope::describe_unready_manualfiles($files));
     }
 
     /**
-     * Upload failures are reported per file; no files is an error.
-     */
-    public function test_vectorize_manual_files_failures(): void {
-        $this->resetAfterTest();
-        [$course, $context] = $this->assign_with_manual_file();
-        $this->queue([[500, ['detail' => 'disk full']]]);
-
-        $result = $this->vectorize($course->id, $context->id);
-        $this->assertFalse($result['success']);
-        $this->assertStringStartsWith('key.txt: HTTP 500: ', $result['error']);
-        $this->assertStringContainsString('disk full', $result['error']);
-
-        $this->assertSame(['success' => false, 'error' => 'No files found to vectorize'],
-            $this->vectorize($course->id, \context_system::instance()->id));
-    }
-
-    /**
-     * Deleting manual-file vectors calls the API unless another activity still uses the filename.
+     * Deleting manual-file vectors is scoped to the assignment owner id; only HTTP 200 is success.
      */
     public function test_delete_manual_file_vectors(): void {
-        global $DB;
         $this->resetAfterTest();
-        [$course, $context] = $this->assign_with_manual_file();
+        $course = $this->getDataGenerator()->create_course();
 
         $this->queue([[200, ['success' => false, 'message' => 'no vectors found']], [500, ['detail' => 'x']]]);
-        $this->assertTrue($this->delete($course->id, 'key.txt', $context->id));
+        $this->assertTrue($this->delete($course->id, 'key.txt', 7));
         $this->assertSame([30], $this->timeouts);
         $this->assertSame([[
             'method' => 'DELETE',
             'path' => '/course/materials/file',
-            'form' => ['course_id' => (string)$course->id, 'filename' => 'key.txt'],
+            'form' => ['course_id' => (string)$course->id, 'filename' => 'key.txt', 'material_id' => 'airagassign:7'],
         ]], $this->requests());
 
-        $this->assertFalse($this->delete($course->id, 'key.txt', $context->id));
+        $this->assertFalse($this->delete($course->id, 'key.txt', 7));
         $this->assertDebuggingCalled();
-
-        // A vectorized material file with the same name keeps the vectors: no request.
-        $material = $this->getDataGenerator()->create_module('airagmaterial', [
-            'course' => $course->id, 'vectorize_status' => 'completed',
-        ]);
-        $DB->insert_record('airagmaterial_files', (object)[
-            'materialid' => $material->id, 'filename' => 'key.txt', 'filesize' => 1,
-            'vectorized' => 1, 'timecreated' => time(),
-        ]);
-        $this->queue([]);
-        $this->assertTrue($this->delete($course->id, 'key.txt', $context->id));
-        $this->assertSame([], $this->requests());
     }
 }
