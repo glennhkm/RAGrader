@@ -27,7 +27,7 @@ namespace mod_airagmaterial;
  */
 final class generator_test extends \advanced_testcase {
     /**
-     * An instance is created with a pending vectorization status.
+     * An instance is created with the real default status and one queued vectorize task.
      */
     public function test_create_instance(): void {
         global $DB;
@@ -38,7 +38,27 @@ final class generator_test extends \advanced_testcase {
 
         $record = $DB->get_record('airagmaterial', ['id' => $material->id], '*', MUST_EXIST);
         $this->assertEquals($course->id, $record->course);
-        $this->assertSame('pending', $record->vectorize_status);
+        $this->assertSame('queued', $record->vectorize_status);
+
+        $tasks = \core\task\manager::get_adhoc_tasks(\mod_airagmaterial\task\vectorize_material::class);
+        $this->assertCount(1, $tasks);
+        $this->assertEquals($material->id, reset($tasks)->get_custom_data()->materialid);
+    }
+
+    /**
+     * An explicit vectorize_status is honoured.
+     */
+    public function test_create_instance_explicit_status(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $material = $this->getDataGenerator()->create_module(
+            'airagmaterial',
+            ['course' => $course->id, 'vectorize_status' => 'completed']
+        );
+
+        $this->assertSame('completed', $DB->get_field('airagmaterial', 'vectorize_status', ['id' => $material->id]));
     }
 
     /**

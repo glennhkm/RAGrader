@@ -36,6 +36,9 @@ class mod_airagmaterial_generator extends testing_module_generator {
     /**
      * Create a material instance without any files (so no vectorization request is made).
      *
+     * The status is whatever airagmaterial_add_instance() produces ('queued') unless the
+     * record explicitly sets vectorize_status.
+     *
      * @param stdClass|array|null $record Instance fields to override.
      * @param array|null $options Course module options.
      * @return stdClass The created instance record (with cmid).
@@ -44,15 +47,17 @@ class mod_airagmaterial_generator extends testing_module_generator {
         global $DB;
 
         $record = (object)(array)$record;
-        $status = $record->vectorize_status ?? 'pending';
+        $status = $record->vectorize_status ?? null;
         unset($record->vectorize_status);
 
         $instance = parent::create_instance($record, (array)$options);
 
-        // The add_instance callback queues a vectorize task and marks the row
-        // as queued; tests expect the documented initial status instead.
-        $DB->set_field('airagmaterial', 'vectorize_status', $status, ['id' => $instance->id]);
-        $instance->vectorize_status = $status;
+        // The add_instance callback ignores any supplied status (it queues a vectorize
+        // task and marks the row as queued). Only an explicit request overrides that.
+        if ($status !== null) {
+            $DB->set_field('airagmaterial', 'vectorize_status', $status, ['id' => $instance->id]);
+            $instance->vectorize_status = $status;
+        }
 
         return $instance;
     }
