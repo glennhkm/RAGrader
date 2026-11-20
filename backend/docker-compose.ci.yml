@@ -1,0 +1,52 @@
+# CI-only override for the full-stack integration tests (never used in production):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
+#
+# Replaces the real LLM/embedding providers with a deterministic stub, enables the
+# bearer token, and publishes Chroma on loopback so the tests can seed a collection
+# with a mismatching embedding identity.
+services:
+  api:
+    environment:
+      LLM_PROVIDER: openai_compatible
+      LLM_BASE_URL: http://stub-ai:9000/v1
+      LLM_MODEL: stub
+      EMBEDDING_PROVIDER: openai_compatible
+      EMBEDDING_BASE_URL: http://stub-ai:9000/v1
+      EMBEDDING_MODEL: stub-embed
+      API_AUTH_TOKEN: ci-token
+      API_REPLICAS: "2"
+    deploy:
+      replicas: 2
+    depends_on:
+      stub-ai:
+        condition: service_healthy
+
+  chroma:
+    ports:
+      - "127.0.0.1:18001:8000"
+
+  stub-ai:
+    # Same image as the API: the stub only needs FastAPI/uvicorn. The image build
+    # is done by the api service; the stub source is mounted because the image's
+    # .dockerignore excludes tests.
+    image: ai-rag-grading-api:${API_IMAGE_TAG:-local}
+    pull_policy: never
+    command: ["uvicorn", "integration_tests.stub_ai:app", "--host", "0.0.0.0", "--port", "9000"]
+    restart: "no"
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+    volumes:
+      - ./integration_tests:/app/integration_tests:ro
+    expose:
+      - "9000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health', timeout=5)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

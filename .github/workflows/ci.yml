@@ -56,6 +56,90 @@ jobs:
         working-directory: backend
         run: docker build --tag ai-rag-grading-api:ci .
 
+  # Brings up the production topology (HAProxy -> 2 API replicas -> Chroma HTTP
+  # server + Redis) with a deterministic stub standing in for the LLM and the
+  # embedding provider, then exercises it end to end.
+  integration:
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      # The tests import the backend (collection naming) and seed Chroma over HTTP.
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Start the compose stack
+        working-directory: backend
+        run: |
+          set -o pipefail
+          cp .env.example .env
+          # The containers run as uid 10001; the bind-mounted data dirs must be writable.
+          mkdir -p data/chroma_db data/uploads
+          sudo chown -R 10001:10001 data/chroma_db data/uploads
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait --wait-timeout 300 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
+
+      - name: Run integration tests
+        working-directory: backend
+        env:
+          RAG_IT_URL: http://127.0.0.1:8000
+          RAG_IT_TOKEN: ci-token
+          RAG_IT_EXPECT_REPLICAS: "2"
+        run: |
+          set -o pipefail
+          python -W ignore -m unittest discover -s integration_tests -v 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
+
+      # Job logs need a sign-in; annotations are public, so surface the log tails.
+      - name: Annotate failure
+        if: failure()
+        working-directory: backend
+        run: |
+          annotate() {
+            python3 -c "import sys,urllib.parse as u; print('::error title=$1::' + sys.stdin.read().replace('%','%25').replace('\r','%0D').replace('\n','%0A'))"
+          }
+          tail -c 3000 "$RUNNER_TEMP/ci.log" 2>/dev/null | annotate "integration test failure"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail 25 2>&1 | tail -c 3500 | annotate "docker compose logs tail"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a 2>&1 | tail -c 1500 | annotate "docker compose ps"
+
+      - name: Tear down the compose stack
+        if: always()
+        working-directory: backend
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+          rm -f .env
+
+  # The default image stays lean; make sure the optional local-embeddings layer
+  # (fastembed) still builds and imports.
+  image-local-extras:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image with local extras
+        working-directory: backend
+        run: |
+          set -o pipefail
+          docker build --build-arg INSTALL_LOCAL_EXTRAS=true --tag ai-rag-grading-api:local-extras . 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
+
+      - name: Verify fastembed imports
+        run: |
+          set -o pipefail
+          docker run --rm ai-rag-grading-api:local-extras python -c "import fastembed" 2>&1 | tee -a "$RUNNER_TEMP/ci.log"
+
+      - name: Annotate failure
+        if: failure()
+        run: |
+          tail -n 40 "$RUNNER_TEMP/ci.log" 2>/dev/null | tail -c 3500 | python3 -c "import sys,urllib.parse as u; print('::error title=image-local-extras failure::' + sys.stdin.read().replace('%','%25').replace('\r','%0D').replace('\n','%0A'))"
+
   moodle-plugins:
     runs-on: ubuntu-latest
     steps:
