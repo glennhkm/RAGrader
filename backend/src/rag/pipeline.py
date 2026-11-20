@@ -49,6 +49,7 @@ class RAGPipeline:
             port=config['vectorstore'].get('port', 8000),
             ssl=config['vectorstore'].get('ssl', False),
             embedding_settings=self.settings.embeddings,
+            anonymized_telemetry=self.settings.vectorstore.anonymized_telemetry,
         )
         
         # Track current embedding model

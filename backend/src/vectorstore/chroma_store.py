@@ -7,6 +7,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from loguru import logger
 import chromadb
+from chromadb.config import Settings as ChromaSettings
 from chromadb.errors import NotFoundError
 
 try:  # chromadb 0.6.x raises InvalidCollectionException for missing collections
@@ -35,6 +36,7 @@ class VectorStore:
         port: int = 8000,
         ssl: bool = False,
         embedding_settings=None,
+        anonymized_telemetry: bool = False,
     ):
         """
         Initialize vector store.
@@ -48,6 +50,9 @@ class VectorStore:
             host: Chroma server host in HTTP mode
             port: Chroma server port in HTTP mode
             ssl: Whether the Chroma HTTP connection uses TLS
+            embedding_settings: Embedding provider settings (defaults to get_settings())
+            anonymized_telemetry: Allow Chroma client telemetry (off by default; set
+                explicitly so a missing ANONYMIZED_TELEMETRY env var cannot enable it)
         """
         self.persist_directory = Path(persist_directory)
         self.base_collection_name = collection_name
@@ -66,16 +71,21 @@ class VectorStore:
         # Embedded Chroma is suitable for one process only. Replicated API
         # deployments use one Chroma server through HttpClient.
         self.client_mode = str(client_mode).lower()
+        client_settings = ChromaSettings(anonymized_telemetry=bool(anonymized_telemetry))
         if self.client_mode == "http":
             self.client = chromadb.HttpClient(
                 host=str(host),
                 port=int(port),
                 ssl=bool(ssl),
+                settings=client_settings,
             )
             self.client.heartbeat()
             logger.info(f"Connected to Chroma server at {host}:{port}")
         elif self.client_mode == "persistent":
-            self.client = chromadb.PersistentClient(path=str(self.persist_directory))
+            self.client = chromadb.PersistentClient(
+                path=str(self.persist_directory),
+                settings=client_settings,
+            )
             logger.info(f"Using embedded Chroma at {self.persist_directory}")
         else:
             raise ValueError("CHROMA_CLIENT_MODE must be 'persistent' or 'http'")

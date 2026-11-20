@@ -4,7 +4,7 @@ PYTHON ?= python3
 
 help:
 	@echo "Available targets:"
-	@echo "  make test           Run backend Python unit tests"
+	@echo "  make test           Run backend Python unit tests (network access blocked)"
 	@echo "  make lint-php       Syntax-check all Moodle plugin PHP files"
 	@echo "  make build-plugins  Build Moodle-installable ZIP archives into dist/"
 	@echo "  make up             Start backend Docker Compose stack (API, Chroma, Redis, HAProxy)"
@@ -13,7 +13,7 @@ help:
 	@echo "  make clean          Remove generated dist/ plugin archives"
 
 test:
-	cd backend && $(PYTHON) -m unittest discover -s tests -v
+	cd backend && $(PYTHON) tests/run_offline.py -v
 
 lint-php:
 	find moodle-plugins -name "*.php" -print0 | xargs -0 -n1 php -l

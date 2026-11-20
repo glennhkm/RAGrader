@@ -8,7 +8,11 @@ import chromadb
 
 from chromadb.errors import NotFoundError
 
+from chromadb.config import Settings as ChromaSettings
+
 from src.vectorstore.chroma_store import VectorStore
+
+_OFFLINE = ChromaSettings(anonymized_telemetry=False)
 
 
 class _FakeCollection:
@@ -73,7 +77,11 @@ class ChromaStoreCompatibilityTest(unittest.TestCase):
                 ssl=False,
             )
 
-        http_client.assert_called_once_with(host="chroma", port=8000, ssl=False)
+        http_client.assert_called_once()
+        kwargs = http_client.call_args.kwargs
+        self.assertEqual(("chroma", 8000, False), (kwargs["host"], kwargs["port"], kwargs["ssl"]))
+        # Privacy by default: the client never phones home unless opted in.
+        self.assertFalse(kwargs["settings"].anonymized_telemetry)
         client.heartbeat.assert_called_once_with()
         self.assertIs(store.client, client)
 
@@ -82,9 +90,19 @@ class ChromaStoreCompatibilityTest(unittest.TestCase):
         self.assertEqual(2, langchain_chroma.call_count)
         self.assertEqual({}, store._vectorstores)
 
+    @patch("src.vectorstore.chroma_store.EmbeddingGenerator")
+    def test_persistent_client_telemetry_is_off_by_default_and_opt_in(self, _embedding_generator):
+        with tempfile.TemporaryDirectory() as directory:
+            store = VectorStore(persist_directory=directory, client_mode="persistent")
+            self.assertFalse(store.client.get_settings().anonymized_telemetry)
+        with tempfile.TemporaryDirectory() as directory:
+            store = VectorStore(persist_directory=directory, client_mode="persistent",
+                                anonymized_telemetry=True)
+            self.assertTrue(store.client.get_settings().anonymized_telemetry)
+
     def test_real_persistent_client_counts_and_deletes_course_chunks(self):
         with tempfile.TemporaryDirectory() as directory:
-            client = chromadb.PersistentClient(path=directory)
+            client = chromadb.PersistentClient(path=directory, settings=_OFFLINE)
             store = _make_store(client)
             collection = client.get_or_create_collection("course_204_baai_bge_m3")
             collection.add(
@@ -117,7 +135,7 @@ class ChromaStoreCompatibilityTest(unittest.TestCase):
         sink = logger.add(lambda m: records.append(m.record), level="WARNING")
         try:
             with tempfile.TemporaryDirectory() as directory:
-                client = chromadb.PersistentClient(path=directory)
+                client = chromadb.PersistentClient(path=directory, settings=_OFFLINE)
                 store = _make_store(client)
                 # Collection missing entirely (first upload into a new course).
                 self.assertFalse(store.delete_document_by_source("never-uploaded.pdf", "204"))

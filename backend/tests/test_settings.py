@@ -49,6 +49,11 @@ class SettingsDefaultsTest(unittest.TestCase):
         self.assertEqual("Qwen/Qwen2.5-VL-7B-Instruct", s.vision.model)
         self.assertEqual("auto", s.prompt.language)
 
+    def test_vectorstore_telemetry_defaults_off_and_follows_env(self):
+        self.assertFalse(load_settings(env={}).vectorstore.anonymized_telemetry)
+        self.assertTrue(load_settings(env={"ANONYMIZED_TELEMETRY": "true"}).vectorstore.anonymized_telemetry)
+        self.assertFalse(load_settings(env={"ANONYMIZED_TELEMETRY": "False"}).vectorstore.anonymized_telemetry)
+
     def test_lock_api_logging_defaults(self):
         s = self.settings
         self.assertFalse(s.locks.enabled)

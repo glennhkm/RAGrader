@@ -14,7 +14,7 @@ Thank you for your interest in contributing!
    ```
 2. Run the unit test suite:
    ```bash
-   python -m unittest discover -s tests -v
+   python tests/run_offline.py -v   # unit tests with network access blocked
    ```
 
 ### Moodle Plugins (`moodle-plugins/`)
