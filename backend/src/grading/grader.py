@@ -73,6 +73,7 @@ class EssayGrader:
         vision_model: str = None,
         module: Optional[str] = None,
         tags: Optional[Dict[str, Any]] = None,
+        material_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Ingest course material documents (PDF, PPTX, DOCX, TXT) with image support.
@@ -85,6 +86,8 @@ class EssayGrader:
             vision_model: Vision model to use for captioning
             module: Optional module/week identifier attached to chunk metadata
             tags: Optional arbitrary tag key-value pairs attached to chunk metadata
+            material_id: Optional owner id stamped on every chunk; scopes the
+                replace-before-add deletion to that owner (plus unowned legacy chunks)
             
         Returns:
             Ingestion result dictionary
@@ -157,6 +160,8 @@ class EssayGrader:
                 progress_callback(90, 100, "Saving to the vector store...")
             
             extra_meta = sanitize_chunk_metadata(module=module, tags=tags)
+            if material_id:
+                extra_meta["material_id"] = material_id
             if chunks and extra_meta:
                 for chunk in chunks:
                     chunk.metadata.update(extra_meta)
@@ -168,6 +173,7 @@ class EssayGrader:
                     self.rag_pipeline.vectorstore.delete_document_by_source(
                         source_name=source_name,
                         course_id=course_id,
+                        material_id=material_id,
                     )
                 self.rag_pipeline.vectorstore.add_documents(chunks, course_id=course_id)
             
@@ -427,19 +433,26 @@ class EssayGrader:
         self.rag_pipeline.vectorstore.clear(course_id=course_id)
         logger.info(f"Vector store cleared for course: {course_id}")
 
-    def delete_course_material_file(self, course_id: str, filename: str) -> bool:
+    def delete_course_material_file(
+        self,
+        course_id: str,
+        filename: str,
+        material_id: Optional[str] = None,
+    ) -> bool:
         """
         Delete a single course material file and its vector chunks.
         
         Args:
             course_id: Moodle course ID
             filename: The name of the file to remove
+            material_id: Optional owner id; without it only unowned chunks are removed
             
         Returns:
             True if deletion was successful, False otherwise
         """
         success = self.rag_pipeline.vectorstore.delete_document_by_source(
             source_name=filename,
-            course_id=course_id
+            course_id=course_id,
+            material_id=material_id,
         )
         return success
