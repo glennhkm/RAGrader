@@ -27,7 +27,7 @@ that scoped retrieval never cites it.
    Any other OpenAI-compatible endpoint works too: set `LLM_BASE_URL` / `EMBEDDING_BASE_URL`
    (and keys, if needed) in `.env.dev`.
 
-2. From the repository root (needs `pip install -r backend/requirements.txt` for the CLI):
+2. From the repository root (the CLI only needs `pip install -r backend/requirements-cli.txt`):
 
    ```bash
    RAG_API_URL=http://127.0.0.1:8000 ./examples/week1_to_week4_quiz/run_demo.sh

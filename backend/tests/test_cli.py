@@ -82,6 +82,32 @@ class CliTest(unittest.TestCase):
         self.assertIn('filename="week-1.txt"', body)
         self.assertIn("OK   week-1.txt: 2 chunks", out)
 
+    def test_grade_tag_filters_reach_material_filter(self):
+        api = _FakeApi()
+        code, _, _ = _run(["--api-url", "http://api", "--token", "", "grade", "--namespace", "cs101",
+                           "--question", "Q?", "--answer", "A.", "--tag", "topic=routing",
+                           "--tag", "term=2026-1"], api)
+        self.assertEqual(0, code)
+        payload = json.loads(api.requests[0].content)
+        self.assertEqual({"tags": {"topic": "routing", "term": "2026-1"}}, payload["material_filter"])
+
+    def test_malformed_grade_tag_is_a_usage_error(self):
+        code, _, err = _run(["--api-url", "http://api", "--token", "", "grade", "--namespace", "cs101",
+                             "--question", "Q?", "--answer", "A.", "--tag", "no-equals-sign"], _FakeApi())
+        self.assertEqual(1, code)
+        self.assertIn("key=value", err)
+
+    def test_grade_csv_rejects_malformed_tag_before_any_request(self):
+        answers = self.dir / "answers.csv"
+        answers.write_text("question,answer\nQ?,A.\n", encoding="utf-8")
+        api = _FakeApi()
+        code, _, err = _run(["--api-url", "http://api", "--token", "", "grade-csv", "--namespace", "cs101",
+                             "--input", str(answers), "--output", str(self.dir / "out.csv"),
+                             "--tag", "bad"], api)
+        self.assertEqual(1, code)
+        self.assertIn("key=value", err)
+        self.assertEqual([], api.requests)
+
     def test_grade_builds_scoped_payload(self):
         rubric = self.dir / "rubric.json"
         rubric.write_text(json.dumps({"Accuracy": {"max_score": 10}}), encoding="utf-8")
