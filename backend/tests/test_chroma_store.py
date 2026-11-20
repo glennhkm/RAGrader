@@ -155,6 +155,21 @@ class ChromaStoreCompatibilityTest(unittest.TestCase):
         self.assertTrue(deleted)
         self.assertEqual(["chunk-1", "chunk-2"], collection.deleted_ids)
 
+    def test_store_error_during_delete_is_raised_not_reported_as_nothing(self):
+        # A Chroma outage must not look like "no chunks to delete" (False): the
+        # DELETE route would answer 200 and the plugins would drop their retry.
+        collection = _FakeCollection(ids=["chunk-1"])
+
+        def broken_get(**kwargs):
+            raise RuntimeError("chroma unavailable")
+
+        collection.get = broken_get
+        store = _make_store(_FakeClient(collection))
+
+        with self.assertRaises(RuntimeError):
+            store.delete_document_by_source("material.pptx", "204")
+        self.assertEqual([], collection.deleted_ids or [])
+
     def test_clear_deletes_existing_collection(self):
         client = _FakeClient(_FakeCollection())
         store = _make_store(client)
