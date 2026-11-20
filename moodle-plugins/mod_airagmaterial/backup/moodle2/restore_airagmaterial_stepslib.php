@@ -45,7 +45,7 @@ class restore_airagmaterial_activity_structure_step extends restore_activity_str
         $paths[] = new restore_path_element('airagmaterial', '/activity/airagmaterial');
         $paths[] = new restore_path_element('airagmaterial_file', '/activity/airagmaterial/files/file');
 
-        return $paths;
+        return $this->prepare_activity_structure($paths);
     }
 
     /**
