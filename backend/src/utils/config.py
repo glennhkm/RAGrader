@@ -335,6 +335,13 @@ class VisionSettings(_SafeRepr):
 
 
 @dataclass(frozen=True, repr=False)
+class VectorStoreSettings(_SafeRepr):
+    # Chroma client telemetry (PostHog). Off unless explicitly enabled, so
+    # self-hosted and air-gapped deployments never phone home.
+    anonymized_telemetry: bool
+
+
+@dataclass(frozen=True, repr=False)
 class PromptSettings(_SafeRepr):
     language: str
 
@@ -377,6 +384,7 @@ class Settings(_SafeRepr):
     embeddings: EmbeddingSettings
     reranker: RerankerSettings
     vision: VisionSettings
+    vectorstore: VectorStoreSettings
     prompt: PromptSettings
     locks: LockSettings
     api: APISettings
@@ -648,6 +656,9 @@ def _build_settings(reader: _EnvReader) -> Settings:
         embeddings=embeddings,
         reranker=reranker,
         vision=vision,
+        vectorstore=VectorStoreSettings(
+            anonymized_telemetry=reader.bool("ANONYMIZED_TELEMETRY", False),
+        ),
         prompt=PromptSettings(
             language=reader.choice("PROMPT_LANGUAGE", "auto", ("auto", "en", "id")),
         ),
