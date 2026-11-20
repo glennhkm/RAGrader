@@ -187,19 +187,18 @@ jobs:
       matrix:
         moodle: [MOODLE_404_STABLE, MOODLE_405_STABLE, MOODLE_500_STABLE, MOODLE_503_STABLE]
         plugin: [mod_airagmaterial, mod_airagassign, local_assign_ai_rag, aiprovider_rag]
-        # Moodle 4.4 is an experimental leg for the two activity modules only; the
+        # Moodle 4.4 covers the two activity modules only; the
         # Core AI subsystem plugins need 4.5+.
         exclude:
           - { moodle: MOODLE_404_STABLE, plugin: local_assign_ai_rag }
           - { moodle: MOODLE_404_STABLE, plugin: aiprovider_rag }
         # Entries matching an existing axis value add the PHP version to those legs.
         include:
-          - { moodle: MOODLE_404_STABLE, php: "8.1", experimental: true }
+          - { moodle: MOODLE_404_STABLE, php: "8.1" }
           - { moodle: MOODLE_405_STABLE, php: "8.1" }
           - { moodle: MOODLE_500_STABLE, php: "8.3" }
           - { moodle: MOODLE_503_STABLE, php: "8.3" }
     name: ${{ matrix.plugin }} (${{ matrix.moodle }}, PHP ${{ matrix.php }})
-    continue-on-error: ${{ matrix.experimental == true }}
     env:
       MOODLE_BRANCH: ${{ matrix.moodle }}
       DB: pgsql
@@ -239,18 +238,6 @@ jobs:
             cp -r "plugin/moodle-plugins/$dep" "$RUNNER_TEMP/extra-plugins/$dep"
           fi
           echo "EXTRA_PLUGINS_DIR=$RUNNER_TEMP/extra-plugins" >> "$GITHUB_ENV"
-
-      # Moodle 4.4 validation: lower `requires` in the CI workspace copies only.
-      - name: Relax requires for Moodle 4.4 (CI copy only)
-        if: matrix.moodle == 'MOODLE_404_STABLE'
-        run: |
-          sed -i 's/\$plugin->requires *= 2024100700;/$plugin->requires = 2024042200;/' \
-            "plugin/moodle-plugins/${{ matrix.plugin }}/version.php"
-          if [ -d "$EXTRA_PLUGINS_DIR/mod_airagmaterial" ]; then
-            sed -i 's/\$plugin->requires *= 2024100700;/$plugin->requires = 2024042200;/' \
-              "$EXTRA_PLUGINS_DIR/mod_airagmaterial/version.php"
-          fi
-          grep -n 'plugin->requires' "plugin/moodle-plugins/${{ matrix.plugin }}/version.php"
 
       - name: Install Moodle and the plugin
         run: |
