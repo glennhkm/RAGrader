@@ -5,7 +5,9 @@ Usage (from ``backend/``)::
     python -m src.cli ingest    --namespace cs101 --module week-1 materials/week-1.txt
     python -m src.cli grade     --namespace cs101 --question "..." --answer "..." --module week-1
     python -m src.cli grade-csv --namespace cs101 --input answers.csv --output graded.csv \\
-        --module week-1 --module week-2 --module week-3
+        --module week-1 --module week-2 --module week-3 [--tag topic=routing]
+
+Only ``requirements-cli.txt`` is needed to run the CLI against a remote API.
 
 The CLI talks to a running API over HTTP (``--api-url`` / ``RAG_API_URL``,
 ``--token`` / ``RAG_API_TOKEN``), so it uses exactly the same validation,
@@ -106,6 +108,7 @@ def _grade_payload(args: argparse.Namespace, question: str, answer: str) -> Dict
     material_filter = {key: value for key, value in (
         ("modules", args.module or []),
         ("sources", args.source or []),
+        ("tags", _parse_tags(args.tag)),
     ) if value}
     if material_filter:
         payload["material_filter"] = material_filter
@@ -176,6 +179,7 @@ def _grade_row(client: RagApiClient, args: argparse.Namespace, row: Dict[str, st
 
 
 def cmd_grade_csv(client: RagApiClient, args: argparse.Namespace) -> int:
+    _parse_tags(args.tag)  # fail fast on malformed --tag before sending any request
     with open(args.input, newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
         rows = list(reader)
@@ -222,6 +226,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--max-grade", type=float, default=100.0)
         p.add_argument("--module", action="append", help="Restrict retrieval to this module (repeatable)")
         p.add_argument("--source", action="append", help="Restrict retrieval to this filename (repeatable)")
+        p.add_argument("--tag", action="append", default=[],
+                       help="Restrict retrieval to chunks ingested with this key=value tag (repeatable)")
         p.add_argument("--language", choices=("auto", "en", "id"))
 
     grade = sub.add_parser("grade", help="Grade one answer")

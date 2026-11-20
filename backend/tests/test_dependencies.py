@@ -149,3 +149,36 @@ class DependencyHygieneTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Modules loaded by ``python -m src.cli`` (the CLI imports src.utils lazily for settings).
+CLI_IMPORT_CLOSURE = ("cli.py", "__init__.py", "utils/__init__.py", "utils/config.py", "utils/logger.py")
+
+
+def _requirement_lines(name: str) -> dict:
+    lines = {}
+    for line in (BACKEND_DIR / name).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            dist = re.split(r"[<>=!~\[; ]", line, maxsplit=1)[0].strip().lower()
+            lines[dist] = line.replace(" ", "")
+    return lines
+
+
+class CliRequirementsTest(unittest.TestCase):
+    def test_cli_requirements_cover_the_cli_import_closure(self):
+        cli = _requirements("requirements-cli.txt")
+        stdlib = set(sys.stdlib_module_names)
+        closure = {SRC_DIR / rel for rel in CLI_IMPORT_CLOSURE}
+        missing = sorted({
+            f"{path.relative_to(BACKEND_DIR)}: {module} -> {IMPORT_TO_DIST.get(module, '?')}"
+            for path, module, guarded in _imports()
+            if path in closure and not guarded and module not in stdlib and module != "src"
+            and IMPORT_TO_DIST.get(module) not in cli
+        })
+        self.assertEqual([], missing)
+
+    def test_cli_pins_match_core_requirements(self):
+        core = _requirement_lines("requirements.txt")
+        for dist, spec in _requirement_lines("requirements-cli.txt").items():
+            self.assertEqual(core.get(dist), spec, f"{dist} pin differs from requirements.txt")

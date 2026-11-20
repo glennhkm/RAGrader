@@ -54,7 +54,7 @@ docker compose -f docker-compose.dev.yml exec ollama ollama pull bge-m3
 curl -fsS http://127.0.0.1:8000/health
 ```
 
-Then run the sample "Weeks 1–3 materials → Week 4 quiz" kit (needs `pip install -r backend/requirements.txt` for the CLI):
+Then run the sample "Weeks 1–3 materials → Week 4 quiz" kit (the CLI only needs `pip install -r backend/requirements-cli.txt`):
 
 ```bash
 RAG_API_URL=http://127.0.0.1:8000 ./examples/week1_to_week4_quiz/run_demo.sh
@@ -84,7 +84,7 @@ python -m src.cli grade-csv --namespace cs101 --input answers.csv --output grade
     --rubric rubric.json --module week-1 --module week-2 --module week-3
 ```
 
-The CLI calls the `/v1` API (`--api-url` / `RAG_API_URL`, `--token` / `RAG_API_TOKEN`).
+The CLI calls the `/v1` API (`--api-url` / `RAG_API_URL`, `--token` / `RAG_API_TOKEN`). Grading commands accept `--module`, `--source` and `--tag key=value` (repeatable) to scope retrieval. On a machine that only runs the CLI, `pip install -r backend/requirements-cli.txt` is enough.
 
 ### D. Build and Install Moodle Plugins
 
