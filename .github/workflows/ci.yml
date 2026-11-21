@@ -39,10 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
@@ -81,10 +81,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
@@ -200,18 +200,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        moodle: [MOODLE_404_STABLE, MOODLE_405_STABLE, MOODLE_500_STABLE, MOODLE_503_STABLE]
+        # Moodle branches with security support: 4.5 LTS (to 2027-10), 5.1
+        # (to 2027-04), 5.2 (to 2027-10) and 5.3 LTS (to 2029-10). Update this
+        # list as branches leave security support: https://moodledev.io/general/releases
+        moodle: [MOODLE_405_STABLE, MOODLE_501_STABLE, MOODLE_502_STABLE, MOODLE_503_STABLE]
         plugin: [mod_airagmaterial, mod_airagassign, local_assign_ai_rag, aiprovider_rag]
-        # Moodle 4.4 covers the two activity modules only; the
-        # Core AI subsystem plugins need 4.5+.
-        exclude:
-          - { moodle: MOODLE_404_STABLE, plugin: local_assign_ai_rag }
-          - { moodle: MOODLE_404_STABLE, plugin: aiprovider_rag }
         # Entries matching an existing axis value add the PHP version to those legs.
         include:
-          - { moodle: MOODLE_404_STABLE, php: "8.1" }
           - { moodle: MOODLE_405_STABLE, php: "8.1" }
-          - { moodle: MOODLE_500_STABLE, php: "8.3" }
+          - { moodle: MOODLE_501_STABLE, php: "8.3" }
+          - { moodle: MOODLE_502_STABLE, php: "8.3" }
           - { moodle: MOODLE_503_STABLE, php: "8.3" }
     name: ${{ matrix.plugin }} (${{ matrix.moodle }}, PHP ${{ matrix.php }})
     env:

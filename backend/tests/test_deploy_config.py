@@ -32,5 +32,20 @@ class ComposeConfigTest(unittest.TestCase):
         self.assertEqual(["local"], dev["services"]["ollama"]["profiles"])
 
 
+class ReleaseHygieneTest(unittest.TestCase):
+    def test_license_files_contain_the_mit_text(self):
+        # 1.0.0 shipped with empty LICENSE files, which leaves the code unlicensed.
+        candidates = [BACKEND_DIR / "LICENSE", BACKEND_DIR.parent / "LICENSE"]
+        for path in (p for p in candidates if p.exists()):  # repo root is absent in the image
+            text = path.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("MIT License"), path)
+            self.assertIn("Permission is hereby granted, free of charge", text, path)
+
+    def test_docker_image_uses_a_supported_python(self):
+        # Python 3.10 reached end of life on 2026-10-01.
+        first_line = (BACKEND_DIR / "Dockerfile").read_text(encoding="utf-8").splitlines()[0]
+        self.assertEqual("FROM python:3.12-slim", first_line)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,7 @@
 
 ## 1. Compatibility
 
-- **Moodle Version:** `mod_airagmaterial` and `mod_airagassign` require Moodle 4.4+ / 5.x (`$plugin->requires = 2024042200`). `local_assign_ai_rag` and `aiprovider_rag` require Moodle 4.5+ / 5.x (`$plugin->requires = 2024100700`) because they depend on the Core AI subsystem.
+- **Moodle Version:** all four plugins require Moodle 4.5 LTS or later (`$plugin->requires = 2024100700`). CI tests every Moodle branch that still has security support: 4.5 LTS, 5.1, 5.2 and 5.3 LTS. `local_assign_ai_rag` and `aiprovider_rag` depend on the Core AI subsystem added in 4.5.
 - **PHP Version:** PHP 8.1+ (tested with PHP 8.3 lint)
 - **Moodle Cron:** Required for background material vectorization (`mod_airagmaterial`) and queued grading (`mod_airagassign`, `local_assign_ai_rag`). Ensure Moodle cron runs every minute:
   ```cron
