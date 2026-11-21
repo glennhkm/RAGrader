@@ -56,6 +56,7 @@ class _FakeGrader:
             "citations": [{"text": "Evidence", "source": "material.pdf", "page": "1"}],
             "confidence": 0.9,
             "retrieved_documents": [],
+            "integrity_warnings": ["possible_prompt_injection:grade_request"],
         }
 
     def ingest_course_materials(self, paths, course_id=None, material_id=None):
@@ -112,6 +113,7 @@ class MoodleEndpointTest(unittest.TestCase):
         )
         self.assertTrue(response.success)
         self.assertEqual(40.0, response.score)
+        self.assertEqual(["possible_prompt_injection:grade_request"], response.integrity_warnings)
         self.lock_mock.assert_called_once_with(12)
 
     def test_grading_contract_forwards_source_filter(self):

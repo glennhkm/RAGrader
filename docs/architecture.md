@@ -42,6 +42,15 @@ Every stage accepts any model id; catalogs in code are suggestions only. Optiona
 | Vision (`src/ingestion/vision_captioner.py`) | `ENABLE_VISION_CAPTIONING`, `VISION_*` | Any OpenAI-compatible multimodal endpoint; default HuggingFace Router |
 | Prompt (`src/rag/prompts.py`) | `PROMPT_LANGUAGE` | `auto` (stopword detection over question + answer; inconclusive → `id`), `en`, `id`; same JSON schema in both templates |
 
+### Grading integrity (`src/rag/grading_guard.py`)
+
+The student answer is untrusted input and the model's citations and confidence are untrusted output. Without extra LLM calls, every grade passes these checks:
+
+1. **Fenced answer:** the answer is wrapped in `student_answer` tags (tags inside the answer are neutralised) and the instructions that follow declare it data, not instructions.
+2. **Injection signals:** instruction overrides, grade requests (English and Indonesian), chat role markup, grading JSON and fence tags in the answer are reported as `possible_prompt_injection:<signals>`.
+3. **Citation grounding:** a citation is kept only if its text occurs in a retrieved chunk (normalised for case, punctuation and whitespace; `...` elisions and small wording drift allowed). Its `source` and `page` come from that chunk, not from the model. Removed citations are reported as `ungrounded_citations_removed:<n>`.
+4. **Confidence cap:** any warning caps `confidence` at `0.3`, below the review thresholds, and the warnings are returned as `integrity_warnings` in every grading response.
+
 ## HTTP API Contract
 
 When `API_AUTH_TOKEN` is set in `backend/.env`, all endpoints below except `GET /` and `GET /health` require `Authorization: Bearer <API_AUTH_TOKEN>`.

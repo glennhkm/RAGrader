@@ -50,6 +50,7 @@ class _FakeGrader:
             "citations": [{"text": "TCP ensures delivery", "source": "week1.pdf", "page": 1}],
             "confidence": 0.91,
             "retrieved_documents": [],
+            "integrity_warnings": ["ungrounded_citations_removed:1"],
         }
 
     def delete_course_material_file(self, course_id, filename):
@@ -109,6 +110,7 @@ class V1EndpointTest(unittest.TestCase):
         self.assertTrue(body["success"])
         self.assertEqual("cs-101", body["namespace"])
         self.assertEqual(17.0, body["score"])
+        self.assertEqual(["ungrounded_citations_removed:1"], body["integrity_warnings"])
         self.assertEqual("v1:cs-101", self.fake_grader.last_grade_kwargs["course_id"])
         self.assertEqual(
             {"module": {"$in": ["week-1", "week-2", "week-3"]}},

@@ -293,6 +293,7 @@ def grade_in_namespace(
             ],
             confidence=confidence,
             language=result.get("language"),
+            integrity_warnings=[str(w) for w in (result.get("integrity_warnings") or [])],
             retrieved_documents=[
                 V1RetrievedDoc(
                     content=str(d.get("content", "")),

@@ -4,8 +4,10 @@ Used only by the compose integration tests so the full stack runs without any
 external service or API key:
 
 * ``POST /v1/embeddings`` returns 64-dim hashed bag-of-words vectors.
-* ``POST /v1/chat/completions`` returns a JSON grade that cites every
-  ``*.txt`` / ``*.pdf`` source named in the prompt (score 80, confidence 0.85).
+* ``POST /v1/chat/completions`` returns a JSON grade (score 80, confidence
+  0.85) that quotes the first words of every course-material chunk in the
+  prompt verbatim, like an honest model, so the citations pass the backend's
+  grounding check.
 """
 
 import hashlib
@@ -17,7 +19,12 @@ from typing import Any, List, Union
 from fastapi import FastAPI, Request
 
 DIMENSION = 64
-SOURCE_PATTERN = re.compile(r"[A-Za-z0-9][\w.\-]*\.(?:txt|pdf)", re.IGNORECASE)
+# "[Document 1] (Source: week-1.txt, Page: N/A)" header, then the chunk text.
+CHUNK_PATTERN = re.compile(
+    r"^\[(?:Document|Dokumen) \d+\] \((?:Source|Sumber): (?P<source>.+?), (?:Page|Halaman): [^)]*\)\n"
+    r"(?P<text>.+)$",
+    re.MULTILINE,
+)
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 app = FastAPI(title="RAGrader integration stub AI")
@@ -68,12 +75,15 @@ async def embeddings(request: Request) -> dict:
 async def chat_completions(request: Request) -> dict:
     body = await request.json()
     prompt = "\n".join(_flatten(m.get("content")) for m in body.get("messages", []))
-    sources = list(dict.fromkeys(SOURCE_PATTERN.findall(prompt)))
+    citations = [
+        {"text": " ".join(m.group("text").split()[:8]), "source": m.group("source"), "page": 1}
+        for m in CHUNK_PATTERN.finditer(prompt)
+    ]
     grade = {
         "score": 80,
         "feedback": "Stub grade.",
         "criterion_scores": {},
-        "citations": [{"text": "stub evidence", "source": s, "page": 1} for s in sources],
+        "citations": citations,
         "confidence": 0.85,
     }
     return {

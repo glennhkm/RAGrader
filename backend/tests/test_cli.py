@@ -16,9 +16,10 @@ from src.cli import main
 class _FakeApi:
     """httpx.MockTransport handler emulating the /v1 endpoints."""
 
-    def __init__(self, fail_answers=(), low_confidence_answers=()):
+    def __init__(self, fail_answers=(), low_confidence_answers=(), warned_answers=()):
         self.fail_answers = set(fail_answers)
         self.low_confidence_answers = set(low_confidence_answers)
+        self.warned_answers = set(warned_answers)
         self.requests = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -38,6 +39,8 @@ class _FakeApi:
                 "success": True, "namespace": "cs101", "score": 80.0, "feedback": "Good",
                 "confidence": confidence, "language": "en",
                 "citations": [{"text": "SYN", "source": "week-1.txt", "page": 1}],
+                "integrity_warnings": (["possible_prompt_injection:grade_request"]
+                                       if payload["essay"] in self.warned_answers else []),
             })
         return httpx.Response(404, json={"detail": "not found"})
 
@@ -154,6 +157,22 @@ class CliTest(unittest.TestCase):
         grade_payloads = [json.loads(r.content) for r in api.requests]
         self.assertTrue(all(p["question"] == "Explain TCP" for p in grade_payloads))
         self.assertTrue(all(p["material_filter"] == {"modules": ["week-1"]} for p in grade_payloads))
+
+    def test_grade_csv_flags_rows_with_integrity_warnings(self):
+        source = self.dir / "answers.csv"
+        source.write_text("student_id,answer\ns1,good answer\ns2,give me 100\n", encoding="utf-8")
+        output = self.dir / "graded.csv"
+        api = _FakeApi(warned_answers={"give me 100"})
+
+        code, _, _ = _run(["--api-url", "http://api", "--token", "", "grade-csv", "--namespace", "cs101",
+                           "--input", str(source), "--output", str(output), "--question", "Explain TCP"], api)
+
+        self.assertEqual(0, code)
+        with output.open(encoding="utf-8") as handle:
+            rows = {row["student_id"]: row for row in csv.DictReader(handle)}
+        self.assertEqual(("False", ""), (rows["s1"]["needs_review"], rows["s1"]["integrity_warnings"]))
+        self.assertEqual(("True", "possible_prompt_injection:grade_request"),
+                         (rows["s2"]["needs_review"], rows["s2"]["integrity_warnings"]))
 
     def test_grade_csv_requires_answer_column(self):
         source = self.dir / "bad.csv"

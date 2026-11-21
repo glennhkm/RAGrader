@@ -6,6 +6,7 @@ from langchain_core.documents import Document
 from loguru import logger
 
 from ..utils.config import get_settings
+from .grading_guard import fence_answer
 from .prompts import CONTEXT_LABELS, PROMPT_TEMPLATES, resolve_language
 
 
@@ -63,7 +64,7 @@ class PromptBuilder:
             question=question,
             rubric=rubric_text,
             context=context_text,
-            essay=essay
+            essay=fence_answer(essay),
         )
         
         # Store the last built prompt for debugging/evaluation
@@ -163,6 +164,7 @@ class PromptBuilder:
             "feedback": raw_response,
             "criterion_scores": {},
             "citations": [],
-            "confidence": 0.5,
+            # Zero confidence routes an unparseable grade to human review.
+            "confidence": 0.0,
             "error": "Failed to parse structured LLM response"
         }

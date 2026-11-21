@@ -58,6 +58,7 @@ class GradeResponse(BaseModel):
     citations: List[Citation] = []
     confidence: float = 0.0
     retrieved_documents: List[RetrievedDocument] = []
+    integrity_warnings: List[str] = []
     error: Optional[str] = None
 
 
