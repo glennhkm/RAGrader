@@ -8,7 +8,7 @@ listed in the table below.
 
 ## [Unreleased]
 
-## [1.0.1] - 2026-11-21
+## [1.0.1] - 2026-11-22
 
 Security and maintenance release: grading integrity guards, licensing, and supported runtimes.
 
