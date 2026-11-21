@@ -8,7 +8,7 @@ It ships with turnkey **Moodle LMS** plugins and an LMS-agnostic `/v1` REST API 
 
 ```mermaid
 flowchart LR
-    M["Moodle LMS (4.4+ / 5.x)<br/>mod_airagmaterial · mod_airagassign (4.4+)<br/>local_assign_ai_rag · aiprovider_rag (4.5+)"] -->|HTTP + Optional Bearer Token| LB["HAProxy Load Balancer (:8000)"]
+    M["Moodle LMS 4.5 LTS / 5.1+<br/>mod_airagmaterial · mod_airagassign<br/>local_assign_ai_rag · aiprovider_rag"] -->|HTTP + Optional Bearer Token| LB["HAProxy Load Balancer (:8000)"]
     LB --> API1["FastAPI Replica 1"]
     LB --> API2["FastAPI Replica 2"]
     API1 --> CH["ChromaDB HTTP Server<br/>(Course-Isolated Collections)"]
@@ -26,7 +26,7 @@ See [docs/architecture.md](docs/architecture.md) for the complete endpoint contr
 ```text
 moodle-rag-essay-grader/
 ├── backend/                  # FastAPI + ChromaDB + Redis + HAProxy RAG service + CLI (MIT)
-├── moodle-plugins/           # Moodle plugins: 4.4+ / 5.x (activity modules), 4.5+ / 5.x (AI plugins) (GPL-3.0-or-later)
+├── moodle-plugins/           # Moodle plugins for Moodle 4.5 LTS / 5.1+ (GPL-3.0-or-later)
 │   ├── mod_airagmaterial/    # Course material upload & background vectorization activity
 │   ├── mod_airagassign/      # AI RAG essay/quiz assignment with HITL teacher review
 │   ├── local_assign_ai_rag/  # Optional integration for Moodle standard mod_assign
@@ -131,6 +131,6 @@ make build-plugins
 
 ## License
 
-- **`backend/`**, **`scripts/`**, and **`docs/`** are licensed under the [MIT License](backend/LICENSE).
+- **`backend/`**, **`scripts/`**, and **`docs/`** are licensed under the [MIT License](LICENSE) (a copy ships in [`backend/LICENSE`](backend/LICENSE) for the Docker build context).
 - **`moodle-plugins/`** are licensed under the [GNU GPL v3.0 or later](moodle-plugins/LICENSE), as required by Moodle.
 
