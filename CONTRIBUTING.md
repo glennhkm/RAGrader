@@ -5,7 +5,7 @@ Thank you for your interest in contributing!
 ## Development Setup
 
 ### Backend (`backend/`)
-1. Create a Python 3.10+ virtual environment and install dependencies:
+1. Create a Python 3.12 virtual environment (the version CI and the Docker image use) and install dependencies:
    ```bash
    cd backend
    python3 -m venv .venv
