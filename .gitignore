@@ -39,3 +39,6 @@ Thumbs.db
 
 # Superpowers SDD scratch
 .superpowers/
+
+# Real student data for evaluation (Cycle 4): never commit it; this repo is public
+private-data/

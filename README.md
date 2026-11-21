@@ -126,6 +126,7 @@ make build-plugins
 - [Architecture & API Contract](docs/architecture.md)
 - [Production Deployment Guide](docs/deployment.md)
 - [Moodle Plugin Setup & Configuration](docs/moodle-setup.md)
+- [Project Status & Handoff (current state, next steps)](docs/HANDOFF.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
 
