@@ -38,12 +38,12 @@ A classic real-world workflow illustrates the product's core value:
 3. **Lack of Auditability & Teacher Control:** Fully autonomous black-box grading is unacceptable in formal education; teachers need evidence citations and a Human-in-the-Loop confirmation step.
 4. **High Infrastructure & Privacy Barriers:** Academic and training institutions often require course-level data isolation, concurrency safety during exam deadlines, and the option to self-host models locally.
 
-### 2.2 Current Codebase Baseline (Post-Cycle 3 Snapshot, backend `1.4.0`)
+### 2.2 Current Codebase Baseline (v1.0.1 Snapshot, backend `1.4.1`)
 The repository already consolidates the latest verified production components:
 - **Production Backend (`backend/`):** FastAPI service (`src/api/app.py`, `src/api/moodle_routes.py`, generic `src/api/v1_routes.py`), HAProxy load balancer (`deploy/haproxy.cfg`), multi-replica Docker Compose (`docker-compose.yml`), ChromaDB HTTP server with per-`course_id` collection isolation (`src/vectorstore/chroma_store.py`), Redis distributed read/write locking (`src/api/locking.py`), multi-format ingestion (`.pdf`, `.pptx`, `.docx`, `.txt` in `src/ingestion/document_loader.py`) with `module`/`tag_*` chunk metadata and Chroma `where` scope filtering (`src/vectorstore/filters.py`), a provider-agnostic AI layer (any OpenAI-compatible endpoint, Groq/OpenRouter/`custom_N` fallback chains, or in-process local models for the LLM, embeddings and reranker, plus optional vision captioning), a central typed settings layer (`src/utils/config.py`) with a side-effect-free `create_app()`/lifespan, a language-aware grading prompt (`PROMPT_LANGUAGE=auto|en|id`), a `/v1` CLI with CSV batch grading (`src/cli.py`), and optional `API_AUTH_TOKEN` Bearer auth (`src/api/auth.py`).
 - **Moodle Plugins (`moodle-plugins/`):**
-  - `mod_airagmaterial` (`2026112100` / `1.2.0`; Moodle 4.4+ / 5.x) — course material upload with asynchronous Moodle adhoc task vectorization, per-material vector cleanup (clear, file removal, module deletion) with ownership handled by owner-scoped vectors (`material_id`) rather than a shared-filename guard.
-  - `mod_airagassign` (`2026112100` / `1.2.0`; Moodle 4.4+ / 5.x) — essay & multi-question quiz assignment, Moodle native or simple rubrics, queued single/bulk AI grading, failure recovery, scoped retrieval via linked-material `source_filter` (grading refused while any linked material is not fully vectorized), quiz-mode confidence, and HITL teacher review (`grade_review.php`).
+  - `mod_airagmaterial` (`2026112101` / `1.2.1`; Moodle 4.5+ / 5.x) — course material upload with asynchronous Moodle adhoc task vectorization, per-material vector cleanup (clear, file removal, module deletion) with ownership handled by owner-scoped vectors (`material_id`) rather than a shared-filename guard.
+  - `mod_airagassign` (`2026112101` / `1.2.1`; Moodle 4.5+ / 5.x) — essay & multi-question quiz assignment, Moodle native or simple rubrics, queued single/bulk AI grading, failure recovery, scoped retrieval via linked-material `source_filter` (grading refused while any linked material is not fully vectorized), quiz-mode confidence, and HITL teacher review (`grade_review.php`).
   - `local_assign_ai_rag` (`2026112100` / `1.1.3`; Moodle 4.5+ / 5.x) & `aiprovider_rag` (`2026071901` / `1.1.1`) — integration path for Moodle's standard `mod_assign` and Core AI subsystem (Moodle 4.5+ / 5.x).
 
 ### 2.3 Key Gaps Between Current Baseline and Open-Source Generalization
@@ -173,6 +173,7 @@ sequenceDiagram
 ```
 
 **Expected Behavior for Edge Cases:**
+- **Untrusted Answer & Model Output (since v1.0.1):** The student answer is fenced in `student_answer` tags and declared data, not instructions. Answers with injection signals, and grades whose citations could not be found in the retrieved chunks (those citations are removed), carry `integrity_warnings` and a confidence capped at `0.3`, so they always reach human review. An unparseable LLM response gets confidence `0.0`.
 - **No Relevant Material Found in Scope:** Return `success: false` (or `confidence: 0.0`, `score: 0`) with an explicit message that no scoped evidence was retrieved—never fabricate citations.
 - **Unrubricated / Simple Short-Answer Quiz:** `rubric` is optional; if omitted, grade holistically on accuracy against the retrieved material and scale `0–100` to `maximum_grade`.
 - **Material Updated or Removed:** Re-uploading a filename replaces its prior chunks atomically (`delete_document_by_source` + re-ingest under Redis write lock); deleting a file removes only that file's chunks.
@@ -306,7 +307,7 @@ Any adopter must be free to run **any AI model** on **any platform**—whether c
    - `backend/requirements-optional.txt`: Optional cloud SDKs such as `pinecone`.
    - `backend/requirements-cli.txt`: Minimal client-only set for `python -m src.cli` (`httpx`, `python-dotenv`, `PyYAML`, `loguru`), pinned identically to `requirements.txt`.
 3. **Current External Infrastructure Dependencies (Unchanged Core Stack):**
-   - Docker base images: `python:3.10-slim`, `redis:7.4.9-alpine`, `haproxy:3.0.25-alpine`, ChromaDB `0.6.3` (`ANONYMIZED_TELEMETRY=false`).
+   - Docker base images: `python:3.12-slim`, `redis:7.4.9-alpine`, `haproxy:3.0.25-alpine`, ChromaDB `0.6.3` (`ANONYMIZED_TELEMETRY=false`).
    - Moodle plugins: PHP `8.1+` with native `curl` & `json` extensions; zero external JS/CSS/font CDNs.
 
 ---
