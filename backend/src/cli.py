@@ -26,7 +26,10 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 import httpx
 
 SUPPORTED_EXTENSIONS = (".pdf", ".pptx", ".docx", ".txt")
-RESULT_COLUMNS = ("score", "max_grade", "confidence", "needs_review", "language", "feedback", "citations", "error")
+RESULT_COLUMNS = (
+    "score", "max_grade", "confidence", "needs_review", "language", "feedback", "citations",
+    "integrity_warnings", "error",
+)
 EXIT_OK, EXIT_USAGE, EXIT_PARTIAL = 0, 1, 2
 
 
@@ -166,13 +169,15 @@ def _grade_row(client: RagApiClient, args: argparse.Namespace, row: Dict[str, st
         return out
     confidence = float(result.get("confidence") or 0.0)
     failed = not result.get("success", False)
+    warnings = [str(w) for w in (result.get("integrity_warnings") or [])]
     out.update(
         score=result.get("score", 0.0),
         confidence=round(confidence, 4),
-        needs_review=failed or confidence < args.review_threshold,
+        needs_review=failed or bool(warnings) or confidence < args.review_threshold,
         language=result.get("language") or "",
         feedback=result.get("feedback", ""),
         citations=_format_citations(result.get("citations") or []),
+        integrity_warnings="; ".join(warnings),
         error=(result.get("error") or "grading failed") if failed else "",
     )
     return out

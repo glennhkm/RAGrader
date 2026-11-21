@@ -65,6 +65,11 @@ class V1GradeResponse(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     retrieved_documents: List[V1RetrievedDoc] = Field(default_factory=list)
     language: Optional[str] = Field(default=None, description="Prompt language used for grading")
+    integrity_warnings: List[str] = Field(
+        default_factory=list,
+        description="Reasons the grade needs human review (e.g. possible prompt injection, "
+        "ungrounded citations removed); when present, confidence is capped at 0.3",
+    )
     error: Optional[str] = None
 
 

@@ -7,6 +7,7 @@ from loguru import logger
 from ..vectorstore import VectorStore
 from ..vectorstore.embeddings import EmbeddingGenerator, EmbeddingMismatchError
 from ..utils.config import Settings, get_settings
+from .grading_guard import apply_integrity_checks
 from .llm import LLMWrapper
 from .retriever import Retriever
 from .prompt_builder import PromptBuilder
@@ -157,6 +158,9 @@ class RAGPipeline:
             # Step 4: Parse response
             logger.info("Parsing LLM response...")
             result = self.prompt_builder.parse_llm_response(llm_response)
+            result = apply_integrity_checks(result, essay, retrieved_docs)
+            if result["integrity_warnings"]:
+                logger.warning(f"Grading integrity warnings: {result['integrity_warnings']}")
             
             # Add question and retrieved documents to result
             result['question'] = question

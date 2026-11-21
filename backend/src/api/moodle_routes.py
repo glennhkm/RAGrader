@@ -242,6 +242,7 @@ def moodle_grade_assignment(request: MoodleAssignRequest):
             confidence=confidence,
             retrieved_documents=retrieved_docs,
             language=result.get('language'),
+            integrity_warnings=[str(w) for w in (result.get('integrity_warnings') or [])],
             # Legacy fields
             reply=feedback,
             grade=scaled_score,

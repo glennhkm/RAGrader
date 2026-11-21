@@ -1,8 +1,9 @@
 """Characterization tests for PromptBuilder.
 
-These lock in the current grading prompt and response parsing behavior before
-Cycle 2 adds language-aware templates, so any change to the Indonesian prompt
-or to the parser contract is deliberate and visible in review.
+These lock in the grading prompt and response parsing behavior, so any change
+to the Indonesian prompt (snapshot in fixtures/prompt_template_id.txt, last
+changed in 1.0.1 to fence the student answer) or to the parser contract is
+deliberate and visible in review.
 """
 
 import json
@@ -81,7 +82,7 @@ class PromptBuilderParserTest(unittest.TestCase):
     def test_malformed_json_returns_fallback(self):
         result = self.builder.parse_llm_response('{"score": 80, "feedback": ')
         self.assertEqual(0, result["score"])
-        self.assertEqual(0.5, result["confidence"])
+        self.assertEqual(0.0, result["confidence"])  # unparseable -> human review
         self.assertEqual({}, result["criterion_scores"])
         self.assertEqual([], result["citations"])
         self.assertIn("error", result)

@@ -93,6 +93,11 @@ class MoodleAssignResponse(BaseModel):
     )
     error: Optional[str] = Field(default=None, description="Error message if failed")
     language: Optional[str] = Field(default=None, description="Prompt language used for grading")
+    integrity_warnings: List[str] = Field(
+        default_factory=list,
+        description="Reasons the grade needs human review (e.g. possible prompt injection, "
+        "ungrounded citations removed); when present, confidence is capped at 0.3",
+    )
     
     # Legacy fields for backward compatibility with datacurso format
     reply: str = Field(default="", description="Alias for feedback")
