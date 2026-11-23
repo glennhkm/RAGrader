@@ -44,6 +44,18 @@ class SmallDatasetsTest(unittest.TestCase):
         self.assertEqual(("id", 3, "jk_case", "key.pdf", None), (it.language, it.label_scale, it.dataset, it.reference_document, it.reference_text))
         self.assertEqual(5, len({i.item_id for i in items}))
 
+    def test_jk_case_drops_duplicate_normalised_answers(self):
+        with open(self.csv, "a", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow([Q, "  ROUTER adalah   kabel. ", "3"])   # same after normalisation
+            w.writerow([Q, "Router adalah kabel.", "8"])        # exact duplicate
+        items, report = load_jk_case(self.csv, Path("key.pdf"))
+        self.assertEqual(5, len(items))
+        self.assertEqual(5, len({i.item_id for i in items}))
+        self.assertEqual(0, items[0].gold_label)  # the first row is kept
+        self.assertEqual(2, report["duplicates_dropped"])
+        self.assertEqual(7, report["rows_read"])
+
     def test_dispatcher_defaults_reference_pdf_beside_csv(self):
         items, _ = datasets.load_dataset("jk_case", self.csv)
         self.assertEqual(str(self.csv.parent / "Kunci Jawaban Jaringan Komputer.pdf"), items[0].reference_document)

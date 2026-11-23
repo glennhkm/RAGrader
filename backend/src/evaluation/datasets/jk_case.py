@@ -15,15 +15,22 @@ MAX_POINTS = 25
 
 def load_jk_case(csv_path: Path, reference_pdf: Path) -> Tuple[List[EvalItem], dict]:
     items: List[EvalItem] = []
+    seen = set()
+    rows_read = 0
     with open(Path(csv_path), "r", encoding="utf-8-sig", newline="") as f:
         for row in csv.DictReader(f):
+            rows_read += 1
             question = row["soal"]
             answer = row["jawaban"]
             nilai = float(row["nilai"])
             qid = "jk-" + question_key(question)
             digest = hashlib.sha256((qid + "\x00" + normalize_text(answer)).encode("utf-8")).hexdigest()
+            item_id = "jk-" + digest[:16]
+            if item_id in seen:
+                continue  # identical normalised answer to the same question: keep the first
+            seen.add(item_id)
             items.append(EvalItem(
-                item_id="jk-" + digest[:16],
+                item_id=item_id,
                 dataset="jk_case",
                 question_id=qid,
                 question=question,
@@ -36,7 +43,9 @@ def load_jk_case(csv_path: Path, reference_pdf: Path) -> Tuple[List[EvalItem], d
                 reference_document=str(reference_pdf),
                 gold_score=nilai / MAX_POINTS,
             ))
-    return items, {"rows": len(items), "questions": len({i.question_id for i in items})}
+    return items, {"rows": len(items), "rows_read": rows_read,
+                   "duplicates_dropped": rows_read - len(items),
+                   "questions": len({i.question_id for i in items})}
 
 
 def load_jk_case_default(source: Path) -> Tuple[List[EvalItem], dict]:
