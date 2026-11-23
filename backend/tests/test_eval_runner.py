@@ -2,6 +2,7 @@ import dataclasses
 import json
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -210,6 +211,72 @@ class RunnerTests(unittest.TestCase):
                                 item.split, item.gold_label, True, 1.0, 1.0))
         with self.assertRaisesRegex(ValueError, "results.jsonl belongs to another configuration"):
             run(plan, ExplodingGrader(), sleep=lambda s: None)
+
+    def test_other_config_hash_refused_without_touching_file(self):
+        plan = self._plan(n=2)
+        path = plan.out_dir / "results.jsonl"
+        item = plan.items[0]
+        append_jsonl(path, EvalResult(item.item_id, "0" * 16, item.dataset, item.question_id,
+                                      item.split, item.gold_label, True, 1.0, 1.0))
+        with open(path, "a", encoding="utf-8") as f:
+            f.write('{"item_id": "synthetic-001", "config_ha')
+        before = path.read_bytes()
+        with self.assertRaisesRegex(ValueError, "results.jsonl belongs to another configuration"):
+            run(plan, ExplodingGrader(), sleep=lambda s: None)
+        self.assertEqual(before, path.read_bytes())
+
+    def test_budget_cap_is_cumulative_across_resume(self):
+        plan = self._plan(n=10, price_in_per_mtok=1.0, max_cost_usd=0.03, concurrency=1)
+        s1 = run(plan, FakeGrader(prompt_tokens=20000), sleep=lambda s: None)
+        self.assertEqual(("budget", 2), (s1.aborted, s1.graded))
+        g = ExplodingGrader()
+        s2 = run(plan, g, sleep=lambda s: None)
+        self.assertEqual(("budget", 0, 2), (s2.aborted, s2.graded, s2.skipped_existing))
+        self.assertAlmostEqual(0.04, s2.cost_usd)
+        self.assertEqual(0.0, s2.cost_usd_this_run)
+        self.assertEqual(40000, s2.tokens_in)
+        self.assertEqual(2, len(read_results(plan.out_dir / "results.jsonl")))
+
+    def test_resume_cost_includes_prior_records(self):
+        plan = self._plan(n=4, price_in_per_mtok=1.0, max_cost_usd=0.05, concurrency=1)
+        # each call costs 0.02 actual; two runs together must stop at the same cap
+        s1 = run(dataclasses.replace(plan, items=plan.items[:1]),
+                 FakeGrader(prompt_tokens=20000), sleep=lambda s: None)
+        self.assertEqual((None, 1), (s1.aborted, s1.graded))
+        s2 = run(plan, FakeGrader(prompt_tokens=20000), sleep=lambda s: None)
+        self.assertEqual(("budget", 2, 1), (s2.aborted, s2.graded, s2.skipped_existing))
+        self.assertAlmostEqual(0.06, s2.cost_usd)
+        self.assertAlmostEqual(0.04, s2.cost_usd_this_run)
+
+    def test_retry_after_capped_at_60(self):
+        slept = []
+        run(self._plan(n=1), AlwaysTransient(retry_after=120.0), sleep=slept.append,
+            max_attempts=2)
+        self.assertEqual([60], slept)
+
+    def test_stop_flag_checked_before_retry(self):
+        plan = self._plan(n=2, price_in_per_mtok=1.0, max_cost_usd=0.03, concurrency=2)
+        path = plan.out_dir / "results.jsonl"
+
+        class Mixed(FakeGrader):
+            def grade(self, namespace, item, request):
+                with self._lock:
+                    self.calls += 1
+                if item.item_id.endswith("000"):
+                    raise TransientGraderError("429", retry_after=1.0)
+                return _ok(prompt_tokens=40000)   # 0.04 > 0.03: trips the cap
+
+        def wait_for_record(_):
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if path.exists() and path.read_text(encoding="utf-8").count("\n") >= 1:
+                    return
+                time.sleep(0.01)
+
+        g = Mixed()
+        s = run(plan, g, sleep=wait_for_record, max_attempts=5)
+        self.assertEqual(("budget", 1, 2), (s.aborted, s.graded, g.calls))
+        self.assertEqual(["synthetic-001"], [r.item_id for r in read_results(path)])
 
     def test_backoff_honours_retry_after_then_gives_up(self):
         slept = []
