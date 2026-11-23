@@ -287,6 +287,28 @@ class PrepareTest(_PrivateSandbox):
         self.assertIn("sb-0", json.dumps(data))
         self.assertTrue((cli.PREPARED_DIR / "scientsbank.jsonl").exists())
 
+    def test_prepare_jk_case_stages_reference_by_name_and_hash(self):
+        import csv
+        import hashlib
+        src = self.tmp / "case-src"
+        src.mkdir()
+        with open(src / "case.csv", "w", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["soal", "jawaban", "nilai"])
+            for k in range(6):
+                w.writerow([f"invented question {k % 2}", f"invented answer {k}", str(4 * k)])
+        (src / "key.pdf").write_bytes(b"%PDF-1.4 invented")
+        code, out, err = _run(["prepare", "--dataset", "jk_case", "--source",
+                               str(src / "case.csv"), "--reference-pdf", str(src / "key.pdf")])
+        self.assertEqual(0, code, err)
+        staged = self.root / "prepared" / "references" / "key.pdf"
+        self.assertEqual(b"%PDF-1.4 invented", staged.read_bytes())
+        items = read_items(self.root / "prepared" / "jk_case.jsonl")
+        self.assertEqual({"key.pdf"}, {i.reference_document for i in items})
+        self.assertEqual({hashlib.sha256(b"%PDF-1.4 invented").hexdigest()},
+                         {i.reference_sha256 for i in items})
+        self.assertNotIn(str(src), (self.root / "prepared" / "jk_case.jsonl").read_text())
+
     def test_prepare_synthetic_to_out(self):
         out_dir = self.tmp / "syn"
         code, out, err = _run(["prepare", "--dataset", "synthetic", "--out", str(out_dir)])

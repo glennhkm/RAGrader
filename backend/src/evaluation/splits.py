@@ -15,9 +15,22 @@ DEFAULT_SEED = 20261123
 BANK_MAX = 9
 
 
+# Fields added after the snapshot format was fixed: left out of the hash while unset, so
+# items that do not use them keep their snapshot.
+_LATE_FIELDS = ("reference_sha256",)
+
+
+def _snapshot_row(item: EvalItem) -> dict:
+    row = dataclasses.asdict(item)
+    for k in _LATE_FIELDS:
+        if row.get(k) is None:
+            row.pop(k, None)
+    return row
+
+
 def snapshot_hash(items: Sequence[EvalItem]) -> str:
     """sha256 over canonical JSON of the items sorted by item_id, fields sorted."""
-    rows = [dataclasses.asdict(i) for i in sorted(items, key=lambda i: i.item_id)]
+    rows = [_snapshot_row(i) for i in sorted(items, key=lambda i: i.item_id)]
     blob = json.dumps(rows, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 

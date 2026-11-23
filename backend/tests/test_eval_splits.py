@@ -97,6 +97,20 @@ class SplitsTest(unittest.TestCase):
             self.assertEqual(items, out)
             self.assertEqual(sf.banks.get(split, []), [])
 
+    def test_snapshot_hash_ignores_unset_reference_sha256(self):
+        import dataclasses
+        items = _items()
+        pinned = snapshot_hash(items)
+        # An unset reference_sha256 leaves the snapshot as it was before the field existed.
+        rows = [{k: v for k, v in dataclasses.asdict(i).items() if k != "reference_sha256"}
+                for i in sorted(items, key=lambda i: i.item_id)]
+        import hashlib
+        import json
+        blob = json.dumps(rows, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        self.assertEqual(hashlib.sha256(blob.encode("utf-8")).hexdigest(), pinned)
+        changed = [dataclasses.replace(items[0], reference_sha256="ab")] + items[1:]
+        self.assertNotEqual(pinned, snapshot_hash(changed))
+
     def test_snapshot_hash_order_independent(self):
         items = _items()
         self.assertEqual(snapshot_hash(items), snapshot_hash(list(reversed(items))))
