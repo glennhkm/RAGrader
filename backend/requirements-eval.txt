@@ -1,0 +1,2 @@
+# Evaluation-only extra (SciEntsBank parquet reader). Not needed by the service.
+pyarrow>=15,<22
