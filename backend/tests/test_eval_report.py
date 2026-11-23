@@ -18,6 +18,7 @@ from src.evaluation.report import (
     build_manifest,
     compare_runs,
     fit_run_thresholds,
+    load_report_thresholds,
     load_run,
     render_comparison,
     render_json,
@@ -309,6 +310,113 @@ class CaseStudyAndVariantTests(unittest.TestCase):
                                          "injection_detection_rate").value)
         self.assertEqual(6, _row(agg, "scientsbank", "dev", "qwk").n_items)
         self.assertIn("Injection", render_markdown(agg, RunManifest()))
+
+
+def _injection_results():
+    results = []
+    for i in range(6):
+        orig = _res(i, gold=0, score=10.0)
+        results.append(orig)
+        for k in range(2):
+            results.append(_res(i, gold=0, item_id=f"{orig.item_id}::inj{k}",
+                                derived_from=orig.item_id, variant=f"injection:en:{k}",
+                                score=10.0 + (50 if k else 0)))
+    return results
+
+
+class FrozenThresholdTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        base = _sci_results()
+        cfg = _cfg(datasets={"scientsbank": ["dev"]})
+        ths = fit_run_thresholds(base, cfg.datasets)
+        self.baseline_ths = ths["scientsbank"]
+        agg = aggregate(base, cfg, ths, n_resamples=N)
+        _, self.baseline_json = write_report(agg, RunManifest(), self.dir / "baseline")
+        self.inj_cfg = _cfg(datasets={"scientsbank": ["dev"]}, variant_set="injection")
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_load_report_thresholds_round_trips(self):
+        loaded = load_report_thresholds(self.baseline_json)
+        self.assertEqual({"scientsbank": self.baseline_ths}, dict(loaded))
+        self.assertEqual("baseline.json", loaded.source)
+
+    def test_load_report_thresholds_relative_to_repo(self):
+        target = paths.PRIVATE_DIR / "evaluation" / "_thresholds_test.json"
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(self.baseline_json, target)
+            self.assertEqual("private-data/evaluation/_thresholds_test.json",
+                             load_report_thresholds(target).source)
+        finally:
+            target.unlink(missing_ok=True)
+
+    def test_injection_without_override_has_na_label_rise_and_note(self):
+        results = _injection_results()
+        ths = fit_run_thresholds(results, self.inj_cfg.datasets)
+        self.assertIn("scientsbank", ths.errors)   # gold-0 only: cannot fit
+        agg = aggregate(results, self.inj_cfg, ths, n_resamples=N)
+        self.assertTrue(math.isnan(_row(agg, "scientsbank", "dev",
+                                        "injection_label_rise_share").value))
+        self.assertIn("--thresholds-from", render_markdown(agg, RunManifest()))
+
+    def test_injection_with_frozen_thresholds_has_label_rise(self):
+        results = _injection_results()
+        frozen = load_report_thresholds(self.baseline_json)
+        ths = fit_run_thresholds(results, self.inj_cfg.datasets)
+        agg = aggregate(results, self.inj_cfg, ths, n_resamples=N, thresholds_override=frozen)
+        rise = _row(agg, "scientsbank", "dev", "injection_label_rise_share").value
+        self.assertFalse(math.isnan(rise))
+        self.assertAlmostEqual(0.5, rise)
+        self.assertEqual({}, agg.extra["threshold_errors"])
+        self.assertEqual(self.baseline_ths, agg.thresholds["scientsbank"])
+        js = render_json(agg, RunManifest())
+        self.assertEqual("baseline.json", js["extra"]["thresholds_source"])
+        md = render_markdown(agg, RunManifest())
+        self.assertNotIn("--thresholds-from", md)
+        self.assertIn("baseline.json", md)
+
+    def test_manifest_records_thresholds_source(self):
+        frozen = load_report_thresholds(self.baseline_json)
+        with mock.patch("src.evaluation.report.subprocess.run", side_effect=FileNotFoundError):
+            m = build_manifest(self.inj_cfg, "h1", _summary(), {}, {}, thresholds=frozen)
+        self.assertEqual("baseline.json", m.thresholds_source)
+        self.assertEqual(self.baseline_ths.t1, m.thresholds["scientsbank"]["t1"])
+
+
+class MinorFixTests(unittest.TestCase):
+    def test_case_study_requires_gold_score(self):
+        results = [_res(i, dataset="jk_case", split="case") for i in range(4)]
+        with self.assertRaises(ValueError):
+            aggregate(results, _cfg(datasets={"jk_case": ["case"]}), {}, n_resamples=N)
+
+    def test_agreement_n_counts_scored_rows_only(self):
+        results = _sci_results() + [
+            _res(100 + i, success=False, score=None, confidence=None,
+                 error_type="parse_failure") for i in range(4)]
+        cfg = _cfg(datasets={"scientsbank": ["dev"]})
+        agg = aggregate(results, cfg, fit_run_thresholds(results, cfg.datasets),
+                        n_resamples=N)
+        self.assertEqual(40, _row(agg, "scientsbank", "dev", "qwk").n_items)
+        self.assertEqual(44, _row(agg, "scientsbank", "dev", "failure_rate").n_items)
+        md = render_markdown(agg, RunManifest())
+        section = md[md.index("## Agreement"):md.index("## SciEntsBank 2-way")]
+        dev_line = [l for l in section.splitlines() if l.startswith("| scientsbank | dev")][0]
+        self.assertTrue(dev_line.endswith("| 40 |"), dev_line)
+
+    def test_case_study_kept_out_of_ci_tables(self):
+        results = _sci_results() + [
+            _res(i, dataset="jk_case", split="case", gold_score=0.5) for i in range(8)]
+        cfg = _cfg(datasets={"scientsbank": ["dev", "test_ua"], "jk_case": ["case"]})
+        agg = aggregate(results, cfg, fit_run_thresholds(results, cfg.datasets),
+                        n_resamples=N)
+        md = render_markdown(agg, RunManifest())
+        tables = md[md.index("## Agreement"):md.index("## Case study")]
+        self.assertNotIn("| jk_case |", tables)
+        js = render_json(agg, RunManifest())
+        self.assertIn("grounded_share", js["metrics"]["jk_case"]["case"])
 
 
 class CompareAndLoadTests(unittest.TestCase):
