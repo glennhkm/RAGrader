@@ -90,6 +90,7 @@ class RunManifest:
     split_hashes: Dict[str, Any] = field(default_factory=dict)
     item_counts: Dict[str, Any] = field(default_factory=dict)
     thresholds: Dict[str, Any] = field(default_factory=dict)
+    thresholds_source: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     calls: int = 0

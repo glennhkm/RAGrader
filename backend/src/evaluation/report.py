@@ -34,7 +34,7 @@ from .thresholds import Thresholds, apply_thresholds, case_study_label, fit_thre
 __all__ = [
     "Aggregate", "CITATIONS", "FittedThresholds", "LIMITATIONS", "MetricRow", "PrivacyError",
     "aggregate", "assert_output_allowed", "build_manifest", "compare_runs",
-    "fit_run_thresholds", "load_run", "render_comparison", "render_json", "render_markdown",
+    "fit_run_thresholds", "load_report_thresholds", "load_run", "render_comparison", "render_json", "render_markdown",
     "write_report",
 ]
 
@@ -93,11 +93,17 @@ class Aggregate:
 
 
 class FittedThresholds(dict):
-    """``{dataset: Thresholds}``; ``errors`` maps datasets that could not be fitted to a reason."""
+    """``{dataset: Thresholds}``.
 
-    def __init__(self, *args, errors: Optional[Dict[str, str]] = None, **kw):
+    ``errors`` maps datasets that could not be fitted to a fixed reason. ``source`` is set
+    when the thresholds are frozen ones loaded from a baseline report (repo-relative path).
+    """
+
+    def __init__(self, *args, errors: Optional[Dict[str, str]] = None,
+                 source: Optional[str] = None, **kw):
         super().__init__(*args, **kw)
         self.errors: Dict[str, str] = dict(errors or {})
+        self.source: Optional[str] = source
 
 
 # --------------------------------------------------------------------------- per-item rows
@@ -142,7 +148,12 @@ def _to_row(r: EvalResult, ths: Dict[str, Thresholds], cluster: Optional[str] = 
     th = ths.get(r.dataset)
     two_pred = (r.score >= th.t2) if (scored and th is not None
                                       and r.dataset == "scientsbank") else None
-    gold01 = r.gold_score if r.gold_score is not None else r.gold_label / (N_LABELS - 1)
+    if r.gold_score is not None:
+        gold01 = r.gold_score
+    elif r.dataset == CASE_STUDY:
+        raise ValueError("case-study result without gold_score")
+    else:
+        gold01 = r.gold_label / (N_LABELS - 1)
     return _Row(
         key=f"{r.item_id}#{r.repeat}", cluster=cluster or r.question_id, success=scored,
         error_type=r.error_type, label=_label(r, ths), gold=r.gold_label,
@@ -261,6 +272,33 @@ def fit_run_thresholds(results: Sequence[EvalResult],
     return FittedThresholds(fitted, errors=errors)
 
 
+def _rel_path(path: Path) -> str:
+    p = Path(path).resolve()
+    try:
+        return p.relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        return p.name
+
+
+def load_report_thresholds(report_json: Path) -> FittedThresholds:
+    """Frozen thresholds from the ``thresholds`` section of a baseline report JSON.
+
+    Variant runs (consistency, injection) cannot fit their own thresholds, so they reuse the
+    same model's baseline thresholds (controller ruling R11). ``source`` is the report's
+    repo-relative path (its file name when it lies outside the repo).
+    """
+    data = json.loads(Path(report_json).read_text(encoding="utf-8"))
+    section = data.get("thresholds")
+    if not isinstance(section, dict) or not section:
+        raise ValueError("report JSON has no thresholds section")
+    out: Dict[str, Thresholds] = {}
+    for ds, th in sorted(section.items()):
+        qwk_dev = th.get("qwk_dev")
+        out[ds] = Thresholds(float(th["t1"]), float(th["t2"]), str(th["fitted_on"]),
+                             NAN if qwk_dev is None else float(qwk_dev))
+    return FittedThresholds(out, source=_rel_path(report_json))
+
+
 # --------------------------------------------------------------------------- aggregate
 
 def _boot(rows: Sequence[Any], cluster_of: Callable[[Any], str], stat: Callable,
@@ -309,8 +347,16 @@ def _est_dict(e: Estimate) -> Dict[str, Any]:
 
 def aggregate(results: Sequence[EvalResult], cfg: ExperimentConfig,
               thresholds_by_dataset: Dict[str, Thresholds],
-              n_resamples: int = N_RESAMPLES) -> Aggregate:
+              n_resamples: int = N_RESAMPLES,
+              thresholds_override: Optional[Dict[str, Thresholds]] = None) -> Aggregate:
+    """Aggregate a run's results.
+
+    ``thresholds_override`` (frozen baseline thresholds, see ``load_report_thresholds``)
+    replaces the run's own thresholds for every dataset it covers.
+    """
     ths = {ds: th for ds, th in thresholds_by_dataset.items()}
+    override = dict(thresholds_override or {})
+    ths.update(override)
     rows: List[MetricRow] = []
     counts: Dict[str, Dict[str, int]] = {}
     cluster = lambda x: x.cluster
@@ -336,15 +382,19 @@ def aggregate(results: Sequence[EvalResult], cfg: ExperimentConfig,
                 names += RETRIEVAL
             names += CALIBRATION
             names += RELIABILITY
+            scored = _ok(base)
             for name in names:
-                add(ds, split, name, _boot(base, cluster, METRICS[name], n_resamples))
+                # Failure rates are over every row; everything else over scored rows, so
+                # its n_items counts scored rows only.
+                rows_for = base if name in ("failure_rate", "parse_failure_rate") else scored
+                add(ds, split, name, _boot(rows_for, cluster, METRICS[name], n_resamples))
 
             if ds == CASE_STUDY:
-                add(ds, split, "mae_points", _boot(base, cluster, METRICS["mae_points"],
+                add(ds, split, "mae_points", _boot(scored, cluster, METRICS["mae_points"],
                                                    n_resamples))
                 qids = sorted({x.cluster for x in base})
                 for k, qid in enumerate(qids, start=1):
-                    q_rows = [x for x in base if x.cluster == qid]
+                    q_rows = [x for x in scored if x.cluster == qid]
                     add(ds, split, f"mae_points_Q{k}",
                         _boot(q_rows, cluster, METRICS["mae_points"], n_resamples))
                 counts[ds][f"{split}_questions"] = len(qids)
@@ -385,8 +435,10 @@ def aggregate(results: Sequence[EvalResult], cfg: ExperimentConfig,
         "providers": providers,
         "threshold_errors": {ds: msg for ds, msg in
                              sorted(getattr(thresholds_by_dataset, "errors", {}).items())
-                             if ds in cfg.datasets},
+                             if ds in cfg.datasets and ds not in override},
     }
+    if thresholds_override is not None:
+        extra["thresholds_source"] = getattr(thresholds_override, "source", None) or "override"
     for ds in sorted(cfg.datasets):
         if ds != CASE_STUDY and ds not in ths and ds not in extra["threshold_errors"]:
             extra["threshold_errors"][ds] = ERR_NO_DEV
@@ -397,7 +449,8 @@ def aggregate(results: Sequence[EvalResult], cfg: ExperimentConfig,
                 for split in cfg.datasets[ds]:
                     sel = [_to_row(r, ths) for r in results
                            if (r.provider or "unknown") == prov and r.dataset == ds
-                           and r.split == split and _is_base(r) and r.repeat == 0]
+                           and r.split == split and _is_base(r) and r.repeat == 0
+                           and r.success and r.score is not None]
                     if sel:
                         per.setdefault(prov, {}).setdefault(ds, {})[split] = _est_dict(
                             _boot(sel, cluster, METRICS["qwk"], n_resamples))
@@ -441,13 +494,7 @@ def _split_hash(sf: SplitFile) -> str:
 
 
 def _rel_config(path: Optional[Path]) -> Optional[str]:
-    if path is None:
-        return None
-    p = Path(path).resolve()
-    try:
-        return p.relative_to(REPO_ROOT.resolve()).as_posix()
-    except ValueError:
-        return p.name
+    return None if path is None else _rel_path(path)
 
 
 def build_manifest(cfg: ExperimentConfig, config_hash: str, summary: RunSummary,
@@ -467,7 +514,8 @@ def build_manifest(cfg: ExperimentConfig, config_hash: str, summary: RunSummary,
     th_out: Dict[str, Any] = {ds: dataclasses.asdict(th)
                               for ds, th in sorted((thresholds or {}).items())}
     for ds, msg in sorted(getattr(thresholds, "errors", {}).items()):
-        th_out[ds] = {"error": msg}
+        if ds not in th_out:
+            th_out[ds] = {"error": msg}
     if results is not None:
         calls = len(results)
         failures = dict(sorted(Counter((r.error_type or "unknown")
@@ -486,7 +534,8 @@ def build_manifest(cfg: ExperimentConfig, config_hash: str, summary: RunSummary,
         embedding_model=embedding_model, dataset_snapshots=dict(sorted(snapshots.items())),
         split_hashes={ds: _split_hash(sf) for ds, sf in sorted(split_files.items())},
         item_counts={ds: dict(sf.counts) for ds, sf in sorted(split_files.items())},
-        thresholds=th_out, started_at=summary.started_at, finished_at=summary.finished_at,
+        thresholds=th_out, thresholds_source=getattr(thresholds, "source", None),
+        started_at=summary.started_at, finished_at=summary.finished_at,
         calls=calls, prompt_tokens=summary.tokens_in, completion_tokens=summary.tokens_out,
         estimated_cost_usd=summary.cost_usd, failures=failures,
     )
@@ -616,6 +665,9 @@ def render_markdown(agg: Aggregate, manifest: RunManifest) -> str:
                       body)
 
     out += ["## Thresholds", ""]
+    if agg.extra.get("thresholds_source"):
+        out += [f"Frozen thresholds loaded from `{agg.extra['thresholds_source']}` "
+                "(baseline report); not fitted on this run.", ""]
     if agg.thresholds:
         out += _table(["Dataset", "t1", "t2", "Fitted on", "Dev QWK"],
                       [[ds, _f(th.t1), _f(th.t2), th.fitted_on, _f(th.qwk_dev)]
@@ -645,13 +697,13 @@ def render_markdown(agg: Aggregate, manifest: RunManifest) -> str:
     out += ["## SciEntsBank 2-way", ""]
     out += look.table(TWO_WAY)
     out += ["## Retrieval", ""]
-    out += look.table(RETRIEVAL)
+    out += look.table(RETRIEVAL, exclude=(CASE_STUDY,))
     out += ["## Calibration", "",
             "Error is |label - gold| >= 1; auroc_error is the AUROC of (1 - confidence) for "
             "predicting error; ece uses 10 bins.", ""]
     out += look.table(CALIBRATION, exclude=(CASE_STUDY,))
     out += ["## Reliability", ""]
-    out += look.table(RELIABILITY)
+    out += look.table(RELIABILITY, exclude=(CASE_STUDY,))
     out += ["Failures by type: " + (", ".join(f"{k}: {v}" for k, v in agg.failures.items())
                                     if agg.failures else "none"),
             "", "Served providers: " + (", ".join(f"{k}: {v}" for k, v in providers.items())
@@ -690,6 +742,9 @@ def render_markdown(agg: Aggregate, manifest: RunManifest) -> str:
                 "points), the share whose label rises, and the share flagged with a "
                 f"`{INJECTION_WARNING}` integrity warning.", ""]
         out += look.table(INJECTION)
+        if not agg.extra.get("thresholds_source"):
+            out += ["Note: injection_label_rise_share needs frozen baseline thresholds; run "
+                    "`report --thresholds-from <baseline .json>`.", ""]
     if not look.having(CONSISTENCY) and not look.having(INJECTION):
         out += [("No variant set in this run." if not variant_set
                  else "No variant results in this run."), ""]
