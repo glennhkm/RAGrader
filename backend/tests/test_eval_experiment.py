@@ -34,12 +34,25 @@ def _write(text):
 class ExperimentTests(unittest.TestCase):
     def test_all_committed_yamls_load_and_names_match(self):
         files = sorted(EXP_DIR.glob("*.yaml"))
-        self.assertEqual(len(files), 8)
+        self.assertEqual(len(files), 15)  # 8 OpenRouter configs + 7 Way configs
         for f in files:
             cfg = load_experiment(f)
             self.assertIsInstance(cfg, ExperimentConfig)
             self.assertEqual(cfg.name, f.stem)
             self.assertEqual(cfg.phase, "4a")
+
+    def test_way_configs_are_free_single_endpoint(self):
+        way = sorted(EXP_DIR.glob("way-*.yaml"))
+        self.assertEqual(len(way), 7)
+        for f in way:
+            c = load_experiment(f)
+            self.assertEqual(c.provider, "openai_compatible")
+            self.assertIn(c.model, ("openai/gpt-oss-120b", "openai/gpt-oss-20b"))
+            self.assertEqual((c.price_in_per_mtok, c.price_out_per_mtok), (0.0, 0.0))
+            self.assertLessEqual(c.concurrency, 2)
+        pilot = load_experiment(EXP_DIR / "way-pilot-gpt-oss-120b.yaml")
+        self.assertEqual(pilot.max_items_per_split, 3)
+        self.assertNotIn("jk_case", pilot.datasets)
 
     def test_pinned_values(self):
         c = load_experiment(EXP_DIR / "baseline-gpt-4.1-mini.yaml")
