@@ -278,6 +278,10 @@ Every submission a teacher confirms or overrides in `grade_review.php` is theref
 
 ## 8. Next: Cycle 4, "Grading Quality & Trust" (detailed)
 
+### 8.0 Cycle 4 status (2026-11-23)
+
+The brainstorming in §8.2 was settled with the owner, and the design is in [`docs/superpowers/specs/2026-11-23-cycle4-grading-quality-design.md`](superpowers/specs/2026-11-23-cycle4-grading-quality-design.md); §8.2 to §8.4 below are kept as history. **Cycle 4a, the evaluation harness, is built** on branch `feat/cycle4a-eval-harness` (backend 1.5.0, unreleased): `python -m src.evaluation prepare|run|report|compare` with EngSAF, SciEntsBank, the case study and a synthetic smoke set, stub, in-process and HTTP graders, and a CI smoke step (see [`docs/evaluation/README.md`](evaluation/README.md)). **The baseline runs and the committed 4a reports are pending:** they need the owner's dedicated OpenRouter key, with a credit limit, in `backend/.env`, and the owner's approval of each printed cost estimate (plan Task 18, about US$6-8 in total). Until then `docs/evaluation/` holds no results.
+
 ### 8.1 Why
 
 Every test proves plumbing: scoping, API, privacy and CI. **Nothing yet measures whether AI grades match teachers.** Three of the PRD §3.2 KPIs depend on that measurement:

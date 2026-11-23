@@ -1,0 +1,129 @@
+{
+  "metrics": {
+    "synthetic": {
+      "smoke": {
+        "accuracy": {
+          "high": 0.834166666666667,
+          "low": 0.6,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.7
+        },
+        "adjacent_accuracy": {
+          "high": 1.0,
+          "low": 1.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 1.0
+        },
+        "auroc_error": {
+          "high": 0.903875,
+          "low": 0.5554865424430642,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.746031746031746
+        },
+        "cited_share": {
+          "high": 1.0,
+          "low": 1.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 1.0
+        },
+        "ece": {
+          "high": 0.2062916666666669,
+          "low": 0.05895858333333334,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.07385333333333341
+        },
+        "failure_rate": {
+          "high": 0.0,
+          "low": 0.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.0
+        },
+        "grounded_share": {
+          "high": 1.0,
+          "low": 1.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 1.0
+        },
+        "hit_at_1": {
+          "high": 1.0,
+          "low": 1.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 1.0
+        },
+        "hit_at_3": {
+          "high": 1.0,
+          "low": 1.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 1.0
+        },
+        "integrity_warning_rate": {
+          "high": 0.0,
+          "low": 0.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.0
+        },
+        "macro_f1": {
+          "high": 0.8280378977747398,
+          "low": 0.519353940406572,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.6614923747276689
+        },
+        "mae_label": {
+          "high": 0.4,
+          "low": 0.16583333333333333,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.3
+        },
+        "mae_score": {
+          "high": 0.29394025,
+          "low": 0.26681000000000005,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.28006
+        },
+        "mrr": {
+          "high": 1.0,
+          "low": 1.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 1.0
+        },
+        "parse_failure_rate": {
+          "high": 0.0,
+          "low": 0.0,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.0
+        },
+        "qwk": {
+          "high": 0.8721264367816093,
+          "low": 0.7120292992347967,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.7804878048780488
+        },
+        "spearman": {
+          "high": 0.8378822706648483,
+          "low": 0.6864473200109529,
+          "n_clusters": 6,
+          "n_items": 30,
+          "value": 0.7621950242599826
+        }
+      }
+    }
+  },
+  "n_resamples": 200,
+  "note": "smoke thresholds are fitted on the smoke split itself: a CI plumbing check, not an evaluation"
+}
