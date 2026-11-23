@@ -1,0 +1,18 @@
+name: no-context-gpt-oss-120b
+phase: "4a"
+grader: inprocess
+provider: openrouter
+model: openai/gpt-oss-120b
+context_mode: no_context
+temperature: null
+# jk_case excluded (ruling R8): the oracle bound needs a text gold reference,
+# and the case study's reference is a PDF.
+datasets:
+  engsaf: [dev, test]
+  scientsbank: [dev, test_uq, test_ua]
+repeats: 1
+price_in_per_mtok: 0.05
+price_out_per_mtok: 0.25
+concurrency: 4
+max_cost_usd: 5.0
+overrides: {}
