@@ -123,6 +123,25 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(sorted([i.item_id for i in _items(4)] + [i.item_id for i in sci_dev]),
                          sorted(i.item_id for i in plan.items))
 
+    def test_max_items_per_split_takes_first_n_by_item_id(self):
+        sci = _items(7, dataset="scientsbank", split="test_uq")
+        sci += _items(5, dataset="scientsbank", split="dev")
+        sci = list(reversed(sci))  # input order must not matter
+        plan = plan_run(_cfg(datasets={"synthetic": ["smoke"], "scientsbank": ["dev", "test_uq"]},
+                             max_items_per_split=3),
+                        {"synthetic": list(reversed(_items(10))), "scientsbank": sci}, self.root)
+        per = {}
+        for i in plan.items:
+            per.setdefault((i.dataset, i.split), []).append(i.item_id)
+        self.assertEqual(["synthetic-000", "synthetic-001", "synthetic-002"],
+                         per[("synthetic", "smoke")])
+        self.assertEqual(["scientsbank-000", "scientsbank-001", "scientsbank-002"],
+                         per[("scientsbank", "dev")])
+        self.assertEqual(3, len(per[("scientsbank", "test_uq")]))
+        self.assertEqual(9, len(plan.items))
+        unlimited = plan_run(_cfg(), {"synthetic": _items(10)}, self.root)
+        self.assertEqual(10, len(unlimited.items))
+
     def test_stub_grader_end_to_end(self):
         plan = self._plan(n=5)
         s = run(plan, StubGrader(), sleep=lambda s: None)

@@ -85,6 +85,28 @@ class ExperimentTests(unittest.TestCase):
         self.assertNotEqual(h, config_hash(base, {**SNAP, "engsaf": "zzz"}))
         self.assertRegex(prompt_template_hash(), r"^[0-9a-f]{64}$")
 
+    def test_max_items_per_split_validated(self):
+        c = load_experiment(_write(MINIMAL + "max_items_per_split: 50\n"))
+        self.assertEqual(50, c.max_items_per_split)
+        self.assertIsNone(load_experiment(_write(MINIMAL)).max_items_per_split)
+        for bad in ("0", "-3", "2.5", "true", "'50'"):
+            with self.assertRaisesRegex(ValueError, "max_items_per_split"):
+                load_experiment(_write(MINIMAL + f"max_items_per_split: {bad}\n"))
+
+    def test_max_items_per_split_hashed_only_when_set(self):
+        base = load_experiment(EXP_DIR / "baseline-gpt-oss-120b.yaml")
+        # Pinned: the hash of an unset limit equals the pre-field hash (no field in payload).
+        import hashlib
+        import json
+        body = dataclasses.asdict(base)
+        for k in ("concurrency", "max_cost_usd", "max_items_per_split"):
+            body.pop(k)
+        blob = json.dumps({"config": body, "prompt": prompt_template_hash(), "data": SNAP},
+                          sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        self.assertEqual(hashlib.sha256(blob.encode()).hexdigest()[:16], config_hash(base, SNAP))
+        limited = dataclasses.replace(base, max_items_per_split=50)
+        self.assertNotEqual(config_hash(base, SNAP), config_hash(limited, SNAP))
+
 
 if __name__ == "__main__":
     unittest.main()

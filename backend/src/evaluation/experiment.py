@@ -51,6 +51,8 @@ class ExperimentConfig:
     concurrency: int
     max_cost_usd: float
     overrides: Dict[str, Any]
+    # First N eval items by item_id per (dataset, split); None means no limit.
+    max_items_per_split: Optional[int] = None
 
 
 def load_experiment(path: Path) -> ExperimentConfig:
@@ -87,6 +89,10 @@ def load_experiment(path: Path) -> ExperimentConfig:
             if s not in ALLOWED_SPLITS[ds]:
                 raise ValueError(f"invalid split for {ds}: {s}")
     values["datasets"] = {ds: list(s) for ds, s in datasets.items()}
+    limit = values.get("max_items_per_split")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int)
+                              or limit < 1):
+        raise ValueError("max_items_per_split must be a positive integer")
     return ExperimentConfig(**values)
 
 
@@ -101,10 +107,14 @@ def config_hash(cfg: ExperimentConfig, snapshot_hashes: Dict[str, str]) -> str:
     """16-hex hash of everything that determines results.
 
     ``concurrency`` and ``max_cost_usd`` are excluded: they do not change results.
+    ``max_items_per_split`` is included only when set, so configurations without a limit
+    keep the hash they had before the field existed.
     """
     body = dataclasses.asdict(cfg)
     body.pop("concurrency")
     body.pop("max_cost_usd")
+    if body.get("max_items_per_split") is None:
+        body.pop("max_items_per_split", None)
     payload = {"config": body, "prompt": prompt_template_hash(), "data": snapshot_hashes}
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]

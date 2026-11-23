@@ -96,10 +96,13 @@ def plan_run(cfg: ExperimentConfig, items_by_dataset: Dict[str, List[EvalItem]],
     assert_output_allowed(cfg.datasets, out_dir)
 
     selected: List[EvalItem] = []
+    limit = cfg.max_items_per_split
     for ds in sorted(cfg.datasets):
-        splits = set(cfg.datasets[ds])
-        selected.extend(i for i in items_by_dataset[ds]
-                        if i.role == "eval" and i.split in splits)
+        for split in sorted(set(cfg.datasets[ds])):
+            chosen = sorted((i for i in items_by_dataset[ds]
+                             if i.role == "eval" and i.split == split),
+                            key=lambda i: i.item_id)
+            selected.extend(chosen if limit is None else chosen[:limit])
     if cfg.variant_set == "consistency":
         selected = derive_consistency(selected, n=CONSISTENCY_N)
     elif cfg.variant_set == "injection":
