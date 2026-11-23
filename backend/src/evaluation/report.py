@@ -697,10 +697,15 @@ def render_markdown(agg: Aggregate, manifest: RunManifest) -> str:
                    "not fitted.")
     out.append("")
 
+    injection = conf.get("variant_set") == "injection"
+    # Injection runs grade clean originals plus injected copies; their agreement and
+    # calibration describe that mix, not the configuration, so only the JSON keeps them.
+    suppressed = ["Not reported for injection runs: the baseline report of the same "
+                  "configuration gives these metrics.", ""]
     out += ["## Agreement", ""]
-    out += look.table(AGREEMENT, exclude=(CASE_STUDY,))
+    out += suppressed if injection else look.table(AGREEMENT, exclude=(CASE_STUDY,))
     providers = agg.extra.get("providers", {})
-    if len(providers) > 1:
+    if len(providers) > 1 and not injection:
         out += ["> **Warning:** More than one provider served this run (spec section 9); "
                 "provider routing may change model behaviour. Per-provider QWK:", ""]
         body = []
@@ -719,7 +724,7 @@ def render_markdown(agg: Aggregate, manifest: RunManifest) -> str:
     out += ["## Calibration", "",
             "Error is |label - gold| >= 1; auroc_error is the AUROC of (1 - confidence) for "
             "predicting error; ece uses 10 bins.", ""]
-    out += look.table(CALIBRATION, exclude=(CASE_STUDY,))
+    out += suppressed if injection else look.table(CALIBRATION, exclude=(CASE_STUDY,))
     out += ["## Reliability", ""]
     out += look.table(RELIABILITY, exclude=(CASE_STUDY,))
     out += ["Failures by type: " + (", ".join(f"{k}: {v}" for k, v in agg.failures.items())

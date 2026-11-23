@@ -95,8 +95,18 @@ class GradeTest(unittest.TestCase):
         payload = json.loads(req.content)
         self.assertEqual({"question": "Q?", "essay": "A.", "rubric": {},
                           "maximum_grade": 100, "language": "en"}, payload)
-        self.assertEqual(len(json.dumps(payload)) // 4, raw.prompt_tokens)
+        self.assertEqual((len(json.dumps(payload)) + 2) // 4, raw.prompt_tokens)
         self.assertEqual("Bearer tok", req.headers["Authorization"])
+
+    def test_prompt_estimate_includes_retrieved_context(self):
+        docs = [{"content": "x" * 400, "source": "a.txt"}, {"content": "y" * 200, "source": "b"}]
+        rec = Recorder(httpx.Response(200, json=_ok(retrieved_documents=docs)))
+        raw = _grader(rec).grade("ns1", _item(), REQ)
+        payload = json.loads(rec.requests[0].content)
+        self.assertEqual((len(json.dumps(payload)) + 600) // 4, raw.prompt_tokens)
+        rec = Recorder(httpx.Response(200, json=_ok(retrieved_documents=None)))
+        raw = _grader(rec).grade("ns1", _item(), REQ)
+        self.assertEqual(len(json.dumps(payload)) // 4, raw.prompt_tokens)
 
     def test_parse_failure(self):
         rec = Recorder(httpx.Response(200, json=_ok(error="Failed to parse LLM response")))

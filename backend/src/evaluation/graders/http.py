@@ -32,6 +32,13 @@ def _retry_after(response: httpx.Response) -> Optional[float]:
         return None
 
 
+def _context_chars(body: Dict[str, Any]) -> int:
+    """Characters of retrieved context the response shows (the API truncates each chunk,
+    so this is a lower bound on the context the model saw)."""
+    return sum(len(str(d.get("content") or "")) for d in (body.get("retrieved_documents") or [])
+               if isinstance(d, dict))
+
+
 class HttpGrader:
     name = "http"
 
@@ -78,13 +85,19 @@ class HttpGrader:
         status = response.status_code
         if status == 429 or status >= 500:
             raise TransientGraderError(f"HTTP {status}", retry_after=_retry_after(response))
-        prompt_tokens = len(json.dumps(payload)) // 4
+        # Estimated tokens: the request plus the retrieved context shown in the response.
+        # The prompt template and the untruncated chunks are not visible to this client.
+        payload_chars = len(json.dumps(payload))
+        prompt_tokens = payload_chars // 4
         if status >= 400:
             return self._failed("http_error", {}, prompt_tokens)
         try:
             body = response.json()
         except ValueError:
             return self._failed("http_error", {}, prompt_tokens)
+        if not isinstance(body, dict):
+            return self._failed("http_error", {}, prompt_tokens)
+        prompt_tokens = (payload_chars + _context_chars(body)) // 4
 
         error = body.get("error")
         error_text = "" if error is None else str(error)
