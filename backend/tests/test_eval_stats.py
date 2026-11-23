@@ -65,6 +65,12 @@ class StatsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             paired_difference(a, a, lambda r: r[0], lambda r: r[1], lambda rs: 0.0)
 
+    def test_describe_undefined_for_nan(self):
+        nan = float("nan")
+        for est in (Estimate(nan, nan, nan, 0, 0, 0), Estimate(0.1, nan, nan, 3, 1, 5),
+                    Estimate(0.1, 0.05, nan, 3, 1, 5)):
+            self.assertEqual("undefined", describe_difference(est))
+
     def test_describe_worsens(self):
         self.assertEqual("worsens", describe_difference(Estimate(-1, -2, -0.5, 1, 1, 0)))
 
