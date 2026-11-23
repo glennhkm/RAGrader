@@ -55,6 +55,10 @@ class InjectionTests(unittest.TestCase):
                          [i.variant for i in en_copies])
         self.assertTrue(en_copies[2].answer.endswith("\n\nC"))
 
+    def test_missing_language_templates_raise(self):
+        with self.assertRaisesRegex(ValueError, "no injection templates for language: id"):
+            derive_injection(_items(), {"en": ["X"]}, n_per_split=2)
+
     def test_deterministic_and_order_independent(self):
         items = _items()
         a = derive_injection(items, {"en": ["X"], "id": ["Y"]}, n_per_split=2)

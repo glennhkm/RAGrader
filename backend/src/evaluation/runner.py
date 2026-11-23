@@ -57,6 +57,14 @@ class RunPlan:
 
 @dataclass
 class RunSummary:
+    """Outcome of one ``run`` invocation.
+
+    ``cost_usd``, ``tokens_in`` and ``tokens_out`` are cumulative over every record
+    in ``results.jsonl`` for this config hash (earlier, resumed invocations included);
+    ``cost_usd_this_run`` covers only this invocation. ``graded`` and ``failures``
+    count only the results recorded by this invocation.
+    """
+
     out_dir: Path
     graded: int
     skipped_existing: int
@@ -67,6 +75,7 @@ class RunSummary:
     aborted: Optional[str]
     started_at: str
     finished_at: str
+    cost_usd_this_run: float = 0.0
 
 
 def _cost(cfg: ExperimentConfig, prompt_tokens: int, completion_tokens: int) -> float:
@@ -190,27 +199,35 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
     out_dir.mkdir(parents=True, exist_ok=True)
     results_path = out_dir / RESULTS_FILE
 
-    done: Set[Tuple[str, int]] = set()
+    existing: List[EvalResult] = []
     if results_path.exists():
-        _repair_trailing_line(results_path)
+        # Check ownership before touching the file: read_results tolerates a partial last line.
         existing = read_results(results_path)
         if any(r.config_hash != plan.config_hash for r in existing):
             raise ValueError("results.jsonl belongs to another configuration")
-        done = {(r.item_id, r.repeat) for r in existing}
+        _repair_trailing_line(results_path)
+    done: Set[Tuple[str, int]] = {(r.item_id, r.repeat) for r in existing}
+    prior_cost = sum(_cost(cfg, r.prompt_tokens, r.completion_tokens) for r in existing)
+    prior_in = sum(r.prompt_tokens for r in existing)
+    prior_out = sum(r.completion_tokens for r in existing)
 
     all_pairs = plan.pairs()
     pending = [(i, r) for i, r in all_pairs if (i.item_id, r) not in done]
     skipped = len(all_pairs) - len(pending)
 
+    lock = threading.Lock()
+    stop = threading.Event()
+    # The running cap is cumulative across resumes: seed it with what is already on disk.
+    state = {"graded": 0, "cost": prior_cost, "tin": prior_in, "tout": prior_out}
+    if prior_cost > cfg.max_cost_usd:
+        stop.set()
+
     workdir = out_dir / "work"
     workdir.mkdir(parents=True, exist_ok=True)
     namespaces = {ds: http_namespace(plan.config_hash, ds) for ds in sorted(cfg.datasets)}
-    for ds in sorted({i.dataset for i, _ in pending}):
-        grader.prepare_namespace(namespaces[ds], plan.materials.get(ds, []), workdir)
-
-    lock = threading.Lock()
-    stop = threading.Event()
-    state = {"graded": 0, "cost": 0.0, "tin": 0, "tout": 0}
+    if not stop.is_set():
+        for ds in sorted({i.dataset for i, _ in pending}):
+            grader.prepare_namespace(namespaces[ds], plan.materials.get(ds, []), workdir)
     failures: Dict[str, int] = {}
 
     def record(result: EvalResult) -> None:
@@ -244,8 +261,12 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
                                    item.item_id, attempt)
                     record(_provider_error(plan, item, repeat, latency))
                     return
-                delay = exc.retry_after if exc.retry_after is not None else min(60, 2 ** attempt)
-                sleep(delay)
+                if stop.is_set():
+                    return  # budget_abort during backoff: not recorded
+                base = exc.retry_after if exc.retry_after is not None else 2 ** attempt
+                sleep(min(60, base))
+                if stop.is_set():
+                    return
                 attempt += 1
                 continue
             except Exception as exc:  # non-transient: record, never log the submission text
@@ -283,6 +304,7 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
     summary = RunSummary(
         out_dir=out_dir, graded=state["graded"], skipped_existing=skipped,
         failures=dict(sorted(failures.items())), cost_usd=state["cost"],
+        cost_usd_this_run=state["cost"] - prior_cost,
         tokens_in=state["tin"], tokens_out=state["tout"],
         aborted="budget" if stop.is_set() and state["graded"] < len(pending) else None,
         started_at=started_at, finished_at=_now(),

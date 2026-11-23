@@ -51,8 +51,10 @@ def derive_injection(items: Sequence[EvalItem], templates: Dict[str, List[str]],
     out: List[EvalItem] = []
     for key in sorted(groups):
         for orig in _sample(groups[key], n_per_split, seed):
+            if not templates.get(orig.language):
+                raise ValueError(f"no injection templates for language: {orig.language}")
             out.append(orig)
-            for k, template in enumerate(templates.get(orig.language, [])):
+            for k, template in enumerate(templates[orig.language]):
                 out.append(dataclasses.replace(
                     orig,
                     item_id=f"{orig.item_id}::inj{k}",
