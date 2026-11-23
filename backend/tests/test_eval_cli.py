@@ -239,6 +239,69 @@ class RunTest(_PrivateSandbox):
         build.assert_called_once_with("http", api_url="http://127.0.0.1:9", token="t")
 
 
+class RunMetaTest(_PrivateSandbox):
+    def _meta(self):
+        run_dir = next((self.root / "runs").iterdir())
+        return run_dir, json.loads((run_dir / cli.RUN_META_FILE).read_text())
+
+    def test_meta_records_prompt_hash_effective_settings_and_first_start(self):
+        from src.evaluation.experiment import prompt_template_hash
+        self.prepare_engsaf()
+        cfg = self.write_config()
+        self.assertEqual(0, _run(["run", "--experiment", str(cfg), "--yes"])[0])
+        run_dir, meta = self._meta()
+        self.assertEqual(prompt_template_hash(), meta["prompt_template_sha256"])
+        self.assertEqual({"grader": "stub"}, meta["effective_settings"])
+        first = meta["started_at"]
+        self.assertTrue(first)
+        # Resume: started_at is the first run's, not this invocation's.
+        self.assertEqual(0, _run(["run", "--experiment", str(cfg), "--yes"])[0])
+        _, meta2 = self._meta()
+        self.assertEqual(first, meta2["started_at"])
+        base = self.tmp / "rep"
+        with mock.patch("src.evaluation.report.prompt_template_hash", return_value="f" * 64):
+            code, out, err = _run(["report", "--run-dir", str(run_dir), "--out", str(base)])
+        self.assertEqual(0, code, err)
+        manifest = json.loads((self.tmp / "rep.json").read_text())["manifest"]
+        self.assertEqual(prompt_template_hash(), manifest["prompt_template_sha256"])
+        self.assertEqual(first, manifest["started_at"])
+        self.assertEqual({"grader": "stub"}, manifest["effective_settings"])
+
+    def test_old_meta_without_prompt_hash_falls_back_with_warning(self):
+        self.prepare_engsaf()
+        cfg = self.write_config()
+        self.assertEqual(0, _run(["run", "--experiment", str(cfg), "--yes"])[0])
+        run_dir, meta = self._meta()
+        for k in ("prompt_template_sha256", "started_at", "effective_settings"):
+            meta.pop(k)
+        (run_dir / cli.RUN_META_FILE).write_text(json.dumps(meta))
+        with mock.patch("src.evaluation.report.prompt_template_hash", return_value="f" * 64), \
+                mock.patch("src.evaluation.__main__.config_hash", return_value="x"):
+            code, out, err = _run(["report", "--run-dir", str(run_dir),
+                                   "--out", str(self.tmp / "old")])
+        self.assertEqual(0, code, err)
+        self.assertIn("current prompt hash", err)
+        manifest = json.loads((self.tmp / "old.json").read_text())["manifest"]
+        self.assertEqual("f" * 64, manifest["prompt_template_sha256"])
+
+    def test_resume_refuses_changed_effective_settings_before_touching_files(self):
+        self.prepare_engsaf()
+        cfg = self.write_config()
+        with mock.patch.object(cli, "_effective_settings", return_value={"chunk_size": 500}):
+            self.assertEqual(0, _run(["run", "--experiment", str(cfg), "--yes"])[0])
+        run_dir, _ = self._meta()
+        before = {p.name: p.read_bytes() for p in run_dir.iterdir() if p.is_file()}
+        with mock.patch.object(cli, "_effective_settings", return_value={"chunk_size": 800}), \
+                mock.patch.object(cli, "build_grader") as build:
+            code, out, err = _run(["run", "--experiment", str(cfg), "--yes"])
+        self.assertEqual(2, code)
+        self.assertIn("effective settings", err)
+        self.assertIn("chunk_size", err)
+        build.assert_not_called()
+        after = {p.name: p.read_bytes() for p in run_dir.iterdir() if p.is_file()}
+        self.assertEqual(before, after)
+
+
 class PrepareTest(_PrivateSandbox):
     def test_prepare_private_writes_prepared_split_and_checksum(self):
         code, out, err = self.prepare_engsaf()

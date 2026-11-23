@@ -21,13 +21,19 @@ import random
 import shutil
 import sys
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .datasets import load_dataset
 from .datasets.jk_case import DEFAULT_REFERENCE_NAME, load_jk_case
-from .experiment import ExperimentConfig, config_hash, load_experiment
+from .experiment import (
+    ExperimentConfig,
+    config_hash,
+    effective_settings,
+    load_experiment,
+    prompt_template_hash,
+)
 from .graders import build_grader
 from .paths import EVAL_ASSETS, PRIVATE_DIR, REPORTS_DIR
 from .privacy import PrivacyError, assert_output_allowed
@@ -259,6 +265,38 @@ def _embedding_model(cfg: ExperimentConfig) -> Optional[str]:
     return get_settings().embeddings.model
 
 
+def _effective_settings(cfg: ExperimentConfig) -> Dict[str, Any]:
+    """JSON-normalised effective grading settings (``experiment.effective_settings``)."""
+    settings = None
+    if cfg.grader == "inprocess":
+        from src.utils.config import get_settings
+
+        settings = get_settings()
+    return json.loads(json.dumps(effective_settings(cfg, settings), sort_keys=True))
+
+
+def _check_resume(plan: RunPlan, current: Dict[str, Any]) -> Optional[dict]:
+    """Return the existing run_meta (or None); refuse a resume under other settings.
+
+    Runs before anything in the run directory is written.
+    """
+    path = Path(plan.out_dir) / RUN_META_FILE
+    if not path.exists():
+        return None
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    recorded = meta.get("effective_settings")
+    if recorded is None:
+        print("warning: run_meta.json has no effective settings (older run); resuming "
+              "without checking them", file=sys.stderr)
+    elif recorded != current:
+        changed = sorted(k for k in set(recorded) | set(current)
+                         if recorded.get(k) != current.get(k))
+        raise CliError(f"effective settings differ from the recorded run "
+                       f"({', '.join(changed)}); refusing to resume {plan.out_dir.name}. "
+                       "Restore the settings or use another --out-root")
+    return meta
+
+
 def _print_plan(plan: RunPlan) -> None:
     cfg = plan.config
     print(f"experiment: {cfg.name} (config hash {plan.config_hash})")
@@ -283,7 +321,9 @@ def _confirm(yes: bool) -> bool:
 
 
 def _write_meta(plan: RunPlan, config_file: Path, split_files: Dict[str, SplitFile],
-                snapshots: Dict[str, str]) -> None:
+                snapshots: Dict[str, str], settings: Dict[str, Any],
+                previous: Optional[dict] = None) -> None:
+    """Write run_meta.json; ``started_at`` is kept from ``previous`` (the first run)."""
     meta = {
         "config_file": str(Path(config_file).resolve()),
         "config": dataclasses.asdict(plan.config),
@@ -291,6 +331,10 @@ def _write_meta(plan: RunPlan, config_file: Path, split_files: Dict[str, SplitFi
         "snapshots": snapshots,
         "split_files": {ds: dataclasses.asdict(sf) for ds, sf in sorted(split_files.items())},
         "embedding_model": _embedding_model(plan.config),
+        "effective_settings": settings,
+        "prompt_template_sha256": prompt_template_hash(),
+        "started_at": (previous or {}).get("started_at")
+                      or datetime.now(timezone.utc).isoformat(),
     }
     out_dir = Path(plan.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -305,6 +349,8 @@ def _execute(config_file: Path, out_root: Path, yes: bool) -> Tuple[int, Optiona
     items_by_dataset, split_files = _load_prepared(cfg)
     plan = plan_run(cfg, items_by_dataset, Path(out_root),
                     reference_dir=PREPARED_DIR / REFERENCES_SUBDIR)
+    settings = _effective_settings(cfg)
+    previous = _check_resume(plan, settings)
     _print_plan(plan)
     if plan.estimated_cost_usd > cfg.max_cost_usd:
         raise BudgetError(f"estimated cost ${plan.estimated_cost_usd:.4f} exceeds "
@@ -313,7 +359,7 @@ def _execute(config_file: Path, out_root: Path, yes: bool) -> Tuple[int, Optiona
         print("Aborted.")
         return 1, None
     snapshots = {ds: sf.snapshot for ds, sf in sorted(split_files.items())}
-    _write_meta(plan, config_file, split_files, snapshots)
+    _write_meta(plan, config_file, split_files, snapshots, settings, previous)
     grader = _make_grader(cfg)
     try:
         summary = run(plan, grader)
@@ -360,8 +406,12 @@ def _load_for_report(run_dir: Path):
     if any(r.config_hash != h for r in results):
         raise CliError(f"results in {run_dir} do not belong to config hash {h}")
     if config_hash(cfg, meta["snapshots"]) != h:
-        print("warning: the prompt templates changed since this run; the manifest records "
-              "the current prompt hash", file=sys.stderr)
+        if meta.get("prompt_template_sha256"):
+            print("warning: the prompt templates changed since this run; the manifest "
+                  "records the run's prompt hash", file=sys.stderr)
+        else:
+            print("warning: the prompt templates changed since this run; the manifest records "
+                  "the current prompt hash", file=sys.stderr)
     split_files = {ds: SplitFile(**sf) for ds, sf in meta["split_files"].items()}
     return meta, cfg, results, summary, split_files
 
@@ -379,7 +429,10 @@ def _report(run_dir: Path, out_base: Optional[Path],
     manifest = build_manifest(cfg, meta["config_hash"], summary, split_files, meta["snapshots"],
                               embedding_model=meta.get("embedding_model"),
                               thresholds=override if override is not None else fitted,
-                              config_file=Path(meta["config_file"]), results=results)
+                              config_file=Path(meta["config_file"]), results=results,
+                              prompt_sha256=meta.get("prompt_template_sha256"),
+                              effective_settings=meta.get("effective_settings"),
+                              started_at=meta.get("started_at"))
     if out_base is None:
         out_base = REPORTS_DIR / f"{date.today().isoformat()}-{cfg.phase}-{cfg.name}"
     md_path, json_path = write_report(agg, manifest, Path(out_base))

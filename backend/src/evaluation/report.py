@@ -511,11 +511,17 @@ def build_manifest(cfg: ExperimentConfig, config_hash: str, summary: RunSummary,
                    embedding_model: Optional[str] = None,
                    thresholds: Optional[Dict[str, Thresholds]] = None,
                    config_file: Optional[Path] = None,
-                   results: Optional[Sequence[EvalResult]] = None) -> RunManifest:
+                   results: Optional[Sequence[EvalResult]] = None,
+                   prompt_sha256: Optional[str] = None,
+                   effective_settings: Optional[Dict[str, Any]] = None,
+                   started_at: Optional[str] = None) -> RunManifest:
     """Spec 6.5 manifest. ``embedding_model`` comes from ``settings.embeddings`` (passed in).
 
     With ``results`` the call count and failures cover every recorded result (resumes
-    included); otherwise they come from ``summary``.
+    included); otherwise they come from ``summary``. ``prompt_sha256``,
+    ``effective_settings`` and ``started_at`` are the values recorded in ``run_meta.json``
+    when the run started; without ``prompt_sha256`` the current template hash is used, and
+    without ``started_at`` the last invocation's start.
     """
     from .. import __version__
 
@@ -536,15 +542,18 @@ def build_manifest(cfg: ExperimentConfig, config_hash: str, summary: RunSummary,
     fmt = cfg.overrides.get("response_format")
     return RunManifest(
         git_sha=sha, git_dirty=dirty, backend_version=__version__,
-        prompt_template_sha256=prompt_template_hash(), config_file=_rel_config(config_file),
+        prompt_template_sha256=prompt_sha256 or prompt_template_hash(),
+        config_file=_rel_config(config_file),
         config_hash=config_hash, model=cfg.model, provider=cfg.provider,
         temperature=cfg.temperature, seed=seed if isinstance(seed, int) else None,
         response_format=fmt if isinstance(fmt, str) else None,
-        embedding_model=embedding_model, dataset_snapshots=dict(sorted(snapshots.items())),
+        embedding_model=embedding_model,
+        effective_settings=dict(sorted((effective_settings or {}).items())),
+        dataset_snapshots=dict(sorted(snapshots.items())),
         split_hashes={ds: _split_hash(sf) for ds, sf in sorted(split_files.items())},
         item_counts={ds: dict(sf.counts) for ds, sf in sorted(split_files.items())},
         thresholds=th_out, thresholds_source=getattr(thresholds, "source", None),
-        started_at=summary.started_at, finished_at=summary.finished_at,
+        started_at=started_at or summary.started_at, finished_at=summary.finished_at,
         calls=calls, prompt_tokens=summary.tokens_in, completion_tokens=summary.tokens_out,
         estimated_cost_usd=summary.cost_usd, failures=failures,
     )
