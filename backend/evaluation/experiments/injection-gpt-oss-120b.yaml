@@ -1,0 +1,17 @@
+name: injection-gpt-oss-120b
+phase: "4a"
+grader: inprocess
+provider: openrouter
+model: openai/gpt-oss-120b
+context_mode: rag
+temperature: null
+datasets:
+  engsaf: [dev, test]
+  scientsbank: [dev, test_uq]
+repeats: 1
+variant_set: injection
+price_in_per_mtok: 0.05
+price_out_per_mtok: 0.25
+concurrency: 4
+max_cost_usd: 5.0
+overrides: {}
