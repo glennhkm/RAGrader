@@ -127,6 +127,7 @@ make build-plugins
 - [Production Deployment Guide](docs/deployment.md)
 - [Moodle Plugin Setup & Configuration](docs/moodle-setup.md)
 - [Project Status & Handoff (current state, next steps)](docs/HANDOFF.md)
+- [Evaluation Harness (reproducing grading-quality reports)](docs/evaluation/README.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
 

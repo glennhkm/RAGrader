@@ -54,6 +54,10 @@ jobs:
         working-directory: backend
         run: python tests/run_offline.py -v
 
+      - name: Evaluation smoke (stub grader, synthetic set)
+        working-directory: backend
+        run: python -m src.evaluation smoke --check evaluation/synthetic/expected_summary.json
+
       - name: Byte-compile backend sources
         working-directory: backend
         run: python -m compileall -q src
