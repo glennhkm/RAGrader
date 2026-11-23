@@ -14,6 +14,10 @@ MAX_POINTS = 25
 
 
 def load_jk_case(csv_path: Path, reference_pdf: Path) -> Tuple[List[EvalItem], dict]:
+    """Items reference the PDF by file name plus content sha256, never by an absolute path,
+    so the snapshot is the same on every machine and changes when the PDF does."""
+    reference_pdf = Path(reference_pdf)
+    reference_sha256 = hashlib.sha256(reference_pdf.read_bytes()).hexdigest()
     items: List[EvalItem] = []
     seen = set()
     rows_read = 0
@@ -40,7 +44,8 @@ def load_jk_case(csv_path: Path, reference_pdf: Path) -> Tuple[List[EvalItem], d
                 label_scale=3,
                 split="case",
                 reference_text=None,
-                reference_document=str(reference_pdf),
+                reference_document=reference_pdf.name,
+                reference_sha256=reference_sha256,
                 gold_score=nilai / MAX_POINTS,
             ))
     return items, {"rows": len(items), "rows_read": rows_read,

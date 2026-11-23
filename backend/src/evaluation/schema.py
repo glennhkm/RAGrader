@@ -40,6 +40,9 @@ class EvalItem:
     gold_label_raw: Optional[str] = None
     derived_from: Optional[str] = None
     variant: Optional[str] = None
+    # sha256 of the reference document's bytes; reference_document is then a bare file
+    # name, resolved against the prepared references directory at grade time.
+    reference_sha256: Optional[str] = None
 
 
 @dataclass(frozen=True)

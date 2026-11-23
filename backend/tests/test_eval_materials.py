@@ -78,6 +78,23 @@ class MaterialsTest(unittest.TestCase):
             self.assertEqual([out / "case.pdf"], paths)
             self.assertEqual(b"%PDF-1.4 fake", paths[0].read_bytes())
 
+    def test_relative_pdf_reference_resolved_and_checksum_verified(self):
+        with tempfile.TemporaryDirectory() as d:
+            refs = Path(d) / "references"
+            refs.mkdir()
+            (refs / "case.pdf").write_bytes(b"%PDF-1.4 fake")
+            sha = hashlib.sha256(b"%PDF-1.4 fake").hexdigest()
+            items = [EvalItem("i", "jk_case", "q", "Q", "a", "id", 1, 3, "case",
+                              reference_document="case.pdf", reference_sha256=sha)]
+            docs = build_materials(items, reference_dir=refs)
+            self.assertEqual(str(refs / "case.pdf"), docs[0].path)
+            self.assertEqual("case.pdf", gold_source(items[0]))
+            paths = write_materials(docs, Path(d) / "out")
+            self.assertEqual(b"%PDF-1.4 fake", paths[0].read_bytes())
+            (refs / "case.pdf").write_bytes(b"%PDF-1.4 changed")
+            with self.assertRaisesRegex(ValueError, "checksum"):
+                write_materials(build_materials(items, reference_dir=refs), Path(d) / "out2")
+
     def test_write_returns_paths_in_doc_order_utf8(self):
         docs = [MaterialDoc("b.txt", "café"), MaterialDoc("a.txt", "x")]
         with tempfile.TemporaryDirectory() as d:

@@ -18,6 +18,7 @@ import json
 import math
 import os
 import random
+import shutil
 import sys
 import tempfile
 from datetime import date
@@ -61,6 +62,7 @@ DEFAULT_SOURCES: Dict[str, Path] = {
     "jk_case": PRIVATE_DIR / "datasets" / "jk-usk" / "jaringan_komputer_usk.csv",
     "scientsbank": PRIVATE_DIR / "cache" / "scientsbank",
 }
+REFERENCES_SUBDIR = "references"  # reference documents beside the prepared items
 RUN_META_FILE = "run_meta.json"
 FROZEN_MSG = "split file is frozen; snapshot changed"
 SMOKE_RESAMPLES = 200
@@ -89,11 +91,28 @@ def _load_source(name: str, source: Optional[Path],
     if not path.exists() and name != "scientsbank":
         raise CliError(f"source not found: {path}")
     if name == "jk_case":
-        pdf = Path(reference_pdf) if reference_pdf else path.parent / DEFAULT_REFERENCE_NAME
+        pdf = _reference_pdf(path, reference_pdf)
         if not pdf.exists():
             raise CliError(f"reference PDF not found: {pdf}")
         return _guarded(name, lambda: load_jk_case(path, pdf))
     return _guarded(name, lambda: load_dataset(name, path))
+
+
+def _reference_pdf(source: Path, reference_pdf: Optional[Path]) -> Path:
+    return Path(reference_pdf) if reference_pdf else Path(source).parent / DEFAULT_REFERENCE_NAME
+
+
+def _stage_reference(name: str, source: Optional[Path], reference_pdf: Optional[Path],
+                     out_dir: Path) -> None:
+    """Copy the case-study PDF beside the prepared items; items name it by file name only."""
+    if name != "jk_case":
+        return
+    src = _reference_pdf(Path(source) if source is not None else DEFAULT_SOURCES[name],
+                         reference_pdf)
+    target = Path(out_dir) / REFERENCES_SUBDIR / src.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not (target.exists() and target.resolve() == src.resolve()):
+        shutil.copyfile(src, target)
 
 
 def _guarded(name: str, load):
@@ -164,6 +183,7 @@ def _prepare(name: str, source: Optional[Path], reference_pdf: Optional[Path],
             raise
 
     prepared = out_dir / f"{name}.jsonl"
+    _stage_reference(name, source, reference_pdf, out_dir)
     write_jsonl(prepared, items)
     if staged is not None:
         os.replace(staged, target)
@@ -283,7 +303,8 @@ def _execute(config_file: Path, out_root: Path, yes: bool) -> Tuple[int, Optiona
     # Checked before any item is loaded: the run directory lives inside out_root.
     assert_output_allowed(cfg.datasets, Path(out_root))
     items_by_dataset, split_files = _load_prepared(cfg)
-    plan = plan_run(cfg, items_by_dataset, Path(out_root))
+    plan = plan_run(cfg, items_by_dataset, Path(out_root),
+                    reference_dir=PREPARED_DIR / REFERENCES_SUBDIR)
     _print_plan(plan)
     if plan.estimated_cost_usd > cfg.max_cost_usd:
         raise BudgetError(f"estimated cost ${plan.estimated_cost_usd:.4f} exceeds "

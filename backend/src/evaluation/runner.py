@@ -85,7 +85,8 @@ def _cost(cfg: ExperimentConfig, prompt_tokens: int, completion_tokens: int) -> 
 
 
 def plan_run(cfg: ExperimentConfig, items_by_dataset: Dict[str, List[EvalItem]],
-             out_root: Path) -> RunPlan:
+             out_root: Path, reference_dir: Optional[Path] = None) -> RunPlan:
+    """``reference_dir`` holds the reference documents named by the items (case study)."""
     missing = [ds for ds in cfg.datasets if ds not in items_by_dataset]
     if missing:
         raise ValueError(f"no items supplied for datasets: {sorted(missing)}")
@@ -109,7 +110,8 @@ def plan_run(cfg: ExperimentConfig, items_by_dataset: Dict[str, List[EvalItem]],
         selected = derive_injection(selected, load_templates(),
                                     n_per_split=INJECTION_N_PER_SPLIT)
 
-    materials = {ds: build_materials(items_by_dataset[ds]) for ds in sorted(cfg.datasets)}
+    materials = {ds: build_materials(items_by_dataset[ds], reference_dir)
+                 for ds in sorted(cfg.datasets)}
     n_calls = len(selected) * cfg.repeats
     estimate = n_calls * _cost(cfg, EST_PROMPT_TOKENS, EST_COMPLETION_TOKENS)
     return RunPlan(cfg, h, selected, out_dir, estimate, materials)
