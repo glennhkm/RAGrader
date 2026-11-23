@@ -380,6 +380,7 @@ class ReportCompareTest(_PrivateSandbox):
                                str(self.run_dir), "--out", str(out_path)])
         self.assertEqual(0, code, err)
         self.assertIn("Difference (B - A)", out_path.read_text())
+        self.assertIn("A failures", out_path.read_text())
 
     def test_compare_requires_two_run_dirs(self):
         code, out, err = _run(["compare", "--run-dir", str(self.run_dir)])

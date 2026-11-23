@@ -117,12 +117,17 @@ def paired_difference(
     return _interval(value, stats, len(pairs), len(_group(pairs, cluster_pair)), 0.05)
 
 
-def describe_difference(est: Estimate) -> str:
-    """Spec 6.4 wording; ``"undefined"`` when the value or either bound is nan."""
+def describe_difference(est: Estimate, higher_is_better: bool = True) -> str:
+    """Spec 6.4 wording; ``"undefined"`` when the value or either bound is nan.
+
+    The estimate is B - A. For a higher-is-better metric B improves when the CI lies above
+    0; for a lower-is-better metric (an error such as MAE or ECE) when it lies below 0.
+    """
     if any(math.isnan(x) for x in (est.value, est.low, est.high)):
         return "undefined"
-    if est.low > 0:
+    above, below = est.low > 0, est.high < 0
+    if (above and higher_is_better) or (below and not higher_is_better):
         return "improves"
-    if est.high < 0:
+    if above or below:
         return "worsens"
     return "no detectable difference"

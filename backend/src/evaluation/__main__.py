@@ -34,6 +34,7 @@ from .report import (
     FittedThresholds,
     aggregate,
     build_manifest,
+    compare_counts,
     compare_runs,
     fit_run_thresholds,
     load_report_thresholds,
@@ -381,7 +382,8 @@ def cmd_compare(args: argparse.Namespace) -> int:
                       fit_run_thresholds(results, cfg.datasets)))
     (name_a, _, ra, ta), (name_b, _, rb, tb) = sides
     rows = compare_runs(ra, rb, ta, tb)
-    text = f"# Comparison\n\n- A: `{name_a}`\n- B: `{name_b}`\n\n{render_comparison(rows)}\n"
+    table = render_comparison(rows, compare_counts(ra, rb))
+    text = f"# Comparison\n\n- A: `{name_a}`\n- B: `{name_b}`\n\n{table}\n"
     print(text)
     if args.out is not None:
         out = Path(args.out)

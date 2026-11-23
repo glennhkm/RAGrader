@@ -33,9 +33,9 @@ from .thresholds import Thresholds, apply_thresholds, case_study_label, fit_thre
 
 __all__ = [
     "Aggregate", "CITATIONS", "FittedThresholds", "LIMITATIONS", "MetricRow", "PrivacyError",
-    "aggregate", "assert_output_allowed", "build_manifest", "compare_runs",
+    "aggregate", "assert_output_allowed", "build_manifest", "compare_counts", "compare_runs",
     "fit_run_thresholds", "load_report_thresholds", "load_run", "render_comparison", "render_json", "render_markdown",
-    "write_report",
+    "higher_is_better", "write_report",
 ]
 
 NAN = float("nan")
@@ -43,6 +43,7 @@ N_RESAMPLES = 2000
 SEED = 20261123
 N_LABELS = 3
 CASE_STUDY = "jk_case"
+CASE_STUDY_VERDICT = "case study: descriptive only"
 INJECTION_WARNING = "possible_prompt_injection"
 
 LIMITATIONS: Tuple[str, ...] = (
@@ -243,6 +244,14 @@ RELIABILITY = ("failure_rate", "parse_failure_rate", "integrity_warning_rate",
                "grounded_share", "cited_share")
 CONSISTENCY = ("consistency_score_std", "consistency_label_agreement")
 INJECTION = ("injection_score_uplift", "injection_label_rise_share", "injection_detection_rate")
+# Error-like metrics, where a decrease is an improvement (every ``mae_*`` metric too).
+LOWER_IS_BETTER = frozenset({"ece", "failure_rate", "parse_failure_rate",
+                             "consistency_score_std"})
+
+
+def higher_is_better(metric: str) -> bool:
+    """Direction of ``metric`` for comparison verdicts."""
+    return not (metric.startswith("mae_") or metric in LOWER_IS_BETTER)
 
 
 # --------------------------------------------------------------------------- thresholds
@@ -768,6 +777,11 @@ def write_report(agg: Aggregate, manifest: RunManifest, out_base: Path) -> Tuple
 
 # --------------------------------------------------------------------------- comparison
 
+def _compare_index(results: Sequence[EvalResult], ths: Dict[str, Thresholds]):
+    return {(r.dataset, r.split, r.item_id, r.repeat): _to_row(r, ths)
+            for r in results if r.derived_from is None}
+
+
 def compare_runs(a: Sequence[EvalResult], b: Sequence[EvalResult],
                  thresholds_a: Dict[str, Thresholds], thresholds_b: Dict[str, Thresholds],
                  metrics: Sequence[str] = ("qwk", "mae_score", "spearman"),
@@ -775,14 +789,12 @@ def compare_runs(a: Sequence[EvalResult], b: Sequence[EvalResult],
                  ) -> List[Tuple[str, str, str, Estimate, str]]:
     """Paired B - A differences on items scored in both runs, keyed by (item_id, repeat).
 
-    Each side is labelled with its own thresholds. The verdict is ``describe_difference``,
-    which is ``"undefined"`` when the estimate or its interval is nan.
+    Each side is labelled with its own thresholds. The verdict is ``describe_difference``
+    in the metric's direction (``higher_is_better``), which is ``"undefined"`` when the
+    estimate or its interval is nan. The case study gets no statistical claims (spec 4.4):
+    its rows carry the point difference only (nan interval) and ``CASE_STUDY_VERDICT``.
     """
-    def index(results, ths):
-        return {(r.dataset, r.split, r.item_id, r.repeat): _to_row(r, ths)
-                for r in results if r.derived_from is None}
-
-    ia, ib = index(a, thresholds_a), index(b, thresholds_b)
+    ia, ib = _compare_index(a, thresholds_a), _compare_index(b, thresholds_b)
     common = sorted(k for k in set(ia) & set(ib) if ia[k].success and ib[k].success)
     groups: Dict[Tuple[str, str], List[Tuple[str, str, str, int]]] = {}
     for k in common:
@@ -791,20 +803,71 @@ def compare_runs(a: Sequence[EvalResult], b: Sequence[EvalResult],
     for (ds, split) in sorted(groups):
         keys = groups[(ds, split)]
         ra, rb = [ia[k] for k in keys], [ib[k] for k in keys]
+        case = ds == CASE_STUDY
         for m in metrics:
             est = paired_difference(ra, rb, lambda x: x.key, lambda x: x.cluster, METRICS[m],
-                                    n_resamples=n_resamples, seed=SEED)
-            out.append((ds, split, m, est, describe_difference(est)))
+                                    n_resamples=0 if case else n_resamples, seed=SEED)
+            verdict = (CASE_STUDY_VERDICT if case
+                       else describe_difference(est, higher_is_better(m)))
+            out.append((ds, split, m, est, verdict))
     return out
 
 
-def render_comparison(rows: Sequence[Tuple[str, str, str, Estimate, str]]) -> str:
-    """Markdown table for ``compare_runs`` output; undefined rows read ``n/a (undefined)``."""
+def compare_counts(a: Sequence[EvalResult], b: Sequence[EvalResult]
+                   ) -> Dict[Tuple[str, str], Dict[str, int]]:
+    """Per (dataset, split): results and failures on each side, paired items, pairs dropped
+    because a side failed, and items present on one side only (non-variant results)."""
+    def index(results):
+        return {(r.dataset, r.split, r.item_id, r.repeat): r for r in results
+                if r.derived_from is None}
+
+    ia, ib = index(a), index(b)
+    out: Dict[Tuple[str, str], Dict[str, int]] = {}
+    for key in sorted(set(ia) | set(ib)):
+        c = out.setdefault((key[0], key[1]), {
+            "a_results": 0, "a_failures": 0, "b_results": 0, "b_failures": 0,
+            "paired": 0, "pairs_dropped": 0, "unmatched": 0})
+        ra, rb = ia.get(key), ib.get(key)
+        ok_a = ra is not None and ra.success and ra.score is not None
+        ok_b = rb is not None and rb.success and rb.score is not None
+        if ra is not None:
+            c["a_results"] += 1
+            c["a_failures"] += 0 if ok_a else 1
+        if rb is not None:
+            c["b_results"] += 1
+            c["b_failures"] += 0 if ok_b else 1
+        if ra is None or rb is None:
+            c["unmatched"] += 1
+        elif ok_a and ok_b:
+            c["paired"] += 1
+        else:
+            c["pairs_dropped"] += 1
+    return out
+
+
+def render_comparison(rows: Sequence[Tuple[str, str, str, Estimate, str]],
+                      counts: Optional[Dict[Tuple[str, str], Dict[str, int]]] = None) -> str:
+    """Markdown table for ``compare_runs`` output; undefined rows read ``n/a (undefined)``.
+
+    Case-study rows show the point difference without an interval. With ``counts``
+    (``compare_counts``) a second table lists failures per side and dropped pairs.
+    """
     body = []
     for ds, split, m, est, verdict in rows:
-        if verdict == "undefined" or any(math.isnan(x) for x in (est.value, est.low, est.high)):
+        if verdict == CASE_STUDY_VERDICT:
+            body.append([ds, split, m, _f(est.value), verdict, str(est.n_items)])
+        elif verdict == "undefined" or any(math.isnan(x) for x in (est.value, est.low, est.high)):
             body.append([ds, split, m, "n/a (undefined)", "n/a (undefined)", str(est.n_items)])
         else:
             body.append([ds, split, m, _ci(est), verdict, str(est.n_items)])
-    return "\n".join(_table(["Dataset", "Split", "Metric", "Difference (B - A) [95% CI]",
-                             "Verdict", "Paired items"], body))
+    out = _table(["Dataset", "Split", "Metric", "Difference (B - A) [95% CI]",
+                  "Verdict", "Paired items"], body)
+    if counts:
+        keys = ("a_results", "a_failures", "b_results", "b_failures", "paired",
+                "pairs_dropped", "unmatched")
+        out += ["Items per side (pairs are dropped when either side failed):", ""]
+        out += _table(["Dataset", "Split", "A results", "A failures", "B results",
+                       "B failures", "Paired", "Pairs dropped", "Unmatched"],
+                      [[ds, split] + [str(c[k]) for k in keys]
+                       for (ds, split), c in sorted(counts.items())])
+    return "\n".join(out)
