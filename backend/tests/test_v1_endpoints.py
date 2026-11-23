@@ -141,6 +141,25 @@ class V1EndpointTest(unittest.TestCase):
                 self.assertEqual(200, response.status_code)
                 self.assertIsNone(self.fake_grader.last_grade_kwargs["metadata_filter"])
 
+    def test_grade_response_exposes_parse_failure_error(self):
+        original = self.fake_grader.grade_essay
+
+        def with_error(**kwargs):
+            out = original(**kwargs)
+            out["error"] = "Failed to parse LLM response"
+            return out
+
+        self.fake_grader.grade_essay = with_error
+        response = self.client.post(
+            "/v1/namespaces/cs-101/grade", json={"question": "Q", "essay": "A"})
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("Failed to parse LLM response", response.json()["error"])
+
+    def test_grade_response_error_is_null_on_clean_success(self):
+        response = self.client.post(
+            "/v1/namespaces/cs-101/grade", json={"question": "Q", "essay": "A"})
+        self.assertIsNone(response.json()["error"])
+
     def test_list_delete_file_and_clear_namespace(self):
         self.client.post(
             "/v1/namespaces/bio-101/materials",
