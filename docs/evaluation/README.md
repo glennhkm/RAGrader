@@ -101,6 +101,23 @@ python -m src.evaluation smoke --check evaluation/synthetic/expected_summary.jso
 
 It exits 1 with a per-key diff when a metric changes. After an intended change, regenerate the file with `smoke --write evaluation/synthetic/expected_summary.json` and review the diff. **The smoke numbers are not an evaluation:** the synthetic set has no dev split, so its thresholds are fitted on the smoke results themselves, and the bootstrap uses 200 resamples instead of 2,000. It only checks that prepare, run and report fit together and stay deterministic.
 
+## Grader agreement
+
+**Stub stack, 2026-11-23.**
+- Setup: the first 50 SciEntsBank `test_uq` eval items by `item_id`, on the `docker-compose.ci.yml` stack (stub LLM and stub embeddings), graded once through `http` (HAProxy → two API replicas → `/v1`) and once through `inprocess`.
+- Result: 50/50 graded on both sides with no failures, and all 50 pairs identical in score, confidence, integrity warnings and retrieved sources.
+- Gold reference: retrieved for 49/50 items.
+
+The real-model agreement check, which uses the Way gateway, is recorded with the baseline reports.
+
+## Model access for the 4a runs
+
+The baseline reports use the `way-*` configurations: Way's OpenAI-compatible gateway, called as a single `openai_compatible` endpoint (`LLM_BASE_URL` / `LLM_API_KEY` in `backend/.env`).
+- **Models:** `openai/gpt-oss-120b` (the product default) and `openai/gpt-oss-20b`, both on Way's free tier.
+- **No fallback:** a single endpoint never falls back to another provider, so every grade comes from the configured model.
+- **Key setup:** the key used must have TokenSaver switched off and no RAG collection bound, because both change the prompt the grader sends.
+- **Old configurations:** the OpenRouter configurations (`baseline-*.yaml` without the `way-` prefix) stay as written but were not run.
+
 ## Datasets and citations
 
 Every report cites:
