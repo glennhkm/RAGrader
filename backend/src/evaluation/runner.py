@@ -25,6 +25,7 @@ from .experiment import ExperimentConfig, config_hash
 from .graders.base import Grader, GradeRequest, RawGrade, TransientGraderError
 from .graders.http import http_namespace
 from .materials import MaterialDoc, build_materials, gold_source
+from .privacy import assert_output_allowed
 from .schema import EvalItem, EvalResult, append_jsonl, read_results
 from .splits import snapshot_hash
 
@@ -92,7 +93,7 @@ def plan_run(cfg: ExperimentConfig, items_by_dataset: Dict[str, List[EvalItem]],
     h = config_hash(cfg, snapshots)
     out_dir = Path(out_root) / f"{cfg.name}-{h}"
 
-    # Task 15: the privacy guard (assert_output_allowed(cfg.datasets, out_dir)) goes here.
+    assert_output_allowed(cfg.datasets, out_dir)
 
     selected: List[EvalItem] = []
     for ds in sorted(cfg.datasets):
@@ -190,6 +191,7 @@ def read_summary(path: Path) -> RunSummary:
 def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep, max_attempts: int = 5) -> RunSummary:
     cfg = plan.config
+    assert_output_allowed(set(cfg.datasets) | {i.dataset for i in plan.items}, plan.out_dir)
     if plan.estimated_cost_usd > cfg.max_cost_usd:
         raise BudgetError(
             f"estimated cost ${plan.estimated_cost_usd:.4f} exceeds max_cost_usd "

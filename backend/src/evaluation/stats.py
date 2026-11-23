@@ -118,6 +118,9 @@ def paired_difference(
 
 
 def describe_difference(est: Estimate) -> str:
+    """Spec 6.4 wording; ``"undefined"`` when the value or either bound is nan."""
+    if any(math.isnan(x) for x in (est.value, est.low, est.high)):
+        return "undefined"
     if est.low > 0:
         return "improves"
     if est.high < 0:

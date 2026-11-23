@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import shutil
 import tempfile
 import threading
 import time
@@ -12,6 +13,8 @@ from src.evaluation.experiment import ExperimentConfig
 from src.evaluation.graders.base import RawGrade, TransientGraderError
 from src.evaluation.graders.http import http_namespace
 from src.evaluation.graders.stub import StubGrader
+from src.evaluation import paths
+from src.evaluation.privacy import PrivacyError
 from src.evaluation.materials import gold_source
 from src.evaluation.runner import (
     BudgetError,
@@ -347,6 +350,28 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(2, len(read_results(plan.out_dir / "results.jsonl")))
         self.assertNotIn("budget_abort", s.failures)
 
+    def test_plan_refuses_private_dataset_outside_private_dir(self):
+        for ds, split in (("engsaf", "dev"), ("jk_case", "case")):
+            with self.assertRaises(PrivacyError):
+                plan_run(_cfg(datasets={ds: [split]}), {ds: _items(3, dataset=ds, split=split)},
+                         self.root)
+
+    def test_run_refuses_private_plan_outside_private_dir(self):
+        plan = self._plan(n=2)
+        plan.items = _items(2, dataset="engsaf", split="dev")
+        plan.config = _cfg(datasets={"engsaf": ["dev"]})
+        with self.assertRaises(PrivacyError):
+            run(plan, ExplodingGrader(), sleep=lambda s: None)
+
+    def test_plan_allows_private_dataset_under_private_dir(self):
+        root = paths.PRIVATE_DIR / "evaluation" / "_runner_test_tmp"
+        try:
+            plan = plan_run(_cfg(datasets={"engsaf": ["dev"]}),
+                            {"engsaf": _items(3, dataset="engsaf", split="dev")}, root)
+            self.assertTrue(paths.is_private_path(plan.out_dir))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_summary_written_and_readable(self):
         plan = self._plan(n=2)
         s = run(plan, FakeGrader(), sleep=lambda s: None)
@@ -355,9 +380,9 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(s.started_at.endswith("+00:00"))
 
     def test_consistency_repeats_expand_and_resume(self):
-        items = _items(6, dataset="engsaf", split="dev")
-        cfg = _cfg(datasets={"engsaf": ["dev"]}, repeats=3, variant_set="consistency")
-        plan = plan_run(cfg, {"engsaf": items}, self.root)
+        items = _items(6, dataset="scientsbank", split="dev")
+        cfg = _cfg(datasets={"scientsbank": ["dev"]}, repeats=3, variant_set="consistency")
+        plan = plan_run(cfg, {"scientsbank": items}, self.root)
         g = FakeGrader()
         s = run(plan, g, sleep=lambda s: None)
         self.assertEqual(18, s.graded)
@@ -367,9 +392,9 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual((0, 18), (s2.graded, s2.skipped_existing))
 
     def test_injection_variant_set_uses_committed_templates(self):
-        items = _items(6, dataset="engsaf", split="dev")
-        cfg = _cfg(datasets={"engsaf": ["dev"]}, variant_set="injection")
-        plan = plan_run(cfg, {"engsaf": items}, self.root)
+        items = _items(6, dataset="scientsbank", split="dev")
+        cfg = _cfg(datasets={"scientsbank": ["dev"]}, variant_set="injection")
+        plan = plan_run(cfg, {"scientsbank": items}, self.root)
         originals = [i for i in plan.items if i.derived_from is None]
         copies = [i for i in plan.items if i.derived_from is not None]
         self.assertEqual(2, len(originals))   # gold-0 items: k = 0, 3
