@@ -461,6 +461,71 @@ class CompareAndLoadTests(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+def _paired_runs(dataset="engsaf", split="test"):
+    """A is off by 40 points on every item, B is exact."""
+    import random
+    rng = random.Random(1)
+    a, b = [], []
+    for q in range(20):
+        for i in range(5):
+            g = rng.choice([0, 1, 2])
+            common = dict(item_id=f"i{q}-{i}", dataset=dataset, question_id=f"q{q}",
+                          split=split, gold_label=g, success=True, confidence=0.5,
+                          gold_score=(g / 2 if dataset == "jk_case" else None))
+            a.append(EvalResult(config_hash="a", score=float(max(0, min(100, g * 50 + rng.choice(
+                [-40, 40])))), **common))
+            b.append(EvalResult(config_hash="b", score=float(g * 50), **common))
+    return a, b
+
+
+class CompareDirectionTests(unittest.TestCase):
+    def test_lower_is_better_metric_decrease_improves(self):
+        a, b = _paired_runs()
+        th = {"engsaf": Thresholds(25.0, 75.0, "engsaf/dev", 0.0)}
+        rows = {r[2]: r for r in compare_runs(a, b, th, th, n_resamples=N)}
+        self.assertLess(rows["mae_score"][3].value, 0)
+        self.assertEqual("improves", rows["mae_score"][4])
+        self.assertEqual("improves", rows["qwk"][4])
+        # And the reverse direction worsens.
+        rev = {r[2]: r for r in compare_runs(b, a, th, th, n_resamples=N)}
+        self.assertEqual("worsens", rev["mae_score"][4])
+
+    def test_metric_directions(self):
+        from src.evaluation.report import higher_is_better
+        for m in ("mae_score", "mae_label", "mae_points", "mae_points_Q1", "ece",
+                  "failure_rate", "parse_failure_rate"):
+            self.assertFalse(higher_is_better(m), m)
+        for m in ("qwk", "accuracy", "spearman", "hit_at_1"):
+            self.assertTrue(higher_is_better(m), m)
+
+    def test_case_study_compare_is_descriptive_only(self):
+        a, b = _paired_runs(dataset="jk_case", split="case")
+        rows = compare_runs(a, b, {}, {}, metrics=("mae_score",), n_resamples=N)
+        self.assertEqual(1, len(rows))
+        ds, split, metric, est, verdict = rows[0]
+        self.assertEqual("case study: descriptive only", verdict)
+        self.assertLess(est.value, 0)
+        self.assertTrue(math.isnan(est.low) and math.isnan(est.high))
+        text = render_comparison(rows)
+        self.assertIn("case study: descriptive only", text)
+        self.assertNotIn("[", text.split("\n")[-2])  # no interval on the case row
+
+    def test_compare_counts_per_side_failures_and_dropped_pairs(self):
+        from src.evaluation.report import compare_counts
+        a, b = _paired_runs()
+        a[0] = dataclasses.replace(a[0], success=False, score=None, error_type="parse_failure")
+        b[1] = dataclasses.replace(b[1], success=False, score=None, error_type="provider_error")
+        b[2] = dataclasses.replace(b[2], success=False, score=None, error_type="provider_error")
+        b = b[:-1]  # one item only in A
+        counts = compare_counts(a, b)
+        self.assertEqual({"a_results": 100, "a_failures": 1, "b_results": 99, "b_failures": 2,
+                          "paired": 96, "pairs_dropped": 3, "unmatched": 1},
+                         counts[("engsaf", "test")])
+        text = render_comparison(compare_runs(a, b, {}, {}, n_resamples=N), counts)
+        self.assertIn("A failures", text)
+        self.assertIn("| engsaf | test | 100 | 1 | 99 | 2 | 96 | 3 | 1 |", text)
+
+
 class ManifestTests(unittest.TestCase):
     def test_build_manifest_fields(self):
         from src import __version__

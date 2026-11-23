@@ -74,6 +74,15 @@ class StatsTest(unittest.TestCase):
     def test_describe_worsens(self):
         self.assertEqual("worsens", describe_difference(Estimate(-1, -2, -0.5, 1, 1, 0)))
 
+    def test_describe_lower_is_better(self):
+        lower = dict(higher_is_better=False)
+        self.assertEqual("improves", describe_difference(Estimate(-1, -2, -0.5, 1, 1, 0), **lower))
+        self.assertEqual("worsens", describe_difference(Estimate(1, 0.5, 2, 1, 1, 0), **lower))
+        self.assertEqual("no detectable difference",
+                         describe_difference(Estimate(0.1, -0.5, 2, 1, 1, 0), **lower))
+        nan = float("nan")
+        self.assertEqual("undefined", describe_difference(Estimate(-1, nan, nan, 1, 1, 0), **lower))
+
 
 if __name__ == "__main__":
     unittest.main()
