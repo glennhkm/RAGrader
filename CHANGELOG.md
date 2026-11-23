@@ -8,6 +8,27 @@ listed in the table below.
 
 ## [Unreleased]
 
+### Component versions
+
+| Component | Version | Moodle plugin version | Requires |
+|-----------|---------|-----------------------|----------|
+| backend (FastAPI service) | 1.5.0 | - | Python 3.12 (Docker image `python:3.12-slim`) |
+
+The Moodle plugins are unchanged since 1.0.1.
+
+### Added
+
+- Offline evaluation harness `backend/src/evaluation`, run as `python -m src.evaluation prepare|run|report|compare|smoke`: dataset adapters (EngSAF, SciEntsBank, the Indonesian case study and a public synthetic set), frozen question-disjoint splits, stub, in-process and HTTP graders, a resumable runner with a cost cap, pure-Python metrics with cluster-bootstrap confidence intervals, and aggregate Markdown + JSON reports with a manifest and a privacy guard. See [docs/evaluation/README.md](docs/evaluation/README.md).
+- `backend/requirements-eval.txt`, an evaluation-only extra (the SciEntsBank parquet reader); the service does not need it.
+- Committed experiment configurations in `backend/evaluation/experiments/`.
+- A CI smoke step in `backend-tests`: the stub grader on the synthetic set, compared with `backend/evaluation/synthetic/expected_summary.json`.
+- `docs/evaluation/`, for the committed aggregate evaluation reports.
+
+### Changed
+
+- `/v1/namespaces/{ns}/grade` now populates `error` when the grading pipeline returns an error, for example when the AI response could not be parsed (the field already existed; the grade itself is unchanged).
+- `LLMWrapper` records `last_usage` (token counts of the last completion) and `last_served_provider` (the provider that served it).
+
 ## [1.0.1] - 2026-11-22
 
 Security and maintenance release: grading integrity guards, licensing, and supported runtimes.

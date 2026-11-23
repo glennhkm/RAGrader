@@ -4,7 +4,8 @@
 #
 # Replaces the real LLM/embedding providers with a deterministic stub, enables the
 # bearer token, and publishes Chroma on loopback so the tests can seed a collection
-# with a mismatching embedding identity.
+# with a mismatching embedding identity. The stub AI is published on loopback too,
+# for the in-process side of the eval agreement test.
 services:
   api:
     environment:
@@ -40,6 +41,10 @@ services:
       - ./integration_tests:/app/integration_tests:ro
     expose:
       - "9000"
+    # Published on loopback so the eval agreement test can run the in-process
+    # grader on the host against the same stub LLM and embeddings as the API.
+    ports:
+      - "127.0.0.1:19000:9000"
     security_opt:
       - no-new-privileges:true
     cap_drop:

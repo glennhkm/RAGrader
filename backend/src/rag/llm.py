@@ -132,6 +132,8 @@ class LLMWrapper:
         logger.info(f"Model: {self.model_name}")
         
         self._last_provider = None
+        self.last_usage: Optional[Dict[str, Any]] = None
+        self.last_served_provider: Optional[str] = None
         self._provider_failures: List[Dict[str, str]] = []
 
         if self.provider in _CHAIN_ALIASES:
@@ -257,6 +259,12 @@ class LLMWrapper:
                 if not content or not str(content).strip():
                     raise RuntimeError("empty completion content")
                 self._last_provider = endpoint.name
+                usage = getattr(completion, "usage", None)
+                self.last_usage = None if usage is None else {
+                    "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                    "completion_tokens": getattr(usage, "completion_tokens", None),
+                }
+                self.last_served_provider = getattr(completion, "provider", None)
                 return str(content).strip()
             except Exception as exc:
                 last_error = exc
