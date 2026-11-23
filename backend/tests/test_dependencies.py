@@ -44,6 +44,7 @@ OPTIONAL_IMPORTS = {
     "fastembed": "requirements-local.txt",
     "sentence_transformers": "requirements-local.txt",
     "llama_cpp": "requirements-local.txt",
+    "pyarrow": "requirements-eval.txt",
 }
 # Core requirements that are not imported by src/ on purpose.
 DOCUMENTED_INDIRECT = {

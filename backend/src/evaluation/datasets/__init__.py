@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
 from src.evaluation.datasets.engsaf import load_engsaf
+from src.evaluation.datasets.scientsbank import load_scientsbank
 from src.evaluation.schema import EvalItem
 
 
@@ -18,6 +19,7 @@ def _load_engsaf(source: Path) -> Tuple[List[EvalItem], dict]:
 
 _LOADERS: Dict[str, Callable[[Path], Tuple[List[EvalItem], dict]]] = {
     "engsaf": _load_engsaf,
+    "scientsbank": load_scientsbank,
 }
 
 
