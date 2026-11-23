@@ -70,6 +70,10 @@ def load_experiment(path: Path) -> ExperimentConfig:
     values = {**DEFAULTS, "overrides": {}, **raw}
     if values["overrides"] is None:
         values["overrides"] = {}
+    if values["overrides"]:
+        # Nothing applies them yet: accepting them would record settings that were not used.
+        raise ValueError("overrides are not supported until Cycle 4b; remove the "
+                         "'overrides' entries from the experiment file")
 
     if values["grader"] not in GRADERS:
         raise ValueError(f"invalid grader: {values['grader']}")
@@ -94,6 +98,48 @@ def load_experiment(path: Path) -> ExperimentConfig:
                               or limit < 1):
         raise ValueError("max_items_per_split must be a positive integer")
     return ExperimentConfig(**values)
+
+
+_PLAIN = (str, int, float, bool, type(None))
+
+
+def _plain(value: Any) -> Any:
+    return value if isinstance(value, _PLAIN) else None
+
+
+def effective_settings(cfg: ExperimentConfig, settings: Any) -> Dict[str, Any]:
+    """The grading settings a run actually uses (no secrets: keys and tokens are never read).
+
+    ``settings`` is ``src.utils.config.get_settings()`` (only that module reads the
+    environment). The stub grader uses none; the http grader's settings belong to the remote
+    server and cannot be observed from here.
+    """
+    if cfg.grader == "stub":
+        return {"grader": "stub"}
+    if cfg.grader == "http":
+        return {"grader": "http",
+                "note": "grading settings belong to the remote server; not observable here"}
+    raw = getattr(settings, "raw", None) or {}
+    chunking = raw.get("document_processing") or {}
+    out = {
+        "grader": "inprocess",
+        "context_mode": cfg.context_mode,
+        "llm_provider": cfg.provider,
+        "llm_model": cfg.model if cfg.model is not None else settings.llm.model,
+        "llm_temperature": (cfg.temperature if cfg.temperature is not None
+                            else settings.llm.temperature),
+        "llm_max_new_tokens": settings.llm.max_new_tokens,
+        "embedding_provider": settings.embeddings.provider,
+        "embedding_model": settings.embeddings.model,
+        "retrieval_top_k": settings.reranker.top_k,
+        "reranking_enabled": settings.reranker.enabled,
+        "reranker_type": settings.reranker.type,
+        "reranker_model": settings.reranker.model,
+        "rerank_top_k": settings.reranker.rerank_top_k,
+        "chunk_size": chunking.get("chunk_size"),
+        "chunk_overlap": chunking.get("chunk_overlap"),
+    }
+    return {k: _plain(v) for k, v in out.items()}
 
 
 def prompt_template_hash() -> str:

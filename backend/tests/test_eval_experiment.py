@@ -6,6 +6,7 @@ from pathlib import Path
 from src.evaluation.experiment import (
     ExperimentConfig,
     config_hash,
+    effective_settings,
     load_experiment,
     prompt_template_hash,
 )
@@ -106,6 +107,43 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(blob.encode()).hexdigest()[:16], config_hash(base, SNAP))
         limited = dataclasses.replace(base, max_items_per_split=50)
         self.assertNotEqual(config_hash(base, SNAP), config_hash(limited, SNAP))
+
+    def test_non_empty_overrides_rejected(self):
+        with self.assertRaisesRegex(ValueError, "overrides are not supported until Cycle 4b"):
+            load_experiment(_write(MINIMAL + "overrides: {seed: 1}\n"))
+        self.assertEqual({}, load_experiment(_write(MINIMAL + "overrides: {}\n")).overrides)
+        self.assertEqual({}, load_experiment(_write(MINIMAL + "overrides:\n")).overrides)
+
+    def test_effective_settings_inprocess_reads_settings_never_secrets(self):
+        from types import SimpleNamespace as NS
+        settings = NS(
+            llm=NS(model="default/model", temperature=0.3, max_new_tokens=1024,
+                   api_key="sk-SECRET"),
+            embeddings=NS(provider="huggingface", model="BAAI/bge-m3", api_key="hf-SECRET",
+                          huggingface_token="hf-SECRET"),
+            reranker=NS(enabled=False, type="bge", model="bge-reranker-v2-m3", top_k=5,
+                        rerank_top_k=3, api_key="SECRET"),
+            raw={"document_processing": {"chunk_size": 500, "chunk_overlap": 50}},
+        )
+        cfg = load_experiment(EXP_DIR / "baseline-gpt-oss-120b.yaml")
+        eff = effective_settings(cfg, settings)
+        self.assertEqual("openai/gpt-oss-120b", eff["llm_model"])
+        self.assertEqual(0.3, eff["llm_temperature"])  # config leaves it unset
+        self.assertEqual(("huggingface", "BAAI/bge-m3"),
+                         (eff["embedding_provider"], eff["embedding_model"]))
+        self.assertEqual((5, False, 3), (eff["retrieval_top_k"], eff["reranking_enabled"],
+                                         eff["rerank_top_k"]))
+        self.assertEqual((500, 50), (eff["chunk_size"], eff["chunk_overlap"]))
+        self.assertNotIn("SECRET", repr(eff))
+        pinned = dataclasses.replace(cfg, temperature=0.0, model=None)
+        eff = effective_settings(pinned, settings)
+        self.assertEqual((0.0, "default/model"), (eff["llm_temperature"], eff["llm_model"]))
+
+    def test_effective_settings_stub_and_http_need_no_settings(self):
+        stub = load_experiment(EXP_DIR / "smoke-stub.yaml")
+        self.assertEqual({"grader": "stub"}, effective_settings(stub, None))
+        http = dataclasses.replace(stub, grader="http")
+        self.assertEqual("http", effective_settings(http, None)["grader"])
 
 
 if __name__ == "__main__":

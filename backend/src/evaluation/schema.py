@@ -89,6 +89,7 @@ class RunManifest:
     seed: Optional[int] = None
     response_format: Optional[str] = None
     embedding_model: Optional[str] = None
+    effective_settings: Dict[str, Any] = field(default_factory=dict)
     dataset_snapshots: Dict[str, Any] = field(default_factory=dict)
     split_hashes: Dict[str, Any] = field(default_factory=dict)
     item_counts: Dict[str, Any] = field(default_factory=dict)
