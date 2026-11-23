@@ -199,6 +199,35 @@ class LLMWrapperAndDepsTest(unittest.TestCase):
         self.assertEqual("ok", wrapper.generate("prompt"))
         self.assertEqual("openrouter", wrapper.get_provider_info()["last_provider"])
 
+    def test_successful_completion_records_usage_and_served_provider(self):
+        class _UsageFactory:
+            def __call__(self, **kwargs):
+                class _Completions:
+                    def create(self, **request):
+                        message = SimpleNamespace(content="ok")
+                        return SimpleNamespace(
+                            choices=[SimpleNamespace(message=message)],
+                            usage=SimpleNamespace(prompt_tokens=12, completion_tokens=3),
+                            provider="X",
+                        )
+
+                return SimpleNamespace(chat=SimpleNamespace(completions=_Completions()))
+
+        settings = load_settings(env={"GROQ_API_KEY": "g0"}).llm
+        wrapper = LLMWrapper(settings=settings, client_factory=_UsageFactory())
+        self.assertIsNone(wrapper.last_usage)
+        self.assertIsNone(wrapper.last_served_provider)
+        self.assertEqual("ok", wrapper.generate("prompt"))
+        self.assertEqual({"prompt_tokens": 12, "completion_tokens": 3}, wrapper.last_usage)
+        self.assertEqual("X", wrapper.last_served_provider)
+
+    def test_completion_without_usage_records_none(self):
+        wrapper = LLMWrapper(settings=load_settings(env={"GROQ_API_KEY": "g0"}).llm,
+                             client_factory=_FakeClientFactory())
+        self.assertEqual("ok", wrapper.generate("prompt"))
+        self.assertIsNone(wrapper.last_usage)
+        self.assertIsNone(wrapper.last_served_provider)
+
     def test_defaults_come_from_settings(self):
         settings = load_settings(env={"GROQ_API_KEY": "g0", "LLM_MODEL": "from/settings"}).llm
         wrapper = LLMWrapper(settings=settings)
