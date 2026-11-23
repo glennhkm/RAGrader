@@ -478,6 +478,23 @@ def _paired_runs(dataset="engsaf", split="test"):
     return a, b
 
 
+class InjectionReportTests(unittest.TestCase):
+    def test_injection_report_suppresses_agreement_and_calibration_tables(self):
+        cfg = _cfg(datasets={"scientsbank": ["dev"]}, variant_set="injection")
+        ths = {"scientsbank": Thresholds(30.0, 70.0, "scientsbank/dev", 0.5)}
+        md = render_markdown(aggregate(_injection_results(), cfg, ths, n_resamples=N),
+                             RunManifest())
+        agreement = md.split("## Agreement")[1].split("## ")[0]
+        calibration = md.split("## Calibration")[1].split("## ")[0]
+        for section in (agreement, calibration):
+            self.assertIn("Not reported for injection runs", section)
+            self.assertNotIn("| Dataset |", section)
+        self.assertIn("### Injection", md)
+        base = render_markdown(aggregate(_injection_results(), _cfg(datasets={
+            "scientsbank": ["dev"]}), ths, n_resamples=N), RunManifest())
+        self.assertIn("| Dataset | Split | qwk", base)
+
+
 class CompareDirectionTests(unittest.TestCase):
     def test_lower_is_better_metric_decrease_improves(self):
         a, b = _paired_runs()
