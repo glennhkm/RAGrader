@@ -52,9 +52,9 @@ def carve_banks(items: Sequence[EvalItem], seed: int = DEFAULT_SEED) -> List[Eva
     """Mark min(9, n // 3) items per (split, question) as bank examples."""
     banked = set()
     groups = _group(items, lambda i: (i.split, i.question_id))
-    for (_, question_id), group in groups.items():
+    for (split, question_id), group in groups.items():
         ordered = sorted(group, key=lambda i: i.item_id)
-        random.Random(f"{seed}:{question_id}").shuffle(ordered)
+        random.Random(f"{seed}:bank:{split}:{question_id}").shuffle(ordered)
         for item in ordered[:min(BANK_MAX, len(ordered) // 3)]:
             banked.add(item.item_id)
     return [dataclasses.replace(i, role="bank") if i.item_id in banked else i for i in items]
@@ -72,7 +72,7 @@ def budget_sample(items: Sequence[EvalItem], split: str, cap: int,
     for question_id, group in _group(target, lambda i: i.question_id).items():
         keep = min(len(group), max(1, round(len(group) * cap / total)))
         ordered = sorted(group, key=lambda i: i.item_id)
-        random.Random(f"{seed}:{question_id}").shuffle(ordered)
+        random.Random(f"{seed}:sample:{split}:{question_id}").shuffle(ordered)
         drop.update(i.item_id for i in ordered[keep:])
     return [i for i in items if i.item_id not in drop]
 
@@ -133,9 +133,17 @@ def _build_split_file(name: str, items: Sequence[EvalItem], seed: int) -> SplitF
     return SplitFile(name, snapshot_hash(items), seed, splits, banks, counts)
 
 
+def _assert_unique_ids(items: Sequence[EvalItem]) -> None:
+    """Item ids key results, banks and pairs; the message names the count, never an id."""
+    n = len(items) - len({i.item_id for i in items})
+    if n:
+        raise ValueError(f"{n} duplicate item_ids; deduplicate the source before splitting")
+
+
 def prepare_dataset(name: str, items: List[EvalItem]) -> Tuple[List[EvalItem], SplitFile]:
     seed = DEFAULT_SEED
     items = list(items)
+    _assert_unique_ids(items)
     if name == "engsaf":
         items = split_by_question(items, seed=seed)
         items = carve_banks(items, seed=seed)

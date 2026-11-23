@@ -1,3 +1,4 @@
+import random
 import tempfile
 import unittest
 from collections import Counter
@@ -99,6 +100,55 @@ class SplitsTest(unittest.TestCase):
     def test_snapshot_hash_order_independent(self):
         items = _items()
         self.assertEqual(snapshot_hash(items), snapshot_hash(list(reversed(items))))
+
+    def test_bank_and_sample_use_separate_seed_namespaces(self):
+        items = split_by_question(_items(nq=10, per_q=lambda q: 30))
+        banked = carve_banks(items, seed=7)
+        for q in {i.question_id for i in items}:
+            for split in ("dev", "test"):
+                group = sorted((i for i in items if i.question_id == q and i.split == split),
+                               key=lambda i: i.item_id)
+                if not group:
+                    continue
+                random.Random(f"7:bank:{split}:{q}").shuffle(group)
+                expect = {i.item_id for i in group[:min(9, len(group) // 3)]}
+                got = {i.item_id for i in banked if i.question_id == q and i.role == "bank"}
+                self.assertEqual(expect, got)
+        sampled = budget_sample(banked, "test", cap=50, seed=7)
+        total = sum(1 for i in banked if i.split == "test" and i.role == "eval")
+        for q in {i.question_id for i in banked if i.split == "test"}:
+            group = sorted((i for i in banked if i.question_id == q and i.split == "test"
+                            and i.role == "eval"), key=lambda i: i.item_id)
+            keep = min(len(group), max(1, round(len(group) * 50 / total)))
+            random.Random(f"7:sample:test:{q}").shuffle(group)
+            expect = {i.item_id for i in group[:keep]}
+            got = {i.item_id for i in sampled if i.question_id == q and i.split == "test"
+                   and i.role == "eval"}
+            self.assertEqual(expect, got)
+
+    def test_duplicate_item_ids_rejected_without_text(self):
+        items = _items()
+        dup = items + [items[0], items[1]]
+        for name in ("engsaf", "jk_case", "synthetic"):
+            with self.assertRaises(ValueError) as ctx:
+                prepare_dataset(name, dup)
+            self.assertIn("2 duplicate item_ids", str(ctx.exception))
+            self.assertNotIn("i0-0", str(ctx.exception))
+
+    def test_banks_disjoint_from_eval_and_hashed_file_has_no_raw_ids(self):
+        out, sf = prepare_dataset("engsaf", _items(nq=40, per_q=lambda q: 30))
+        for split in sf.splits:
+            self.assertFalse(set(sf.splits[split]) & set(sf.banks.get(split, [])))
+        all_eval = {i for v in sf.splits.values() for i in v}
+        all_bank = {i for v in sf.banks.values() for i in v}
+        self.assertFalse(all_eval & all_bank)
+        self.assertEqual(len(out), len(all_eval) + len(all_bank))
+        with tempfile.TemporaryDirectory() as d:
+            write_split_file(Path(d) / "s.json", sf, hash_ids=True)
+            text = (Path(d) / "s.json").read_text()
+        for item in out:
+            self.assertNotIn(item.item_id, text)
+            self.assertNotIn(item.question_id, text)
 
 
 if __name__ == "__main__":
