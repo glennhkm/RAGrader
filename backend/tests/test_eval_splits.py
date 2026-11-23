@@ -1,0 +1,105 @@
+import tempfile
+import unittest
+from collections import Counter
+from pathlib import Path
+
+from src.evaluation.schema import EvalItem
+from src.evaluation.splits import (
+    SplitFile,
+    budget_sample,
+    carve_banks,
+    prepare_dataset,
+    read_split_file,
+    snapshot_hash,
+    split_by_question,
+    write_split_file,
+)
+
+
+def _items(nq=20, per_q=lambda q: 3 + q % 7):
+    return [EvalItem(f"i{q}-{k}", "engsaf", f"q{q}", "Q", f"a{k}", "en", k % 3, 3, "")
+            for q in range(nq) for k in range(per_q(q))]
+
+
+class SplitsTest(unittest.TestCase):
+    def test_no_question_in_both_splits(self):
+        out = split_by_question(_items())
+        dev = {i.question_id for i in out if i.split == "dev"}
+        test = {i.question_id for i in out if i.split == "test"}
+        self.assertFalse(dev & test)
+        share = sum(i.split == "dev" for i in out) / len(out)
+        self.assertTrue(0.4 <= share < 0.6)
+
+    def test_split_is_deterministic(self):
+        self.assertEqual(split_by_question(_items()), split_by_question(_items()))
+
+    def test_bank_size_rule(self):
+        out = carve_banks(_items(nq=3, per_q=lambda q: [2, 12, 40][q]))
+        banks = Counter(i.question_id for i in out if i.role == "bank")
+        self.assertEqual({"q1": 4, "q2": 9}, dict(banks))
+
+    def test_budget_sample_preserves_questions_and_banks(self):
+        items = carve_banks(split_by_question(_items(nq=40, per_q=lambda q: 30)))
+        out = budget_sample(items, "test", cap=100)
+        kept = [i for i in out if i.split == "test" and i.role == "eval"]
+        self.assertTrue(90 <= len(kept) <= 110)
+        self.assertEqual({i.question_id for i in items if i.split == "test"},
+                         {i.question_id for i in kept})
+        self.assertEqual(sum(i.role == "bank" for i in items), sum(i.role == "bank" for i in out))
+
+    def test_budget_sample_under_cap_unchanged(self):
+        items = carve_banks(split_by_question(_items()))
+        self.assertEqual(items, budget_sample(items, "test", cap=10000))
+
+    def test_budget_sample_deterministic(self):
+        items = carve_banks(split_by_question(_items(nq=40, per_q=lambda q: 30)))
+        self.assertEqual(budget_sample(items, "dev", 50), budget_sample(items, "dev", 50))
+
+    def test_private_split_file_hashes_ids(self):
+        _, sf = prepare_dataset("engsaf", _items())
+        with tempfile.TemporaryDirectory() as d:
+            write_split_file(Path(d) / "s.json", sf, hash_ids=True)
+            text = (Path(d) / "s.json").read_text()
+            back = read_split_file(Path(d) / "s.json")
+        self.assertNotIn('"i0-0"', text)
+        self.assertIn('"hashed": true', text)
+        self.assertEqual(sf.snapshot, back.snapshot)
+        self.assertEqual(len(sf.splits["dev"]), len(back.splits["dev"]))
+
+    def test_public_split_file_roundtrip(self):
+        _, sf = prepare_dataset("engsaf", _items())
+        with tempfile.TemporaryDirectory() as d:
+            write_split_file(Path(d) / "s.json", sf, hash_ids=False)
+            self.assertEqual(sf, read_split_file(Path(d) / "s.json"))
+
+    def test_prepare_engsaf_counts_and_snapshot(self):
+        items, sf = prepare_dataset("engsaf", _items())
+        self.assertEqual(sf.snapshot, snapshot_hash(items))
+        self.assertEqual(sf.counts["dev"], len(sf.splits["dev"]))
+        self.assertEqual(sf.counts["test_bank"], len(sf.banks["test"]))
+        self.assertEqual(sf.splits["dev"], sorted(sf.splits["dev"]))
+
+    def test_prepare_scientsbank_banks_every_split(self):
+        items = [EvalItem(f"s{s}-{q}-{k}", "scientsbank", f"{s}-q{q}", "Q", "a", "en",
+                          k % 2, 2, s)
+                 for s in ("dev", "test_ua", "test_uq") for q in range(3) for k in range(12)]
+        out, sf = prepare_dataset("scientsbank", items)
+        self.assertEqual(len(out), len(items))
+        for s in ("dev", "test_ua", "test_uq"):
+            self.assertEqual(len(sf.banks[s]), 3 * 4)
+
+    def test_prepare_case_and_synthetic_no_banks(self):
+        for name, split in (("jk_case", "case"), ("synthetic", "smoke")):
+            items = [EvalItem(f"c{k}", name, "q", "Q", "a", "id", 1, 3, split)
+                     for k in range(30)]
+            out, sf = prepare_dataset(name, items)
+            self.assertEqual(items, out)
+            self.assertEqual(sf.banks.get(split, []), [])
+
+    def test_snapshot_hash_order_independent(self):
+        items = _items()
+        self.assertEqual(snapshot_hash(items), snapshot_hash(list(reversed(items))))
+
+
+if __name__ == "__main__":
+    unittest.main()
