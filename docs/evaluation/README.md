@@ -58,7 +58,11 @@ All commands run from `backend/`.
    python -m src.evaluation run --experiment evaluation/experiments/baseline-gpt-oss-120b.yaml
    ```
 
-   It prints the planned calls and the estimated cost and asks `Proceed? [y/N]`; `--yes` skips the question (required when stdin is not a terminal). A run above the configuration's `max_cost_usd` is refused. Results go to `private-data/evaluation/runs/` (override with `--out-root`). An interrupted run resumes when the same command is run again.
+   It prints the planned calls and the estimated cost and asks `Proceed? [y/N]`; `--yes` skips the question (required when stdin is not a terminal). A run above the configuration's `max_cost_usd` is refused. Results go to `private-data/evaluation/runs/` (override with `--out-root`). An interrupted run resumes when the same command is run again. `run_meta.json` in the run directory records the effective grading settings (model, temperature, embedding provider and model, retrieval `top_k`, reranking, chunk size and overlap; never keys), the prompt-template hash and the first start time. A resume under different effective settings is refused before anything in the run directory changes.
+
+   Optional `max_items_per_split: N` in a configuration grades only the first `N` eval items by `item_id` of each dataset split (used for the 50-item agreement checks); it is part of the configuration hash only when set. `overrides` must stay empty until Cycle 4b, which applies them. The `jk_case` reference PDF is copied beside the prepared items and named in them by file name and sha256, so its snapshot does not depend on the checkout path.
+
+   **Token estimates of the `http` grader.** The `/v1` API returns no token counts, so `http` results estimate prompt tokens as (request characters + retrieved-context characters shown in the response) / 4 and completion tokens as feedback characters / 4 (`tokens_estimated: true`). The response truncates each retrieved chunk and does not include the prompt template, so the estimate is a lower bound and the reported cost of `http` runs is too.
 
 5. **Report** the run:
 
@@ -76,9 +80,9 @@ All commands run from `backend/`.
      --thresholds-from ../docs/evaluation/<date>-4a-baseline-gpt-oss-120b.json
    ```
 
-   The manifest records the thresholds used and their source.
+   The manifest records the thresholds used and their source. Injection reports omit the Agreement and Calibration tables, which would mix clean and injected answers; the baseline report gives them.
 
-6. **Compare** two runs (paired B - A differences on the items both scored):
+6. **Compare** two runs (paired B - A differences on the items both scored; verdicts follow each metric's direction, so a lower MAE "improves"; the case study gets point differences only, and a second table lists failures per side and dropped pairs):
 
    ```bash
    python -m src.evaluation compare \
@@ -102,7 +106,7 @@ It exits 1 with a per-key diff when a metric changes. After an intended change, 
 Every report cites:
 
 - Aggarwal, D., Sil, P., Raman, B., Bhattacharyya, P. (2025). "I Understand Why I Got This Grade": Automatic Short Answer Grading (ASAG) with Feedback. In: Artificial Intelligence in Education. AIED 2025. Lecture Notes in Computer Science, vol 15879. Springer, Cham. https://doi.org/10.1007/978-3-031-98420-4_22
-- Dzikovska et al. (2013). SemEval-2013 Task 7: The Joint Student Response Analysis and 8th Recognizing Textual Entailment Challenge.
+- Dzikovska et al. (2013). SemEval-2013 Task 7: The Joint Student Response Analysis and 8th Recognizing Textual Entailment Challenge. In Proceedings of the Seventh International Workshop on Semantic Evaluation (SemEval 2013), pp. 263–274, ACL.
 - Nielsen, Ward, Martin & Palmer (2008). Annotating students' understanding of science concepts (SciEntsBank). LREC 2008. Licensed CC BY 4.0 via HF nkazi/SciEntsBank.
 
 The Indonesian case study (32 answers to 4 questions from a computer-networks course) is private and reported qualitatively.

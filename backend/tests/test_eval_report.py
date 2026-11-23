@@ -38,7 +38,8 @@ ENGSAF_CITATION = (
     'Springer, Cham. https://doi.org/10.1007/978-3-031-98420-4_22')
 SEMEVAL_CITATION = (
     "Dzikovska et al. (2013). SemEval-2013 Task 7: The Joint Student Response Analysis and "
-    "8th Recognizing Textual Entailment Challenge.")
+    "8th Recognizing Textual Entailment Challenge. In Proceedings of the Seventh "
+    "International Workshop on Semantic Evaluation (SemEval 2013), pp. 263–274, ACL.")
 SCIENTSBANK_CITATION = (
     "Nielsen, Ward, Martin & Palmer (2008). Annotating students' understanding of science "
     "concepts (SciEntsBank). LREC 2008. Licensed CC BY 4.0 via HF nkazi/SciEntsBank.")
