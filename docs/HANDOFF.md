@@ -50,7 +50,7 @@ python tests/run_offline.py -v       # expect: Ran 221 tests ... OK (skipped=1)
 
 | Component | Version | Moodle `$plugin->version` | Requires |
 |---|---|---|---|
-| backend (FastAPI) | **1.4.1** (`backend/src/__init__.py`) | - | Python 3.12 |
+| backend (FastAPI) | **1.5.0** (`backend/src/__init__.py`) | - | Python 3.12 |
 | `mod_airagmaterial` | **1.2.1** | `2026112101` | Moodle 4.5 (`2024100700`) |
 | `mod_airagassign` | **1.2.1** | `2026112101` | Moodle 4.5; depends on `mod_airagmaterial >= 2026112100` |
 | `local_assign_ai_rag` | 1.1.3 | `2026112100` | Moodle 4.5 |
