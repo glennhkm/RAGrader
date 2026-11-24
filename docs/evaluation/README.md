@@ -116,6 +116,7 @@ The baseline reports use the `way-*` configurations: Way's OpenAI-compatible gat
 - **Models:** `openai/gpt-oss-120b` (the product default) and `openai/gpt-oss-20b`, both on Way's free tier.
 - **No fallback:** a single endpoint never falls back to another provider, so every grade comes from the configured model.
 - **Key setup:** the key used must have TokenSaver switched off and no RAG collection bound, because both change the prompt the grader sends.
+- **Known limitation:** Way adds its own service-policy instructions to every request. A one-sentence probe was billed as about 1,500 prompt tokens on both models (2026-11-23), so roughly 1,450 tokens precede the grader's prompt. Their text is not visible to us, and we could not rule out that part of them comes from another gateway setting. The results therefore describe RAGrader through Way, and token counts are inflated by that amount.
 - **Old configurations:** the OpenRouter configurations (`baseline-*.yaml` without the `way-` prefix) stay as written but were not run.
 
 ## Datasets and citations
