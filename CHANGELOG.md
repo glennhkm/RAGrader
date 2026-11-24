@@ -31,7 +31,8 @@ The Moodle plugins are unchanged since 1.0.1.
 
 ### Fixed
 
-- A grading run that fails because the AI provider, the embedding service or the vector store is unavailable now returns `success: false`. Before, the generic error result had no `success` key, so `/v1` and the Moodle endpoint returned it as a successful grade of 0.
+- An AI response that is valid JSON but has no usable score (missing, null or non-numeric, including a missing number for a rubric criterion) is now a failed grade. Before, it was returned as a successful grade of 0.
+- `RAGPipeline.grade_essay` itself sets `success: false` on errors. The API already reported these failures correctly, because `EssayGrader` derives `success` from `error`.
 - Vector-store search errors are no longer turned into an empty result, which was reported as "no relevant course materials".
 
 ## [1.0.1] - 2026-11-22

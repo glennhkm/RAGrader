@@ -45,8 +45,8 @@ that scoped retrieval never cites it.
   Grade the same TLS question without `--module` filters to see `week-4.txt` appear.
 - Student `s02` gives a vague answer and should score lower than `s01`.
 - Student `s04` answers in Indonesian; with `PROMPT_LANGUAGE=auto` the feedback is Indonesian.
-- Small local models sometimes return malformed JSON; such rows get a low score and
-  `confidence = 0.5` from the fallback parser. Instruction-tuned models of 7B+ parameters
+- Small local models sometimes return malformed JSON; such rows have an
+  `error`, `confidence = 0.0` and `needs_review = True`. Instruction-tuned models of 7B+ parameters
   are recommended.
 
 ## Timing

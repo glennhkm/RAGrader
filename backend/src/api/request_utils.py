@@ -104,6 +104,24 @@ def rubric_maxima(rubric: Mapping[str, Any]) -> Dict[str, float]:
     return maxima
 
 
+def _is_number(value: Any) -> bool:
+    return not isinstance(value, bool) and _as_float(value, float("nan")) == _as_float(value)
+
+
+def has_usable_score(result: Mapping[str, Any], rubric: Mapping[str, Any]) -> bool:
+    """Whether the numbers ``normalize_grade`` would use are really in the response.
+
+    Without this check a missing or non-numeric score silently becomes a grade of 0.
+    """
+    raw = result.get("criterion_scores", {})
+    raw = raw if isinstance(raw, Mapping) else {}
+    criteria = {str(k).casefold(): v for k, v in raw.items() if isinstance(v, Mapping)}
+    names = [name.casefold() for name in rubric_maxima(rubric)]
+    if names and all(name in criteria for name in names):
+        return all(_is_number(criteria[name].get("score")) for name in names)
+    return _is_number(result.get("score"))
+
+
 def normalize_grade(
     result: Mapping[str, Any], rubric: Mapping[str, Any], maximum_grade: float
 ) -> Tuple[float, Dict[str, Dict[str, Any]], float]:
