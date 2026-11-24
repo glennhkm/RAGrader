@@ -51,7 +51,7 @@ LIMITATION_TEXT = [
     "qualitatively, without statistical claims.",
     "The no_context bound uses a single placeholder document ('No course materials are "
     "available'), because the product refuses to grade with zero retrieved documents.",
-    "OpenRouter provider order is not pinned in 4a; the served provider per call is "
+    "Provider routing is outside the configuration file; the served provider per call is "
     "recorded and reported.",
     "The oracle and no_context bounds exclude the case study, whose reference is a PDF.",
 ]
