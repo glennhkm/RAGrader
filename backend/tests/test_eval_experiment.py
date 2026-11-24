@@ -34,7 +34,7 @@ def _write(text):
 class ExperimentTests(unittest.TestCase):
     def test_all_committed_yamls_load_and_names_match(self):
         files = sorted(EXP_DIR.glob("*.yaml"))
-        self.assertEqual(len(files), 15)  # 8 OpenRouter configs + 7 Way configs
+        self.assertEqual(len(files), 21)  # 8 original, 7 Way and 6 pinned OpenRouter configs
         for f in files:
             cfg = load_experiment(f)
             self.assertIsInstance(cfg, ExperimentConfig)
@@ -54,6 +54,14 @@ class ExperimentTests(unittest.TestCase):
             self.assertNotIn("jk_case", c.datasets)  # student data stays off the gateway
         pilot = load_experiment(EXP_DIR / "way-pilot-gpt-oss-120b.yaml")
         self.assertEqual(pilot.max_items_per_split, 20)
+
+    def test_pinned_openrouter_configs(self):
+        files = sorted(EXP_DIR.glob("openrouter-*.yaml"))
+        self.assertEqual(len(files), 6)
+        for f in files:
+            c = load_experiment(f)
+            self.assertEqual(c.provider, "openai_compatible")  # no fallback provider
+            self.assertNotIn("jk_case", c.datasets)
 
     def test_pinned_values(self):
         c = load_experiment(EXP_DIR / "baseline-gpt-4.1-mini.yaml")

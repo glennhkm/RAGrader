@@ -1,0 +1,21 @@
+# Served through OpenRouter as a single openai_compatible endpoint (no fallback provider).
+# Every request is pinned to DeepInfra bf16 with data_collection=deny; embeddings are
+# baai/bge-m3 on DeepInfra fp32. Prices are DeepInfra's, checked 2026-11-24.
+# jk_case is not sent; it would be a separate run.
+name: openrouter-consistency-gpt-oss-120b
+phase: "4a"
+grader: inprocess
+provider: openai_compatible
+model: openai/gpt-oss-120b
+context_mode: rag
+temperature: null
+datasets:
+  engsaf: [dev]
+  scientsbank: [dev]
+repeats: 3
+variant_set: consistency
+price_in_per_mtok: 0.037
+price_out_per_mtok: 0.17
+concurrency: 8
+max_cost_usd: 2.0
+overrides: {}
