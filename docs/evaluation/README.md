@@ -121,6 +121,7 @@ The real-model agreement check has not been run yet.
 The committed 4a reports use the `openrouter-*-gpt-oss-120b.yaml` configurations: OpenRouter called as a single `openai_compatible` endpoint, so no other provider configured in the product is used as a fallback.
 - **Provider pinning:** every request carried `provider: {only: [...], allow_fallbacks: false, data_collection: deny}`, with `deepinfra/bf16` for the LLM and `deepinfra/fp32` for the embeddings. The pin is added by a local launcher around the harness, because the product's client has no such option; running the configurations without it uses OpenRouter's default routing.
 - **Embeddings:** `baai/bge-m3` (the product's default model) through OpenRouter.
+- **Before the score check:** these runs predate the check that fails a response without a usable score. Raw responses are not stored, so any such response is counted as a score of 0 in them.
 - **Case study:** `jk_case` was not sent.
 - **Way gateway:** the `way-*.yaml` configurations were tried first. Way adds about 1,450 prompt tokens of its own to every request, and its free tier stopped serving after 334 graded items, so no Way result is reported.
 - **Old configurations:** `baseline-*.yaml` and the other files without an `openrouter-` or `way-` prefix were not run.
