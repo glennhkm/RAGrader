@@ -50,8 +50,9 @@ class ExperimentTests(unittest.TestCase):
             self.assertIn(c.model, ("openai/gpt-oss-120b", "openai/gpt-oss-20b"))
             self.assertEqual((c.price_in_per_mtok, c.price_out_per_mtok), (0.0, 0.0))
             self.assertLessEqual(c.concurrency, 2)
+            self.assertEqual(c.requests_per_minute, 40)
         pilot = load_experiment(EXP_DIR / "way-pilot-gpt-oss-120b.yaml")
-        self.assertEqual(pilot.max_items_per_split, 3)
+        self.assertEqual(pilot.max_items_per_split, 20)
         self.assertNotIn("jk_case", pilot.datasets)
 
     def test_pinned_values(self):
@@ -113,7 +114,7 @@ class ExperimentTests(unittest.TestCase):
         import hashlib
         import json
         body = dataclasses.asdict(base)
-        for k in ("concurrency", "max_cost_usd", "max_items_per_split"):
+        for k in ("concurrency", "max_cost_usd", "max_items_per_split", "requests_per_minute"):
             body.pop(k)
         blob = json.dumps({"config": body, "prompt": prompt_template_hash(), "data": SNAP},
                           sort_keys=True, separators=(",", ":"), ensure_ascii=False)

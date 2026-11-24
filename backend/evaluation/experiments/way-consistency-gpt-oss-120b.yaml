@@ -17,5 +17,6 @@ variant_set: consistency
 price_in_per_mtok: 0.0
 price_out_per_mtok: 0.0
 concurrency: 2
+requests_per_minute: 40
 max_cost_usd: 1.0
 overrides: {}
