@@ -22,7 +22,7 @@ The Moodle plugins are unchanged since 1.0.1.
 - `backend/requirements-eval.txt`, an evaluation-only extra (the SciEntsBank parquet reader); the service does not need it.
 - Committed experiment configurations in `backend/evaluation/experiments/`.
 - A CI smoke step in `backend-tests`: the stub grader on the synthetic set, compared with `backend/evaluation/synthetic/expected_summary.json`.
-- `docs/evaluation/`, for the committed aggregate evaluation reports.
+- `docs/evaluation/`, with the aggregate 4a evaluation reports of `gpt-oss-120b`: baseline, no-context, oracle, consistency and injection.
 
 ### Changed
 

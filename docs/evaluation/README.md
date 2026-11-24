@@ -4,7 +4,7 @@ This folder holds the committed **aggregate** evaluation reports of RAGrader's g
 
 The harness that produces them lives in [`backend/src/evaluation`](../../backend/src/evaluation). The method is described in the [Cycle 4 design](../superpowers/specs/2026-11-23-cycle4-grading-quality-design.md).
 
-No reports have been committed yet. The 4a baseline runs are pending (see [HANDOFF §8.0](../HANDOFF.md)).
+The 4a reports for `gpt-oss-120b` (baseline, no-context, oracle, consistency, injection) are the `2026-11-24` and `2026-11-25` files. Runs of other models are pending.
 
 ## Privacy
 
@@ -114,17 +114,16 @@ It exits 1 with a per-key diff when a metric changes. After an intended change, 
 - Result: 50/50 graded on both sides with no failures, and all 50 pairs identical in score, confidence, integrity warnings and retrieved sources.
 - Gold reference: retrieved for 49/50 items.
 
-The real-model agreement check, which uses the Way gateway, is recorded with the baseline reports.
+The real-model agreement check has not been run yet.
 
 ## Model access for the 4a runs
 
-The baseline reports use the `way-*` configurations: Way's OpenAI-compatible gateway, called as a single `openai_compatible` endpoint (`LLM_BASE_URL` / `LLM_API_KEY` in `backend/.env`).
-- **Models:** `openai/gpt-oss-120b` (the product default) and `openai/gpt-oss-20b`, both on Way's free tier.
-- **No fallback:** a single endpoint never falls back to another provider, so every grade comes from the configured model.
-- **Key setup:** the key used must have TokenSaver switched off and no RAG collection bound, because both change the prompt the grader sends.
-- **Embeddings:** `text-embedding-3-small` through the same gateway, not the product default `BAAI/bge-m3`, because the Hugging Face credits were exhausted. Set `EMBEDDING_PROVIDER=openai_compatible`, `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL` and `EMBEDDING_API_KEY` in the environment of the evaluation process; `run_meta.json` records the provider and model.
-- **Known limitation:** Way adds its own service-policy instructions to every request. A one-sentence probe was billed as about 1,500 prompt tokens on both models (2026-11-23), so roughly 1,450 tokens precede the grader's prompt. Their text is not visible to us, and we could not rule out that part of them comes from another gateway setting. The results therefore describe RAGrader through Way, and token counts are inflated by that amount.
-- **Old configurations:** the OpenRouter configurations (`baseline-*.yaml` without the `way-` prefix) stay as written but were not run.
+The committed 4a reports use the `openrouter-*-gpt-oss-120b.yaml` configurations: OpenRouter called as a single `openai_compatible` endpoint, so no other provider configured in the product is used as a fallback.
+- **Provider pinning:** every request carried `provider: {only: [...], allow_fallbacks: false, data_collection: deny}`, with `deepinfra/bf16` for the LLM and `deepinfra/fp32` for the embeddings. The pin is added by a local launcher around the harness, because the product's client has no such option; running the configurations without it uses OpenRouter's default routing.
+- **Embeddings:** `baai/bge-m3` (the product's default model) through OpenRouter.
+- **Case study:** `jk_case` was not sent.
+- **Way gateway:** the `way-*.yaml` configurations were tried first. Way adds about 1,450 prompt tokens of its own to every request, and its free tier stopped serving after 334 graded items, so no Way result is reported.
+- **Old configurations:** `baseline-*.yaml` and the other files without an `openrouter-` or `way-` prefix were not run.
 
 ## Datasets and citations
 

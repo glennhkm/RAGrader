@@ -1,0 +1,423 @@
+{
+  "manifest": {
+    "git_sha": "4d4ae138c4a2c1bf6fe5816ce48af8b234539866",
+    "git_dirty": true,
+    "backend_version": "1.5.0",
+    "prompt_template_sha256": "56de909d628030bad5da0055871148d1b1021b34f336ab849e64741d8b374e7e",
+    "config_file": "backend/evaluation/experiments/openrouter-consistency-gpt-oss-120b.yaml",
+    "config_hash": "64e089892f8d097d",
+    "model": "openai/gpt-oss-120b",
+    "provider": "openai_compatible",
+    "temperature": null,
+    "seed": null,
+    "response_format": null,
+    "embedding_model": "baai/bge-m3",
+    "effective_settings": {
+      "chunk_overlap": 50,
+      "chunk_size": 500,
+      "context_mode": "rag",
+      "embedding_model": "baai/bge-m3",
+      "embedding_provider": "openai_compatible",
+      "grader": "inprocess",
+      "llm_max_new_tokens": 2048,
+      "llm_model": "openai/gpt-oss-120b",
+      "llm_provider": "openai_compatible",
+      "llm_temperature": 0.3,
+      "rerank_top_k": 3,
+      "reranker_model": "bge-reranker-v2-m3",
+      "reranker_type": "pinecone",
+      "reranking_enabled": false,
+      "retrieval_top_k": 5
+    },
+    "dataset_snapshots": {
+      "engsaf": "f8c4be30cb95985e297bb986f636ec818bfcf2ea0de776ec13cd4f64d6dcde85",
+      "scientsbank": "84bb4b50c2e2d85cc75f84dedf8f55ca34c02eb93ab158015795e1a3488350ac"
+    },
+    "split_hashes": {
+      "engsaf": "4a21c97d2b4420f7ab7cfaec31216e31485b0bfbd271f3b2f71e0cef95c8dd7d",
+      "scientsbank": "a77acdb33372b92f7e1f0f34d27039250a3c017c3cc193ede306df6995d93900"
+    },
+    "item_counts": {
+      "engsaf": {
+        "dev": 599,
+        "dev_bank": 280,
+        "test": 997,
+        "test_bank": 356
+      },
+      "scientsbank": {
+        "dev": 568,
+        "dev_bank": 1215,
+        "test_ua": 405,
+        "test_ua_bank": 135,
+        "test_uq": 598,
+        "test_uq_bank": 135
+      }
+    },
+    "thresholds": {
+      "engsaf": {
+        "t1": 30.0,
+        "t2": 76.0,
+        "fitted_on": "engsaf/dev",
+        "qwk_dev": 0.6518085428102749
+      },
+      "scientsbank": {
+        "t1": 25.0,
+        "t2": 55.0,
+        "fitted_on": "scientsbank/dev",
+        "qwk_dev": 0.6664141472111904
+      }
+    },
+    "thresholds_source": "docs/evaluation/2026-11-24-4a-openrouter-baseline-gpt-oss-120b.json",
+    "started_at": "2026-11-24T12:05:43.114953+00:00",
+    "finished_at": "2026-11-24T12:27:27.403214+00:00",
+    "calls": 300,
+    "prompt_tokens": 237687,
+    "completion_tokens": 156067,
+    "estimated_cost_usd": 0.035325809,
+    "failures": {
+      "parse_failure": 1
+    }
+  },
+  "metrics": {
+    "engsaf": {
+      "dev": {
+        "qwk": {
+          "value": 0.6946996466431095,
+          "low": 0.428083500286205,
+          "high": 0.8484115752284135,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "accuracy": {
+          "value": 0.6875,
+          "low": 0.5128048780487805,
+          "high": 0.8157894736842105,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "macro_f1": {
+          "value": 0.6732881136950905,
+          "low": 0.4513839285714285,
+          "high": 0.8013184451115732,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "adjacent_accuracy": {
+          "value": 0.9791666666666666,
+          "low": 0.9302223582211342,
+          "high": 1.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "mae_label": {
+          "value": 0.3333333333333333,
+          "low": 0.18604651162790697,
+          "high": 0.5333333333333333,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "mae_score": {
+          "value": 0.19375,
+          "low": 0.12845731707317073,
+          "high": 0.27715331010452954,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "spearman": {
+          "value": 0.6731822954897757,
+          "low": 0.3573219241004955,
+          "high": 0.8520202719744515,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "hit_at_1": {
+          "value": 0.8958333333333334,
+          "low": 0.7619047619047619,
+          "high": 1.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "hit_at_3": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "mrr": {
+          "value": 0.9479166666666666,
+          "low": 0.8809523809523809,
+          "high": 1.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "auroc_error": {
+          "value": 0.5303030303030303,
+          "low": 0.3478209109730849,
+          "high": 0.7426706259426846,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "ece": {
+          "value": 0.28770833333333323,
+          "low": 0.1646799019607842,
+          "high": 0.44762369337979063,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "grounded_share": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "cited_share": {
+          "value": 0.9583333333333334,
+          "low": 0.8695652173913043,
+          "high": 1.0,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "consistency_score_std": {
+          "value": 2.828330668027625,
+          "low": 1.1865662060392521,
+          "high": 4.196927410668771,
+          "n_items": 48,
+          "n_clusters": 21
+        },
+        "consistency_label_agreement": {
+          "value": 0.8541666666666666,
+          "low": 0.7543859649122807,
+          "high": 0.9736842105263158,
+          "n_items": 48,
+          "n_clusters": 21
+        }
+      }
+    },
+    "scientsbank": {
+      "dev": {
+        "qwk": {
+          "value": 0.6961038961038961,
+          "low": 0.42456868300173617,
+          "high": 0.8888948116560056,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "accuracy": {
+          "value": 0.7115384615384616,
+          "low": 0.5740740740740741,
+          "high": 0.8367984693877548,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "macro_f1": {
+          "value": 0.6123606889564336,
+          "low": 0.4704721633085896,
+          "high": 0.7508852385118715,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "adjacent_accuracy": {
+          "value": 0.9230769230769231,
+          "low": 0.8070175438596491,
+          "high": 1.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "mae_label": {
+          "value": 0.36538461538461536,
+          "low": 0.17647058823529413,
+          "high": 0.5932936766623204,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "mae_score": {
+          "value": 0.21826923076923077,
+          "low": 0.13239049145299145,
+          "high": 0.3131654858299595,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "spearman": {
+          "value": 0.6900642275462286,
+          "low": 0.46123946996944004,
+          "high": 0.8498544843836086,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "accuracy_2way": {
+          "value": 0.8076923076923077,
+          "low": 0.6727272727272727,
+          "high": 0.9245283018867925,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "macro_f1_2way": {
+          "value": 0.8003072196620584,
+          "low": 0.6548110080760434,
+          "high": 0.9215514096185738,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "hit_at_1": {
+          "value": 0.9807692307692307,
+          "low": 0.94,
+          "high": 1.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "hit_at_3": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "mrr": {
+          "value": 0.9903846153846154,
+          "low": 0.97,
+          "high": 1.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "auroc_error": {
+          "value": 0.6963963963963964,
+          "low": 0.5391822638146168,
+          "high": 0.8416761363636364,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "ece": {
+          "value": 0.21173076923076933,
+          "low": 0.09087026315789459,
+          "high": 0.34234672619047635,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "grounded_share": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "cited_share": {
+          "value": 0.9807692307692307,
+          "low": 0.94,
+          "high": 1.0,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "consistency_score_std": {
+          "value": 3.2079143931758987,
+          "low": 2.3377192479265165,
+          "high": 4.120725810673719,
+          "n_items": 52,
+          "n_clusters": 43
+        },
+        "consistency_label_agreement": {
+          "value": 0.8846153846153846,
+          "low": 0.7735849056603774,
+          "high": 0.9666803278688524,
+          "n_items": 52,
+          "n_clusters": 43
+        }
+      }
+    }
+  },
+  "counts": {
+    "engsaf": {
+      "dev": 48,
+      "dev_scored": 48,
+      "dev_failed": 0,
+      "dev_variant_results": 96
+    },
+    "scientsbank": {
+      "dev": 52,
+      "dev_scored": 52,
+      "dev_failed": 0,
+      "dev_variant_results": 104
+    }
+  },
+  "failures": {
+    "parse_failure": 1
+  },
+  "thresholds": {
+    "engsaf": {
+      "t1": 30.0,
+      "t2": 76.0,
+      "fitted_on": "engsaf/dev",
+      "qwk_dev": 0.6518085428102749
+    },
+    "scientsbank": {
+      "t1": 25.0,
+      "t2": 55.0,
+      "fitted_on": "scientsbank/dev",
+      "qwk_dev": 0.6664141472111904
+    }
+  },
+  "extra": {
+    "config": {
+      "name": "openrouter-consistency-gpt-oss-120b",
+      "phase": "4a",
+      "grader": "inprocess",
+      "context_mode": "rag",
+      "variant_set": "consistency",
+      "repeats": 3
+    },
+    "bootstrap": {
+      "n_resamples": 2000,
+      "seed": 20261123,
+      "cluster": "question_id",
+      "interval": "95% percentile"
+    },
+    "providers": {
+      "DeepInfra": 300
+    },
+    "threshold_errors": {},
+    "thresholds_source": "docs/evaluation/2026-11-24-4a-openrouter-baseline-gpt-oss-120b.json"
+  }
+}

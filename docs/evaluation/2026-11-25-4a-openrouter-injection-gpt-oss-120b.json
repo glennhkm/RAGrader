@@ -1,0 +1,743 @@
+{
+  "manifest": {
+    "git_sha": "4d4ae138c4a2c1bf6fe5816ce48af8b234539866",
+    "git_dirty": true,
+    "backend_version": "1.5.0",
+    "prompt_template_sha256": "56de909d628030bad5da0055871148d1b1021b34f336ab849e64741d8b374e7e",
+    "config_file": "backend/evaluation/experiments/openrouter-injection-gpt-oss-120b.yaml",
+    "config_hash": "a12b471f4c7b91bf",
+    "model": "openai/gpt-oss-120b",
+    "provider": "openai_compatible",
+    "temperature": null,
+    "seed": null,
+    "response_format": null,
+    "embedding_model": "baai/bge-m3",
+    "effective_settings": {
+      "chunk_overlap": 50,
+      "chunk_size": 500,
+      "context_mode": "rag",
+      "embedding_model": "baai/bge-m3",
+      "embedding_provider": "openai_compatible",
+      "grader": "inprocess",
+      "llm_max_new_tokens": 2048,
+      "llm_model": "openai/gpt-oss-120b",
+      "llm_provider": "openai_compatible",
+      "llm_temperature": 0.3,
+      "rerank_top_k": 3,
+      "reranker_model": "bge-reranker-v2-m3",
+      "reranker_type": "pinecone",
+      "reranking_enabled": false,
+      "retrieval_top_k": 5
+    },
+    "dataset_snapshots": {
+      "engsaf": "f8c4be30cb95985e297bb986f636ec818bfcf2ea0de776ec13cd4f64d6dcde85",
+      "scientsbank": "84bb4b50c2e2d85cc75f84dedf8f55ca34c02eb93ab158015795e1a3488350ac"
+    },
+    "split_hashes": {
+      "engsaf": "4a21c97d2b4420f7ab7cfaec31216e31485b0bfbd271f3b2f71e0cef95c8dd7d",
+      "scientsbank": "a77acdb33372b92f7e1f0f34d27039250a3c017c3cc193ede306df6995d93900"
+    },
+    "item_counts": {
+      "engsaf": {
+        "dev": 599,
+        "dev_bank": 280,
+        "test": 997,
+        "test_bank": 356
+      },
+      "scientsbank": {
+        "dev": 568,
+        "dev_bank": 1215,
+        "test_ua": 405,
+        "test_ua_bank": 135,
+        "test_uq": 598,
+        "test_uq_bank": 135
+      }
+    },
+    "thresholds": {
+      "engsaf": {
+        "t1": 30.0,
+        "t2": 76.0,
+        "fitted_on": "engsaf/dev",
+        "qwk_dev": 0.6518085428102749
+      },
+      "scientsbank": {
+        "t1": 25.0,
+        "t2": 55.0,
+        "fitted_on": "scientsbank/dev",
+        "qwk_dev": 0.6664141472111904
+      }
+    },
+    "thresholds_source": "docs/evaluation/2026-11-24-4a-openrouter-baseline-gpt-oss-120b.json",
+    "started_at": "2026-11-24T12:27:30.785838+00:00",
+    "finished_at": "2026-11-24T22:34:38.438756+00:00",
+    "calls": 1600,
+    "prompt_tokens": 1280799,
+    "completion_tokens": 864667,
+    "estimated_cost_usd": 0.194382953,
+    "failures": {
+      "parse_failure": 2
+    }
+  },
+  "metrics": {
+    "engsaf": {
+      "dev": {
+        "qwk": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "accuracy": {
+          "value": 0.7777777777777778,
+          "low": 0.6859445100354191,
+          "high": 0.8804477225672878,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "macro_f1": {
+          "value": 0.2916666666666667,
+          "low": 0.27124044533067465,
+          "high": 0.31455763566908695,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "adjacent_accuracy": {
+          "value": 0.9595959595959596,
+          "low": 0.918023143683703,
+          "high": 0.9906542056074766,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "mae_label": {
+          "value": 0.26262626262626265,
+          "low": 0.14150430680885973,
+          "high": 0.3804347826086957,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "mae_score": {
+          "value": 0.18282828282828284,
+          "low": 0.11234077535479403,
+          "high": 0.2519029187153467,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "spearman": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "hit_at_1": {
+          "value": 0.8383838383838383,
+          "low": 0.6438236421113134,
+          "high": 1.0,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "hit_at_3": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "mrr": {
+          "value": 0.9191919191919192,
+          "low": 0.8219118210556566,
+          "high": 1.0,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "auroc_error": {
+          "value": 0.672077922077922,
+          "low": 0.5486723519135303,
+          "high": 0.7760795454545455,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "ece": {
+          "value": 0.19202020202020198,
+          "low": 0.090205703825032,
+          "high": 0.2839472083035077,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "failure_rate": {
+          "value": 0.01,
+          "low": 0.0,
+          "high": 0.038834951456310676,
+          "n_items": 100,
+          "n_clusters": 35
+        },
+        "parse_failure_rate": {
+          "value": 0.01,
+          "low": 0.0,
+          "high": 0.038834951456310676,
+          "n_items": 100,
+          "n_clusters": 35
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "grounded_share": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "cited_share": {
+          "value": 0.9494949494949495,
+          "low": 0.8581306990881459,
+          "high": 1.0,
+          "n_items": 99,
+          "n_clusters": 34
+        },
+        "injection_score_uplift": {
+          "value": -0.5286195286195287,
+          "low": -2.5300259170653905,
+          "high": 2.020493197278911,
+          "n_items": 297,
+          "n_clusters": 34
+        },
+        "injection_label_rise_share": {
+          "value": 0.08080808080808081,
+          "low": 0.036571632608217976,
+          "high": 0.12936014372581534,
+          "n_items": 297,
+          "n_clusters": 34
+        },
+        "injection_detection_rate": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 297,
+          "n_clusters": 34
+        }
+      },
+      "test": {
+        "qwk": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "accuracy": {
+          "value": 0.84,
+          "low": 0.7633587786259542,
+          "high": 0.9041132322937918,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "macro_f1": {
+          "value": 0.3043478260869565,
+          "low": 0.2887441095748537,
+          "high": 0.4742857142857143,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "adjacent_accuracy": {
+          "value": 0.99,
+          "low": 0.9639612504070336,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "mae_label": {
+          "value": 0.17,
+          "low": 0.09773438019828332,
+          "high": 0.264173675835417,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "mae_score": {
+          "value": 0.1337,
+          "low": 0.08544179348599061,
+          "high": 0.18435751970891445,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "spearman": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "hit_at_1": {
+          "value": 0.97,
+          "low": 0.9142801339285714,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "hit_at_3": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "mrr": {
+          "value": 0.985,
+          "low": 0.9571400669642858,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "auroc_error": {
+          "value": 0.6566220238095238,
+          "low": 0.519116433048049,
+          "high": 0.8252122684760682,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "ece": {
+          "value": 0.14070000000000066,
+          "low": 0.06748852040816342,
+          "high": 0.21948256320837017,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "grounded_share": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "cited_share": {
+          "value": 0.98,
+          "low": 0.9514563106796117,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 32
+        },
+        "injection_score_uplift": {
+          "value": 0.14333333333333334,
+          "low": -2.174589371980676,
+          "high": 2.9286904761904755,
+          "n_items": 300,
+          "n_clusters": 32
+        },
+        "injection_label_rise_share": {
+          "value": 0.05333333333333334,
+          "low": 0.022648276076674138,
+          "high": 0.09001449275362311,
+          "n_items": 300,
+          "n_clusters": 32
+        },
+        "injection_detection_rate": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 300,
+          "n_clusters": 32
+        }
+      }
+    },
+    "scientsbank": {
+      "dev": {
+        "qwk": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "accuracy": {
+          "value": 0.89,
+          "low": 0.8235294117647058,
+          "high": 0.9484536082474226,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "macro_f1": {
+          "value": 0.31393298059964725,
+          "low": 0.3010752688172043,
+          "high": 0.32487309644670054,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "adjacent_accuracy": {
+          "value": 0.95,
+          "low": 0.9038461538461539,
+          "high": 0.9896907216494846,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "mae_label": {
+          "value": 0.16,
+          "low": 0.0707070707070707,
+          "high": 0.2619105409153953,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "mae_score": {
+          "value": 0.136,
+          "low": 0.10098653297533144,
+          "high": 0.1752858956352636,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "spearman": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "accuracy_2way": {
+          "value": 0.95,
+          "low": 0.9038461538461539,
+          "high": 0.9896907216494846,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "macro_f1_2way": {
+          "value": 0.48717948717948717,
+          "low": 0.47474747474747475,
+          "high": 0.49740932642487046,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "hit_at_1": {
+          "value": 0.93,
+          "low": 0.8695652173913043,
+          "high": 0.979381443298969,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "hit_at_3": {
+          "value": 0.99,
+          "low": 0.967391304347826,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "mrr": {
+          "value": 0.9583333333333335,
+          "low": 0.9233305243445694,
+          "high": 0.9883362211221123,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "auroc_error": {
+          "value": 0.7293156281920327,
+          "low": 0.6142804232804233,
+          "high": 0.8297969723834084,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "ece": {
+          "value": 0.11640000000000002,
+          "low": 0.06062702542874066,
+          "high": 0.1898144612683784,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "grounded_share": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "cited_share": {
+          "value": 0.98,
+          "low": 0.9504950495049505,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 70
+        },
+        "injection_score_uplift": {
+          "value": -3.3277591973244145,
+          "low": -5.278229783037475,
+          "high": -1.3343214929847997,
+          "n_items": 299,
+          "n_clusters": 70
+        },
+        "injection_label_rise_share": {
+          "value": 0.026755852842809364,
+          "low": 0.009344347675125141,
+          "high": 0.04965425531914889,
+          "n_items": 299,
+          "n_clusters": 70
+        },
+        "injection_detection_rate": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 299,
+          "n_clusters": 70
+        }
+      },
+      "test_uq": {
+        "qwk": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "accuracy": {
+          "value": 0.85,
+          "low": 0.7283670033670033,
+          "high": 0.9379521463757916,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "macro_f1": {
+          "value": 0.30630630630630634,
+          "low": 0.28094611528822055,
+          "high": 0.3234718165097912,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "adjacent_accuracy": {
+          "value": 0.96,
+          "low": 0.9259160756501182,
+          "high": 0.9894764254385965,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "mae_label": {
+          "value": 0.19,
+          "low": 0.0759445723053318,
+          "high": 0.34375,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "mae_score": {
+          "value": 0.14800000000000002,
+          "low": 0.10318982712765959,
+          "high": 0.20219780219780223,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "spearman": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "accuracy_2way": {
+          "value": 0.96,
+          "low": 0.9259160756501182,
+          "high": 0.9894764254385965,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "macro_f1_2way": {
+          "value": 0.4897959183673469,
+          "low": 0.4807665745856354,
+          "high": 0.4973551898944569,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "hit_at_1": {
+          "value": 0.94,
+          "low": 0.8378158049353701,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "hit_at_3": {
+          "value": 0.98,
+          "low": 0.9302325581395349,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "mrr": {
+          "value": 0.9583333333333335,
+          "low": 0.881468253968254,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "auroc_error": {
+          "value": 0.6047058823529412,
+          "low": 0.4485671818639376,
+          "high": 0.7771707255919418,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "ece": {
+          "value": 0.1751,
+          "low": 0.09019663149350639,
+          "high": 0.293800679012346,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "grounded_share": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "cited_share": {
+          "value": 0.98,
+          "low": 0.9494917529727657,
+          "high": 1.0,
+          "n_items": 100,
+          "n_clusters": 15
+        },
+        "injection_score_uplift": {
+          "value": -0.3333333333333333,
+          "low": -2.6888490954266637,
+          "high": 2.59563706163104,
+          "n_items": 300,
+          "n_clusters": 15
+        },
+        "injection_label_rise_share": {
+          "value": 0.06666666666666667,
+          "low": 0.04629400440044004,
+          "high": 0.09525075987841938,
+          "n_items": 300,
+          "n_clusters": 15
+        },
+        "injection_detection_rate": {
+          "value": 1.0,
+          "low": 1.0,
+          "high": 1.0,
+          "n_items": 300,
+          "n_clusters": 15
+        }
+      }
+    }
+  },
+  "counts": {
+    "engsaf": {
+      "dev": 100,
+      "dev_scored": 99,
+      "dev_failed": 1,
+      "dev_variant_results": 300,
+      "test": 100,
+      "test_scored": 100,
+      "test_failed": 0,
+      "test_variant_results": 300
+    },
+    "scientsbank": {
+      "dev": 100,
+      "dev_scored": 100,
+      "dev_failed": 0,
+      "dev_variant_results": 300,
+      "test_uq": 100,
+      "test_uq_scored": 100,
+      "test_uq_failed": 0,
+      "test_uq_variant_results": 300
+    }
+  },
+  "failures": {
+    "parse_failure": 2
+  },
+  "thresholds": {
+    "engsaf": {
+      "t1": 30.0,
+      "t2": 76.0,
+      "fitted_on": "engsaf/dev",
+      "qwk_dev": 0.6518085428102749
+    },
+    "scientsbank": {
+      "t1": 25.0,
+      "t2": 55.0,
+      "fitted_on": "scientsbank/dev",
+      "qwk_dev": 0.6664141472111904
+    }
+  },
+  "extra": {
+    "config": {
+      "name": "openrouter-injection-gpt-oss-120b",
+      "phase": "4a",
+      "grader": "inprocess",
+      "context_mode": "rag",
+      "variant_set": "injection",
+      "repeats": 1
+    },
+    "bootstrap": {
+      "n_resamples": 2000,
+      "seed": 20261123,
+      "cluster": "question_id",
+      "interval": "95% percentile"
+    },
+    "providers": {
+      "DeepInfra": 1600
+    },
+    "threshold_errors": {},
+    "thresholds_source": "docs/evaluation/2026-11-24-4a-openrouter-baseline-gpt-oss-120b.json"
+  }
+}
