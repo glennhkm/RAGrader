@@ -51,9 +51,9 @@ class ExperimentTests(unittest.TestCase):
             self.assertEqual((c.price_in_per_mtok, c.price_out_per_mtok), (0.0, 0.0))
             self.assertLessEqual(c.concurrency, 2)
             self.assertEqual(c.requests_per_minute, 40)
+            self.assertNotIn("jk_case", c.datasets)  # student data stays off the gateway
         pilot = load_experiment(EXP_DIR / "way-pilot-gpt-oss-120b.yaml")
         self.assertEqual(pilot.max_items_per_split, 20)
-        self.assertNotIn("jk_case", pilot.datasets)
 
     def test_pinned_values(self):
         c = load_experiment(EXP_DIR / "baseline-gpt-4.1-mini.yaml")
