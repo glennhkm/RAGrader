@@ -185,6 +185,8 @@ class RAGPipeline:
         except Exception as e:
             logger.error(f"Error while grading: {e}")
             return {
+                # Callers treat a missing key as success and would release the 0 as a grade.
+                "success": False,
                 "score": 0,
                 "feedback": f"Error while grading: {str(e)}",
                 "citations": [],

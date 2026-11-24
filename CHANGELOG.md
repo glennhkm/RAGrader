@@ -29,6 +29,11 @@ The Moodle plugins are unchanged since 1.0.1.
 - `/v1/namespaces/{ns}/grade` now populates `error` when the grading pipeline returns an error, for example when the AI response could not be parsed (the field already existed; the grade itself is unchanged).
 - `LLMWrapper` records `last_usage` (token counts of the last completion) and `last_served_provider` (the provider that served it).
 
+### Fixed
+
+- A grading run that fails because the AI provider, the embedding service or the vector store is unavailable now returns `success: false`. Before, the generic error result had no `success` key, so `/v1` and the Moodle endpoint returned it as a successful grade of 0.
+- Vector-store search errors are no longer turned into an empty result, which was reported as "no relevant course materials".
+
 ## [1.0.1] - 2026-11-22
 
 Security and maintenance release: grading integrity guards, licensing, and supported runtimes.
