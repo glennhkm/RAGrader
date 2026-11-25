@@ -8,6 +8,10 @@ listed in the table below.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-25
+
+Evaluation release: an offline grading-quality harness, the first published results, and safer handling of unusable AI responses.
+
 ### Component versions
 
 | Component | Version | Moodle plugin version | Requires |
@@ -26,7 +30,6 @@ The Moodle plugins are unchanged since 1.0.1.
 
 ### Changed
 
-- `/v1/namespaces/{ns}/grade` now populates `error` when the grading pipeline returns an error, for example when the AI response could not be parsed (the field already existed; the grade itself is unchanged).
 - `LLMWrapper` records `last_usage` (token counts of the last completion) and `last_served_provider` (the provider that served it).
 
 ### Fixed
@@ -34,6 +37,11 @@ The Moodle plugins are unchanged since 1.0.1.
 - An AI response that is valid JSON but has no usable score (missing, null or non-numeric, including a missing number for a rubric criterion) is now a failed grade. Before, it was returned as a successful grade of 0.
 - `RAGPipeline.grade_essay` itself sets `success: false` on errors. The API already reported these failures correctly, because `EssayGrader` derives `success` from `error`.
 - Vector-store search errors are no longer turned into an empty result, which was reported as "no relevant course materials".
+
+### Upgrade notes
+
+- Only the backend changes. Version 1.5.0 works with the 1.0.1 plugins, and no data migration is needed.
+- Some responses that used to come back as a grade of 0 now come back with `success: false` and an `error` starting with "Failed to parse". The Moodle plugins and the CLI already handle that as a failed grading; other `/v1` clients should check `success` before using `score`.
 
 ## [1.0.1] - 2026-11-22
 
@@ -121,6 +129,7 @@ First public release. It summarizes three development cycles.
 - Legacy vectors of files that were removed before the upgrade may remain in the course collection. AI RAG Assignment grading is owner-scoped and ignores them, but `local_assign_ai_rag` grades against the whole course collection and can still retrieve them; if that matters, clear the course collection and then re-vectorize the course's materials.
 - The AI RAG Material and AI RAG Assignment activity modules now call the RAG server through Moodle's HTTP client, which honours `$CFG->proxyhost`. If a proxy is configured, add the RAG server host to `$CFG->proxybypass`.
 
-[Unreleased]: https://github.com/glennhkm/RAGrader/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/glennhkm/RAGrader/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/glennhkm/RAGrader/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/glennhkm/RAGrader/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/glennhkm/RAGrader/releases/tag/v1.0.0
