@@ -280,7 +280,7 @@ Every submission a teacher confirms or overrides in `grade_review.php` is theref
 
 ### 8.0 Cycle 4 status (2026-11-23)
 
-The brainstorming in §8.2 was settled with the owner, and the design is in [`docs/superpowers/specs/2026-11-23-cycle4-grading-quality-design.md`](superpowers/specs/2026-11-23-cycle4-grading-quality-design.md); §8.2 to §8.4 below are kept as history. **Cycle 4a, the evaluation harness, is built** on branch `feat/cycle4a-eval-harness` (backend 1.5.0, unreleased): `python -m src.evaluation prepare|run|report|compare` with EngSAF, SciEntsBank, the case study and a synthetic smoke set, stub, in-process and HTTP graders, and a CI smoke step (see [`docs/evaluation/README.md`](evaluation/README.md)). **The `gpt-oss-120b` runs (baseline, no-context, oracle, consistency, injection) are done** and their aggregate reports are in `docs/evaluation/` (2026-11-24 and 2026-11-25). Still pending: other models, the real-model agreement check, and the case study, which needs the owner's consent before it is sent to a provider.
+The brainstorming in §8.2 was settled with the owner, and the design is in [`docs/superpowers/specs/2026-11-23-cycle4-grading-quality-design.md`](superpowers/specs/2026-11-23-cycle4-grading-quality-design.md); §8.2 to §8.4 below are kept as history. **Cycle 4a, the evaluation harness, is built** and prepared for release as v1.1.0 (backend 1.5.0): `python -m src.evaluation prepare|run|report|compare` with EngSAF, SciEntsBank, the case study and a synthetic smoke set, stub, in-process and HTTP graders, and a CI smoke step (see [`docs/evaluation/README.md`](evaluation/README.md)). **The `gpt-oss-120b` runs (baseline, no-context, oracle, consistency, injection) are done** and their aggregate reports are in `docs/evaluation/` (2026-11-24 and 2026-11-25). Still pending: other models, the real-model agreement check, and the case study, which needs the owner's consent before it is sent to a provider.
 
 ### 8.1 Why
 
@@ -366,7 +366,7 @@ This is the agent's proposal and has not been approved yet.
    - Done when confidence separates good from bad grades (the AUROC target is set from the baseline).
    - A documented threshold is chosen.
 5. **D (G3, export, G1, G2)**, with PHPUnit across the CI matrix.
-6. **Release.** Release v1.1.0, with backend 1.5.0 (new evaluation features and response semantics) and plugin minors. Add the CHANGELOG entry and PRD updates: §3.2 measured values, and a new Cycle 4 row in §8.
+6. **Release.** v1.1.0 (backend 1.5.0, the 4a harness and reports) is prepared separately; release the Cycle 4b to 4d work, with plugin minors, after it. Add the CHANGELOG entry and PRD updates: §3.2 measured values, and a new Cycle 4 row in §8.
 
 ### 8.5 Anti-goals
 

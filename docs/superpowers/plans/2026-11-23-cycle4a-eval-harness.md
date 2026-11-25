@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Branch `feat/cycle4a-eval-harness`, created from `docs/cycle4-design`. No commits to `main`. Merge and tag only with the owner's approval.
-- Conventional Commits. Every commit message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Conventional Commits.
 - Only `src/utils/config.py` reads the environment (`tests/test_config_boundaries.py`). The harness gets settings from `get_settings()` and never calls `os.environ` or `dotenv`.
 - No `pandas`, `numpy`, `scikit-learn` or `scipy` in any requirements file. Metrics are pure Python.
 - Unit tests run with network blocked: `cd backend && python tests/run_offline.py -v`. New tests are flat files `backend/tests/test_eval_*.py`, using `unittest.TestCase`.
