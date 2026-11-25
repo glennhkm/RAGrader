@@ -340,8 +340,10 @@ class VectorStore:
             return results
             
         except Exception as e:
+            # Not an empty result: an embedding or store outage must not look like
+            # "no relevant materials" to the grading pipeline.
             logger.error(f"Error during similarity search: {e}")
-            return []
+            raise
     
     def similarity_search_with_score(
         self,
@@ -374,7 +376,7 @@ class VectorStore:
             
         except Exception as e:
             logger.error(f"Error during similarity search with score: {e}")
-            return []
+            raise
     
     def delete_document_by_source(
         self,

@@ -1,0 +1,692 @@
+{
+  "manifest": {
+    "git_sha": "4d4ae138c4a2c1bf6fe5816ce48af8b234539866",
+    "git_dirty": true,
+    "backend_version": "1.5.0",
+    "prompt_template_sha256": "56de909d628030bad5da0055871148d1b1021b34f336ab849e64741d8b374e7e",
+    "config_file": "backend/evaluation/experiments/openrouter-no-context-gpt-oss-120b.yaml",
+    "config_hash": "11bc137abb06e3ac",
+    "model": "openai/gpt-oss-120b",
+    "provider": "openai_compatible",
+    "temperature": null,
+    "seed": null,
+    "response_format": null,
+    "embedding_model": "baai/bge-m3",
+    "effective_settings": {
+      "chunk_overlap": 50,
+      "chunk_size": 500,
+      "context_mode": "no_context",
+      "embedding_model": "baai/bge-m3",
+      "embedding_provider": "openai_compatible",
+      "grader": "inprocess",
+      "llm_max_new_tokens": 2048,
+      "llm_model": "openai/gpt-oss-120b",
+      "llm_provider": "openai_compatible",
+      "llm_temperature": 0.3,
+      "rerank_top_k": 3,
+      "reranker_model": "bge-reranker-v2-m3",
+      "reranker_type": "pinecone",
+      "reranking_enabled": false,
+      "retrieval_top_k": 5
+    },
+    "dataset_snapshots": {
+      "engsaf": "f8c4be30cb95985e297bb986f636ec818bfcf2ea0de776ec13cd4f64d6dcde85",
+      "scientsbank": "84bb4b50c2e2d85cc75f84dedf8f55ca34c02eb93ab158015795e1a3488350ac"
+    },
+    "split_hashes": {
+      "engsaf": "4a21c97d2b4420f7ab7cfaec31216e31485b0bfbd271f3b2f71e0cef95c8dd7d",
+      "scientsbank": "a77acdb33372b92f7e1f0f34d27039250a3c017c3cc193ede306df6995d93900"
+    },
+    "item_counts": {
+      "engsaf": {
+        "dev": 599,
+        "dev_bank": 280,
+        "test": 997,
+        "test_bank": 356
+      },
+      "scientsbank": {
+        "dev": 568,
+        "dev_bank": 1215,
+        "test_ua": 405,
+        "test_ua_bank": 135,
+        "test_uq": 598,
+        "test_uq_bank": 135
+      }
+    },
+    "thresholds": {
+      "engsaf": {
+        "t1": 30.0,
+        "t2": 50.0,
+        "fitted_on": "engsaf/dev",
+        "qwk_dev": 0.5696905077755323
+      },
+      "scientsbank": {
+        "t1": 20.0,
+        "t2": 25.0,
+        "fitted_on": "scientsbank/dev",
+        "qwk_dev": 0.5097785582730116
+      }
+    },
+    "thresholds_source": null,
+    "started_at": "2026-11-24T14:30:03.596804+00:00",
+    "finished_at": "2026-11-24T22:37:05.285877+00:00",
+    "calls": 3167,
+    "prompt_tokens": 1746990,
+    "completion_tokens": 1202171,
+    "estimated_cost_usd": 0.2690076999999999,
+    "failures": {
+      "parse_failure": 6
+    }
+  },
+  "metrics": {
+    "engsaf": {
+      "dev": {
+        "qwk": {
+          "value": 0.5696905077755323,
+          "low": 0.4785882878143965,
+          "high": 0.6644626888897343,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "accuracy": {
+          "value": 0.6285714285714286,
+          "low": 0.5581870266119502,
+          "high": 0.7210386429905317,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "macro_f1": {
+          "value": 0.5906354347339301,
+          "low": 0.5401484986854653,
+          "high": 0.6441138562055672,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "adjacent_accuracy": {
+          "value": 0.9277310924369748,
+          "low": 0.8912982754432839,
+          "high": 0.9516714989059081,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "mae_label": {
+          "value": 0.4436974789915966,
+          "low": 0.35542377292016974,
+          "high": 0.5139605230489116,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "mae_score": {
+          "value": 0.24215126050420172,
+          "low": 0.20899561482820977,
+          "high": 0.2714328852327448,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "spearman": {
+          "value": 0.5788614389218468,
+          "low": 0.47687159828370734,
+          "high": 0.658945612962188,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "auroc_error": {
+          "value": 0.6019369903452948,
+          "low": 0.5247315662649943,
+          "high": 0.661300214381445,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "ece": {
+          "value": 0.21989915966386547,
+          "low": 0.15873137507429996,
+          "high": 0.2825062451209994,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "failure_rate": {
+          "value": 0.00667779632721202,
+          "low": 0.0,
+          "high": 0.01348349072861377,
+          "n_items": 599,
+          "n_clusters": 46
+        },
+        "parse_failure_rate": {
+          "value": 0.00667779632721202,
+          "low": 0.0,
+          "high": 0.01348349072861377,
+          "n_items": 599,
+          "n_clusters": 46
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "grounded_share": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 595,
+          "n_clusters": 46
+        },
+        "cited_share": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 595,
+          "n_clusters": 46
+        }
+      },
+      "test": {
+        "qwk": {
+          "value": 0.3836350601713613,
+          "low": 0.2586937914261425,
+          "high": 0.5228785112525679,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "accuracy": {
+          "value": 0.5005025125628141,
+          "low": 0.41073052155103973,
+          "high": 0.5892942704139152,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "macro_f1": {
+          "value": 0.4799104966316361,
+          "low": 0.4032632906281116,
+          "high": 0.5525899187599995,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "adjacent_accuracy": {
+          "value": 0.8683417085427135,
+          "low": 0.8186423435814142,
+          "high": 0.9214342064355665,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "mae_label": {
+          "value": 0.6311557788944724,
+          "low": 0.5064886716948572,
+          "high": 0.7478640320981921,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "mae_score": {
+          "value": 0.3041206030150754,
+          "low": 0.25430642256902763,
+          "high": 0.35044450675647404,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "spearman": {
+          "value": 0.46375175182216427,
+          "low": 0.35779228484537867,
+          "high": 0.5798046540098216,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "auroc_error": {
+          "value": 0.6454712208996953,
+          "low": 0.5821247640310857,
+          "high": 0.6927174574569669,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "ece": {
+          "value": 0.23494472361808863,
+          "low": 0.19672908556969923,
+          "high": 0.2754472791386193,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "failure_rate": {
+          "value": 0.0020060180541624875,
+          "low": 0.0,
+          "high": 0.005605499091189252,
+          "n_items": 997,
+          "n_clusters": 61
+        },
+        "parse_failure_rate": {
+          "value": 0.0020060180541624875,
+          "low": 0.0,
+          "high": 0.005605499091189252,
+          "n_items": 997,
+          "n_clusters": 61
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "grounded_share": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 995,
+          "n_clusters": 61
+        },
+        "cited_share": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 995,
+          "n_clusters": 61
+        }
+      }
+    },
+    "scientsbank": {
+      "dev": {
+        "qwk": {
+          "value": 0.5097785582730116,
+          "low": 0.421669117968008,
+          "high": 0.5872054219398928,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "accuracy": {
+          "value": 0.5440140845070423,
+          "low": 0.4948966442247002,
+          "high": 0.5925942915392456,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "macro_f1": {
+          "value": 0.5179554782673734,
+          "low": 0.4718959528195187,
+          "high": 0.5603455120225832,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "adjacent_accuracy": {
+          "value": 0.9154929577464789,
+          "low": 0.8843496773709484,
+          "high": 0.9430065642689875,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "mae_label": {
+          "value": 0.5404929577464789,
+          "low": 0.477025112058532,
+          "high": 0.6084581605077928,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "mae_score": {
+          "value": 0.3278169014084507,
+          "low": 0.29981733796032917,
+          "high": 0.3578559717806041,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "spearman": {
+          "value": 0.5214838719721238,
+          "low": 0.4291116055910521,
+          "high": 0.6010259754297923,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "accuracy_2way": {
+          "value": 0.7183098591549296,
+          "low": 0.6752267964420435,
+          "high": 0.7625016247833621,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "macro_f1_2way": {
+          "value": 0.7113821138211383,
+          "low": 0.666218061746605,
+          "high": 0.756872884277907,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "auroc_error": {
+          "value": 0.5640064475015931,
+          "low": 0.513532940051168,
+          "high": 0.6160924812896496,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "ece": {
+          "value": 0.28607394366197236,
+          "low": 0.24464340952641717,
+          "high": 0.33383331641135666,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "grounded_share": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 568,
+          "n_clusters": 135
+        },
+        "cited_share": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 568,
+          "n_clusters": 135
+        }
+      },
+      "test_uq": {
+        "qwk": {
+          "value": 0.5888632886660645,
+          "low": 0.40193118697378855,
+          "high": 0.7276848630148881,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "accuracy": {
+          "value": 0.6070234113712375,
+          "low": 0.46138994798842287,
+          "high": 0.7331830067988895,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "macro_f1": {
+          "value": 0.5594323636612929,
+          "low": 0.4411441954221727,
+          "high": 0.6474035614237469,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "adjacent_accuracy": {
+          "value": 0.9230769230769231,
+          "low": 0.8962233521195786,
+          "high": 0.9462872897594209,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "mae_label": {
+          "value": 0.4698996655518395,
+          "low": 0.3233476567102627,
+          "high": 0.6408354001734013,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "mae_score": {
+          "value": 0.27667224080267555,
+          "low": 0.1993852647362494,
+          "high": 0.35046298951684346,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "spearman": {
+          "value": 0.6516822843887108,
+          "low": 0.46524542335335084,
+          "high": 0.7854404010571157,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "accuracy_2way": {
+          "value": 0.7591973244147158,
+          "low": 0.6595190279743686,
+          "high": 0.8378607265802387,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "macro_f1_2way": {
+          "value": 0.7572176109707687,
+          "low": 0.6440340429030322,
+          "high": 0.8365795201523072,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "auroc_error": {
+          "value": 0.5198112654592345,
+          "low": 0.40756943881642915,
+          "high": 0.6273663521789626,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "ece": {
+          "value": 0.3114715719063544,
+          "low": 0.19267141927990336,
+          "high": 0.41957688839988405,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "grounded_share": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 598,
+          "n_clusters": 15
+        },
+        "cited_share": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 598,
+          "n_clusters": 15
+        }
+      },
+      "test_ua": {
+        "qwk": {
+          "value": 0.5006005802283402,
+          "low": 0.4037098621084127,
+          "high": 0.5901060527212811,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "accuracy": {
+          "value": 0.5555555555555556,
+          "low": 0.5037037037037037,
+          "high": 0.6074074074074074,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "macro_f1": {
+          "value": 0.500638626725443,
+          "low": 0.4540462506820988,
+          "high": 0.5421992418565493,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "adjacent_accuracy": {
+          "value": 0.8938271604938272,
+          "low": 0.8567901234567902,
+          "high": 0.928395061728395,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "mae_label": {
+          "value": 0.5506172839506173,
+          "low": 0.4740740740740741,
+          "high": 0.6296296296296297,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "mae_score": {
+          "value": 0.3408395061728395,
+          "low": 0.30801666666666666,
+          "high": 0.37400123456790124,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "spearman": {
+          "value": 0.5212804831817908,
+          "low": 0.4244763677226018,
+          "high": 0.6068343489370182,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "accuracy_2way": {
+          "value": 0.7358024691358025,
+          "low": 0.691358024691358,
+          "high": 0.7802469135802469,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "macro_f1_2way": {
+          "value": 0.7336983573917372,
+          "low": 0.6873233901395707,
+          "high": 0.7773914630433858,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "auroc_error": {
+          "value": 0.5645308641975308,
+          "low": 0.5033281511730939,
+          "high": 0.6231686907838071,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "ece": {
+          "value": 0.2879506172839514,
+          "low": 0.239615432098766,
+          "high": 0.34081913580247014,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "parse_failure_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "integrity_warning_rate": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "grounded_share": {
+          "value": null,
+          "low": null,
+          "high": null,
+          "n_items": 405,
+          "n_clusters": 135
+        },
+        "cited_share": {
+          "value": 0.0,
+          "low": 0.0,
+          "high": 0.0,
+          "n_items": 405,
+          "n_clusters": 135
+        }
+      }
+    }
+  },
+  "counts": {
+    "engsaf": {
+      "dev": 599,
+      "dev_scored": 595,
+      "dev_failed": 4,
+      "dev_variant_results": 0,
+      "test": 997,
+      "test_scored": 995,
+      "test_failed": 2,
+      "test_variant_results": 0
+    },
+    "scientsbank": {
+      "dev": 568,
+      "dev_scored": 568,
+      "dev_failed": 0,
+      "dev_variant_results": 0,
+      "test_uq": 598,
+      "test_uq_scored": 598,
+      "test_uq_failed": 0,
+      "test_uq_variant_results": 0,
+      "test_ua": 405,
+      "test_ua_scored": 405,
+      "test_ua_failed": 0,
+      "test_ua_variant_results": 0
+    }
+  },
+  "failures": {
+    "parse_failure": 6
+  },
+  "thresholds": {
+    "engsaf": {
+      "t1": 30.0,
+      "t2": 50.0,
+      "fitted_on": "engsaf/dev",
+      "qwk_dev": 0.5696905077755323
+    },
+    "scientsbank": {
+      "t1": 20.0,
+      "t2": 25.0,
+      "fitted_on": "scientsbank/dev",
+      "qwk_dev": 0.5097785582730116
+    }
+  },
+  "extra": {
+    "config": {
+      "name": "openrouter-no-context-gpt-oss-120b",
+      "phase": "4a",
+      "grader": "inprocess",
+      "context_mode": "no_context",
+      "variant_set": null,
+      "repeats": 1
+    },
+    "bootstrap": {
+      "n_resamples": 2000,
+      "seed": 20261123,
+      "cluster": "question_id",
+      "interval": "95% percentile"
+    },
+    "providers": {
+      "DeepInfra": 3167
+    },
+    "threshold_errors": {}
+  }
+}

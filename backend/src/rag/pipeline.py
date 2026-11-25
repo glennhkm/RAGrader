@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 from loguru import logger
 
+from ..api.request_utils import has_usable_score
 from ..vectorstore import VectorStore
 from ..vectorstore.embeddings import EmbeddingGenerator, EmbeddingMismatchError
 from ..utils.config import Settings, get_settings
@@ -159,6 +160,10 @@ class RAGPipeline:
             logger.info("Parsing LLM response...")
             result = self.prompt_builder.parse_llm_response(llm_response)
             result = apply_integrity_checks(result, essay, retrieved_docs)
+            if not result.get("error") and not has_usable_score(result, rubric):
+                logger.warning("LLM response has no usable score")
+                result["error"] = "Failed to parse a usable score from the LLM response"
+                result["confidence"] = 0.0
             if result["integrity_warnings"]:
                 logger.warning(f"Grading integrity warnings: {result['integrity_warnings']}")
             
@@ -185,6 +190,8 @@ class RAGPipeline:
         except Exception as e:
             logger.error(f"Error while grading: {e}")
             return {
+                # Explicit, so a direct caller cannot mistake this for a grade of 0.
+                "success": False,
                 "score": 0,
                 "feedback": f"Error while grading: {str(e)}",
                 "citations": [],

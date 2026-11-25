@@ -226,7 +226,8 @@ class RunTest(_PrivateSandbox):
             cli._make_grader(cfg)
         build.assert_called_once_with("inprocess", model=cfg.model, provider=cfg.provider,
                                       temperature=cfg.temperature,
-                                      context_mode=cfg.context_mode, settings=settings)
+                                      context_mode=cfg.context_mode, settings=settings,
+                                      requests_per_minute=None)
 
     def test_http_grader_built_from_client_settings(self):
         cfg = cli.load_experiment(self.write_config(grader="http"))

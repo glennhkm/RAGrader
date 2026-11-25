@@ -53,6 +53,8 @@ class ExperimentConfig:
     overrides: Dict[str, Any]
     # First N eval items by item_id per (dataset, split); None means no limit.
     max_items_per_split: Optional[int] = None
+    # Paces the in-process grader's LLM and embedding calls together; None means no pacing.
+    requests_per_minute: Optional[int] = None
 
 
 def load_experiment(path: Path) -> ExperimentConfig:
@@ -97,6 +99,9 @@ def load_experiment(path: Path) -> ExperimentConfig:
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int)
                               or limit < 1):
         raise ValueError("max_items_per_split must be a positive integer")
+    rpm = values.get("requests_per_minute")
+    if rpm is not None and (isinstance(rpm, bool) or not isinstance(rpm, int) or rpm < 1):
+        raise ValueError("requests_per_minute must be a positive integer")
     return ExperimentConfig(**values)
 
 
@@ -152,13 +157,15 @@ def prompt_template_hash() -> str:
 def config_hash(cfg: ExperimentConfig, snapshot_hashes: Dict[str, str]) -> str:
     """16-hex hash of everything that determines results.
 
-    ``concurrency`` and ``max_cost_usd`` are excluded: they do not change results.
+    ``concurrency``, ``max_cost_usd`` and ``requests_per_minute`` are excluded: they do not
+    change results.
     ``max_items_per_split`` is included only when set, so configurations without a limit
     keep the hash they had before the field existed.
     """
     body = dataclasses.asdict(cfg)
     body.pop("concurrency")
     body.pop("max_cost_usd")
+    body.pop("requests_per_minute")
     if body.get("max_items_per_split") is None:
         body.pop("max_items_per_split", None)
     payload = {"config": body, "prompt": prompt_template_hash(), "data": snapshot_hashes}

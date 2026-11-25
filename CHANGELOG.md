@@ -22,12 +22,18 @@ The Moodle plugins are unchanged since 1.0.1.
 - `backend/requirements-eval.txt`, an evaluation-only extra (the SciEntsBank parquet reader); the service does not need it.
 - Committed experiment configurations in `backend/evaluation/experiments/`.
 - A CI smoke step in `backend-tests`: the stub grader on the synthetic set, compared with `backend/evaluation/synthetic/expected_summary.json`.
-- `docs/evaluation/`, for the committed aggregate evaluation reports.
+- `docs/evaluation/`, with the aggregate 4a evaluation reports of `gpt-oss-120b`: baseline, no-context, oracle, consistency and injection.
 
 ### Changed
 
 - `/v1/namespaces/{ns}/grade` now populates `error` when the grading pipeline returns an error, for example when the AI response could not be parsed (the field already existed; the grade itself is unchanged).
 - `LLMWrapper` records `last_usage` (token counts of the last completion) and `last_served_provider` (the provider that served it).
+
+### Fixed
+
+- An AI response that is valid JSON but has no usable score (missing, null or non-numeric, including a missing number for a rubric criterion) is now a failed grade. Before, it was returned as a successful grade of 0.
+- `RAGPipeline.grade_essay` itself sets `success: false` on errors. The API already reported these failures correctly, because `EssayGrader` derives `success` from `error`.
+- Vector-store search errors are no longer turned into an empty result, which was reported as "no relevant course materials".
 
 ## [1.0.1] - 2026-11-22
 

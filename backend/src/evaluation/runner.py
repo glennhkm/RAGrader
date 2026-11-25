@@ -33,6 +33,8 @@ EST_PROMPT_TOKENS = 2000
 EST_COMPLETION_TOKENS = 300
 CONSISTENCY_N = 100
 INJECTION_N_PER_SPLIT = 100
+# Consecutive items given up after every retry: the provider is down or its quota is spent.
+MAX_CONSECUTIVE_GIVE_UPS = 5
 RESULTS_FILE = "results.jsonl"
 SUMMARY_FILE = "run_summary.json"
 
@@ -146,6 +148,19 @@ def _repair_trailing_line(path: Path) -> None:
         os.fsync(fh.fileno())
 
 
+def _drop_provider_errors(path: Path, existing: List[EvalResult]) -> List[EvalResult]:
+    kept = [r for r in existing if r.error_type != "provider_error"]
+    if len(kept) == len(existing):
+        return existing
+    tmp = path.with_suffix(".jsonl.tmp")
+    tmp.unlink(missing_ok=True)
+    tmp.touch()
+    for r in kept:
+        append_jsonl(tmp, r)
+    os.replace(tmp, path)
+    return kept
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -194,7 +209,10 @@ def read_summary(path: Path) -> RunSummary:
 
 
 def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep, max_attempts: int = 5) -> RunSummary:
+        sleep: Callable[[float], None] = time.sleep, max_attempts: int = 5,
+        retry_failed: bool = False) -> RunSummary:
+    """Grade the pending items. ``retry_failed`` drops stored ``provider_error`` results
+    first, so items lost to an outage are graded again; model-side failures are kept."""
     cfg = plan.config
     assert_output_allowed(set(cfg.datasets) | {i.dataset for i in plan.items}, plan.out_dir)
     if plan.estimated_cost_usd > cfg.max_cost_usd:
@@ -213,6 +231,8 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
         if any(r.config_hash != plan.config_hash for r in existing):
             raise ValueError("results.jsonl belongs to another configuration")
         _repair_trailing_line(results_path)
+        if retry_failed:
+            existing = _drop_provider_errors(results_path, existing)
     done: Set[Tuple[str, int]] = {(r.item_id, r.repeat) for r in existing}
     prior_cost = sum(_cost(cfg, r.prompt_tokens, r.completion_tokens) for r in existing)
     prior_in = sum(r.prompt_tokens for r in existing)
@@ -225,8 +245,10 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
     lock = threading.Lock()
     stop = threading.Event()
     # The running cap is cumulative across resumes: seed it with what is already on disk.
-    state = {"graded": 0, "cost": prior_cost, "tin": prior_in, "tout": prior_out}
+    state = {"graded": 0, "cost": prior_cost, "tin": prior_in, "tout": prior_out,
+             "give_ups": 0, "stop_reason": None}
     if prior_cost > cfg.max_cost_usd:
+        state["stop_reason"] = "budget"
         stop.set()
 
     workdir = out_dir / "work"
@@ -237,7 +259,7 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
             grader.prepare_namespace(namespaces[ds], plan.materials.get(ds, []), workdir)
     failures: Dict[str, int] = {}
 
-    def record(result: EvalResult) -> None:
+    def record(result: EvalResult, gave_up: bool = False) -> None:
         with lock:
             append_jsonl(results_path, result)
             state["graded"] += 1
@@ -247,7 +269,12 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
             if not result.success:
                 key = result.error_type or "unknown"
                 failures[key] = failures.get(key, 0) + 1
+            state["give_ups"] = state["give_ups"] + 1 if gave_up else 0
             if state["cost"] > cfg.max_cost_usd:
+                state["stop_reason"] = state["stop_reason"] or "budget"
+                stop.set()
+            elif state["give_ups"] >= MAX_CONSECUTIVE_GIVE_UPS:
+                state["stop_reason"] = state["stop_reason"] or "provider_unavailable"
                 stop.set()
 
     def grade_one(item: EvalItem, repeat: int) -> None:
@@ -266,7 +293,7 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
                 if attempt >= max_attempts:
                     logger.warning("Grading {} gave up after {} transient failures",
                                    item.item_id, attempt)
-                    record(_provider_error(plan, item, repeat, latency))
+                    record(_provider_error(plan, item, repeat, latency), gave_up=True)
                     return
                 if stop.is_set():
                     return  # budget_abort during backoff: not recorded
@@ -313,7 +340,7 @@ def run(plan: RunPlan, grader: Grader, *, clock: Callable[[], float] = time.mono
         failures=dict(sorted(failures.items())), cost_usd=state["cost"],
         cost_usd_this_run=state["cost"] - prior_cost,
         tokens_in=state["tin"], tokens_out=state["tout"],
-        aborted="budget" if stop.is_set() and state["graded"] < len(pending) else None,
+        aborted=state["stop_reason"] if stop.is_set() and state["graded"] < len(pending) else None,
         started_at=started_at, finished_at=_now(),
     )
     _write_summary(summary)

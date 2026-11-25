@@ -34,6 +34,7 @@ from src.evaluation.graders.base import (
     TransientGraderError,
     parse_dropped_count,
 )
+from src.evaluation.graders.pacing import RateLimiter
 from src.evaluation.materials import MaterialDoc, gold_source, write_materials
 from src.evaluation.schema import EvalItem
 from src.grading.grader import EssayGrader
@@ -43,7 +44,9 @@ from src.vectorstore.embeddings import EmbeddingMismatchError
 CONTEXT_MODES = ("rag", "oracle", "no_context")
 NO_CONTEXT_TEXT = "(No course materials are available for this question.)"
 _TRANSIENT = re.compile(
-    r"\b(429|500|502|503|504)\b|rate.?limit|too many requests|timed? ?out|timeout",
+    # 413: gateways also return it when their own upstream quota is short.
+    r"\b(413|429|500|502|503|504)\b|rate.?limit|too many requests|timed? ?out|timeout"
+    r"|connection (error|reset|refused|aborted)|upstream_error",
     re.IGNORECASE,
 )
 
@@ -79,6 +82,7 @@ class InProcessGrader:
         context_mode: str = "rag",
         settings: Optional[Settings] = None,
         grader_factory: Callable[..., EssayGrader] = EssayGrader,
+        requests_per_minute: Optional[int] = None,
     ):
         if context_mode not in CONTEXT_MODES:
             raise ValueError(f"unknown context_mode: {context_mode}")
@@ -88,6 +92,7 @@ class InProcessGrader:
         self.context_mode = context_mode
         self.settings = settings or get_settings()
         self._factory = grader_factory
+        self._limiter = RateLimiter(requests_per_minute) if requests_per_minute else None
         self._config: Optional[Dict[str, Any]] = None
         self._grader: Any = None
         self._texts: Dict[str, Dict[str, str]] = {}
@@ -124,12 +129,34 @@ class InProcessGrader:
                                settings=self.settings)
         self._grader = grader
         pipeline = grader.rag_pipeline
+        if self._limiter is not None:
+            self._pace(pipeline.llm,
+                       pipeline.vectorstore.embedding_generator.get_embeddings_instance())
         self._wrap_llm(pipeline.llm)
         if self.context_mode == "oracle":
             pipeline.retriever = _FixedRetriever(self._local)
         elif self.context_mode == "no_context":
             pipeline.retriever = _FixedRetriever(self._local, Document(
                 page_content=NO_CONTEXT_TEXT, metadata={"source": "none", "page": "N/A"}))
+
+    def _pace(self, llm: Any, embeddings: Any) -> None:
+        """One provider request slot per LLM call and per embedding call."""
+        nested = threading.local()
+        for obj, name in ((llm, "generate"), (embeddings, "embed_query"),
+                          (embeddings, "embed_documents")):
+            original = getattr(obj, name)
+
+            def paced(arg, _original=original):
+                if getattr(nested, "active", False):  # embed_query calls embed_documents
+                    return _original(arg)
+                self._limiter.wait()
+                nested.active = True
+                try:
+                    return _original(arg)
+                finally:
+                    nested.active = False
+
+            setattr(obj, name, paced)
 
     def _wrap_llm(self, llm: Any) -> None:
         original = llm.generate

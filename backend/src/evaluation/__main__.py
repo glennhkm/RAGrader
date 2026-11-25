@@ -252,7 +252,8 @@ def _make_grader(cfg: ExperimentConfig):
     if cfg.grader == "inprocess":
         return build_grader("inprocess", model=cfg.model, provider=cfg.provider,
                             temperature=cfg.temperature, context_mode=cfg.context_mode,
-                            settings=settings)
+                            settings=settings,
+                            requests_per_minute=cfg.requests_per_minute)
     return build_grader("http", api_url=settings.client.api_url,
                         token=settings.client.api_token)
 
@@ -342,7 +343,8 @@ def _write_meta(plan: RunPlan, config_file: Path, split_files: Dict[str, SplitFi
                                          encoding="utf-8")
 
 
-def _execute(config_file: Path, out_root: Path, yes: bool) -> Tuple[int, Optional[RunPlan]]:
+def _execute(config_file: Path, out_root: Path, yes: bool,
+             retry_failed: bool = False) -> Tuple[int, Optional[RunPlan]]:
     cfg = load_experiment(Path(config_file))
     # Checked before any item is loaded: the run directory lives inside out_root.
     assert_output_allowed(cfg.datasets, Path(out_root))
@@ -362,7 +364,7 @@ def _execute(config_file: Path, out_root: Path, yes: bool) -> Tuple[int, Optiona
     _write_meta(plan, config_file, split_files, snapshots, settings, previous)
     grader = _make_grader(cfg)
     try:
-        summary = run(plan, grader)
+        summary = run(plan, grader, retry_failed=retry_failed)
     finally:
         grader.close()
     print(f"graded: {summary.graded}, skipped (already done): {summary.skipped_existing}")
@@ -379,7 +381,7 @@ def _execute(config_file: Path, out_root: Path, yes: bool) -> Tuple[int, Optiona
 
 def cmd_run(args: argparse.Namespace) -> int:
     out_root = args.out_root if args.out_root is not None else DEFAULT_RUNS_ROOT
-    return _execute(args.experiment, out_root, args.yes)[0]
+    return _execute(args.experiment, out_root, args.yes, args.retry_failed)[0]
 
 
 # --------------------------------------------------------------------------- report
@@ -586,6 +588,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--experiment", required=True, type=Path)
     p.add_argument("--out-root", type=Path, help=f"default: {DEFAULT_RUNS_ROOT}")
     p.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+    p.add_argument("--retry-failed", action="store_true",
+                   help="grade items again whose stored result is a provider_error")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("report", help="write the aggregate Markdown + JSON report of a run")

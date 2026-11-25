@@ -4,7 +4,7 @@ This folder holds the committed **aggregate** evaluation reports of RAGrader's g
 
 The harness that produces them lives in [`backend/src/evaluation`](../../backend/src/evaluation). The method is described in the [Cycle 4 design](../superpowers/specs/2026-11-23-cycle4-grading-quality-design.md).
 
-No reports have been committed yet. The 4a baseline runs are pending (see [HANDOFF §8.0](../HANDOFF.md)).
+The 4a reports for `gpt-oss-120b` (baseline, no-context, oracle, consistency, injection) are the `2026-11-24` and `2026-11-25` files. Runs of other models are pending.
 
 ## Privacy
 
@@ -100,6 +100,31 @@ python -m src.evaluation smoke --check evaluation/synthetic/expected_summary.jso
 ```
 
 It exits 1 with a per-key diff when a metric changes. After an intended change, regenerate the file with `smoke --write evaluation/synthetic/expected_summary.json` and review the diff. **The smoke numbers are not an evaluation:** the synthetic set has no dev split, so its thresholds are fitted on the smoke results themselves, and the bootstrap uses 200 resamples instead of 2,000. It only checks that prepare, run and report fit together and stay deterministic.
+
+## Provider limits and outages
+
+- `requests_per_minute` in a configuration paces the in-process grader's LLM and embedding calls together. It is not part of the configuration hash.
+- Rate limits, gateway errors (413 included), timeouts and connection errors are retried with backoff. An item that still fails is stored as `provider_error`.
+- After five such items in a row the run stops with `provider_unavailable`. Re-run the same command to continue, adding `--retry-failed` to grade the stored `provider_error` items again. Parse failures are model behaviour and are never retried.
+
+## Grader agreement
+
+**Stub stack, 2026-11-23.**
+- Setup: the first 50 SciEntsBank `test_uq` eval items by `item_id`, on the `docker-compose.ci.yml` stack (stub LLM and stub embeddings), graded once through `http` (HAProxy → two API replicas → `/v1`) and once through `inprocess`.
+- Result: 50/50 graded on both sides with no failures, and all 50 pairs identical in score, confidence, integrity warnings and retrieved sources.
+- Gold reference: retrieved for 49/50 items.
+
+The real-model agreement check has not been run yet.
+
+## Model access for the 4a runs
+
+The committed 4a reports use the `openrouter-*-gpt-oss-120b.yaml` configurations: OpenRouter called as a single `openai_compatible` endpoint, so no other provider configured in the product is used as a fallback.
+- **Provider pinning:** every request carried `provider: {only: [...], allow_fallbacks: false, data_collection: deny}`, with `deepinfra/bf16` for the LLM and `deepinfra/fp32` for the embeddings. The pin is added by a local launcher around the harness, because the product's client has no such option; running the configurations without it uses OpenRouter's default routing.
+- **Embeddings:** `baai/bge-m3` (the product's default model) through OpenRouter.
+- **Before the score check:** these runs predate the check that fails a response without a usable score. Raw responses are not stored, so any such response is counted as a score of 0 in them.
+- **Case study:** `jk_case` was not sent.
+- **Way gateway:** the `way-*.yaml` configurations were tried first. Way adds about 1,450 prompt tokens of its own to every request, and its free tier stopped serving after 334 graded items, so no Way result is reported.
+- **Old configurations:** `baseline-*.yaml` and the other files without an `openrouter-` or `way-` prefix were not run.
 
 ## Datasets and citations
 

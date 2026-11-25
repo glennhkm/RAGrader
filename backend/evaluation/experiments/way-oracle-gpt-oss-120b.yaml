@@ -1,0 +1,23 @@
+# Served through the Way gateway (OpenAI-compatible; LLM_BASE_URL / LLM_API_KEY in backend/.env).
+# Way Free Tier: Rp 0 per token, so prices are 0 and max_cost_usd does not bind; check Way's
+# Usage page after the pilot. Way's per-key limit is 60 RPM, hence concurrency 2.
+# The key used must have TokenSaver off and no RAG collection bound (both rewrite the prompt).
+name: way-oracle-gpt-oss-120b
+phase: "4a"
+grader: inprocess
+provider: openai_compatible
+model: openai/gpt-oss-120b
+context_mode: oracle
+temperature: null
+# jk_case excluded (ruling R8): the oracle bound needs a text gold reference,
+# and the case study's reference is a PDF.
+datasets:
+  engsaf: [dev, test]
+  scientsbank: [dev, test_uq, test_ua]
+repeats: 1
+price_in_per_mtok: 0.0
+price_out_per_mtok: 0.0
+concurrency: 2
+requests_per_minute: 40
+max_cost_usd: 1.0
+overrides: {}

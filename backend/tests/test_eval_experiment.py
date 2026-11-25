@@ -34,12 +34,34 @@ def _write(text):
 class ExperimentTests(unittest.TestCase):
     def test_all_committed_yamls_load_and_names_match(self):
         files = sorted(EXP_DIR.glob("*.yaml"))
-        self.assertEqual(len(files), 8)
+        self.assertEqual(len(files), 21)  # 8 original, 7 Way and 6 pinned OpenRouter configs
         for f in files:
             cfg = load_experiment(f)
             self.assertIsInstance(cfg, ExperimentConfig)
             self.assertEqual(cfg.name, f.stem)
             self.assertEqual(cfg.phase, "4a")
+
+    def test_way_configs_are_free_single_endpoint(self):
+        way = sorted(EXP_DIR.glob("way-*.yaml"))
+        self.assertEqual(len(way), 7)
+        for f in way:
+            c = load_experiment(f)
+            self.assertEqual(c.provider, "openai_compatible")
+            self.assertIn(c.model, ("openai/gpt-oss-120b", "openai/gpt-oss-20b"))
+            self.assertEqual((c.price_in_per_mtok, c.price_out_per_mtok), (0.0, 0.0))
+            self.assertLessEqual(c.concurrency, 2)
+            self.assertEqual(c.requests_per_minute, 40)
+            self.assertNotIn("jk_case", c.datasets)  # student data stays off the gateway
+        pilot = load_experiment(EXP_DIR / "way-pilot-gpt-oss-120b.yaml")
+        self.assertEqual(pilot.max_items_per_split, 20)
+
+    def test_pinned_openrouter_configs(self):
+        files = sorted(EXP_DIR.glob("openrouter-*.yaml"))
+        self.assertEqual(len(files), 6)
+        for f in files:
+            c = load_experiment(f)
+            self.assertEqual(c.provider, "openai_compatible")  # no fallback provider
+            self.assertNotIn("jk_case", c.datasets)
 
     def test_pinned_values(self):
         c = load_experiment(EXP_DIR / "baseline-gpt-4.1-mini.yaml")
@@ -100,7 +122,7 @@ class ExperimentTests(unittest.TestCase):
         import hashlib
         import json
         body = dataclasses.asdict(base)
-        for k in ("concurrency", "max_cost_usd", "max_items_per_split"):
+        for k in ("concurrency", "max_cost_usd", "max_items_per_split", "requests_per_minute"):
             body.pop(k)
         blob = json.dumps({"config": body, "prompt": prompt_template_hash(), "data": SNAP},
                           sort_keys=True, separators=(",", ":"), ensure_ascii=False)
